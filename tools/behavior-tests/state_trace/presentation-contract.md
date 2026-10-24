@@ -66,6 +66,14 @@ clipping, ancestor visibility and rendered pixel evidence are distinct. Nonprimi
 properties emit explicit opaque type records. Direct native geometry mutations,
 renderer state and application-independent modal ordering are not fully observed.
 
+Starting or restarting an epoch snapshots each native birth ID once, preserving
+all actual attachment edges for shared/globalized nodes. Current focus and the
+global modal singleton are recorded after those births, so a late capture has
+an explicit baseline rather than guessed empty state. Property/unset records
+follow actual storage writes/erases before their callbacks; callbacks do not
+emit a second copy. Independent native writes remain separate records, including
+same-value writes; production assignments and callbacks are unchanged.
+
 Every Scene Sound actor gets a separate playback birth identity when created
 while armed; source is the actual loader name. Play, pause, stop, mute, repeat,
 delay, autoplay and volume requests are captured with request evidence. Actor
@@ -231,5 +239,7 @@ runtime, and the existing browser dependencies:
 
 ```sh
 SMAC_ASSETS_DIR=/path/to/game WASM_APP_DIR=/path/to/private/bin \
-  node --test tools/behavior-tests/state_trace/presentation_inputs_browser.test.mjs
+  node --test --test-concurrency=1 \
+    tools/behavior-tests/state_trace/presentation_inputs_browser.test.mjs \
+    tools/behavior-tests/state_trace/presentation_native_ui_browser.test.mjs
 ```

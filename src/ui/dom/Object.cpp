@@ -301,8 +301,8 @@ void Object::Destroy( GSE_CALLABLE ) {
 	PRESENTATION_EVENT( "node.destroy", presentation::Node( m_dom_id ) );
 }
 
-void Object::TraceSnapshot() const {
-	if ( !presentation::Get().Enabled() ) { return; }
+void Object::TraceSnapshot( std::unordered_set< dom_id_t >& visited ) const {
+	if ( !presentation::Get().Enabled() || !visited.insert( m_dom_id ).second ) { return; }
 	PRESENTATION_EVENT( "node.create", presentation::Node( m_dom_id ), "{\"parent\":" + ( m_parent ? presentation::Quote( presentation::Node( m_parent->m_dom_id ) ) : "null" ) + ",\"tag\":" + presentation::Quote( m_tag ) + "}" );
 	for ( const auto& property : m_properties ) { TraceProperty( m_dom_id, property.first, property.second ); }
 	if ( m_is_visible ) { PRESENTATION_EVENT( "node.show", presentation::Node( m_dom_id ) ); }
@@ -421,9 +421,9 @@ const bool Object::ProcessEventImpl( GSE_CALLABLE, const input::Event& event ) {
 }
 
 void Object::UpdateProperty( const std::string& k, gse::Value* const v ) {
-	TraceProperty( m_dom_id, k, v );
 	ASSERT( !m_is_destroyed, "UpdateProperty: object is destroyed" );
 	m_properties.insert_or_assign( k, v );
+	TraceProperty( m_dom_id, k, v );
 	if ( m_wrapobj ) {
 		m_wrapobj->Assign( k, v );
 	}
@@ -585,7 +585,6 @@ void Object::OnPropertyChange( GSE_CALLABLE, const std::string& key, gse::Value*
 	if ( def->second.f_on_set ) {
 		def->second.f_on_set( GSE_CALL, value );
 	}
-	TraceProperty( m_dom_id, key, value );
 }
 
 void Object::OnPropertyRemove( GSE_CALLABLE, const std::string& key ) {
@@ -600,7 +599,6 @@ void Object::OnPropertyRemove( GSE_CALLABLE, const std::string& key ) {
 	if ( def->second.f_on_unset ) {
 		def->second.f_on_unset( GSE_CALL );
 	}
-	PRESENTATION_EVENT( "node.unset", presentation::Node( m_dom_id ), "{\"key\":" + presentation::Quote( key ) + "}" );
 }
 
 void Object::WrapEvent( GSE_CALLABLE, const input::Event& e, gse::value::object_properties_t& obj ) const {
@@ -761,6 +759,7 @@ void Object::SetProperty( GSE_CALLABLE, properties_t* const properties, const st
 	else {
 		if ( ( ( it->second == nullptr ) != ( value == nullptr ) ) || ( value && ( *it->second != *value ) ) ) {
 			it->second = value;
+			if ( properties == &m_properties ) { TraceProperty( m_dom_id, key, value ); }
 			if ( m_is_initialized && properties == &m_properties ) {
 				OnPropertyChange( GSE_CALL, key, value );
 			}
@@ -784,6 +783,7 @@ void Object::UnsetProperty( GSE_CALLABLE, properties_t* const properties, const 
 		}
 		properties->erase( it );
 		if ( properties == &m_properties ) {
+			PRESENTATION_EVENT( "node.unset", presentation::Node( m_dom_id ), "{\"key\":" + presentation::Quote( key ) + "}" );
 			if ( m_wrapobj ) {
 				m_wrapobj->Assign( key, nullptr );
 			}

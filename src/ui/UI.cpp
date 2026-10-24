@@ -151,7 +151,12 @@ WRAPIMPL_BEGIN( UI )
 				NATIVE_CALL( this ) {
 					N_EXPECT_ARGS( 0 );
 					presentation::Get().Start();
-					m_root->TraceSnapshot();
+					std::unordered_set< dom_id_t > visited;
+					m_root->TraceSnapshot( visited );
+					// Births precede references, including an already-open native singleton.
+					const auto* focused = dynamic_cast< dom::Object* >( m_focused_element );
+					PRESENTATION_EVENT( "ui.focus", "ui", "{\"node\":" + ( focused ? presentation::Quote( presentation::Node( focused->m_dom_id ) ) : "null" ) + "}" );
+					PRESENTATION_EVENT( "ui.modal", "ui", "{\"node\":" + ( m_global_singleton ? presentation::Quote( presentation::Node( m_global_singleton->m_dom_id ) ) : "null" ) + "}" );
 					return nullptr;
 				} )
 			},

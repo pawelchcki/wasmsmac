@@ -78,7 +78,7 @@ public:
 	virtual void Destroy( GSE_CALLABLE );
 
 	// Detached diagnostics only; does not affect native object state.
-	virtual void TraceSnapshot() const;
+	virtual void TraceSnapshot( std::unordered_set< dom_id_t >& visited ) const;
 
 	virtual void Show();
 	virtual void Hide();

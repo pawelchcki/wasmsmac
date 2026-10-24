@@ -198,10 +198,11 @@ const bool Container::ProcessEvent( GSE_CALLABLE, const input::Event& event ) {
 	return Area::ProcessEvent( GSE_CALL, event );
 }
 
-void Container::TraceSnapshot() const {
-	Object::TraceSnapshot();
+void Container::TraceSnapshot( std::unordered_set< dom_id_t >& visited ) const {
+	if ( !presentation::Get().Enabled() || visited.find( m_dom_id ) != visited.end() ) { return; }
+	Object::TraceSnapshot( visited );
 	for ( const auto& child : m_children ) {
-		child.second.object->TraceSnapshot();
+		child.second.object->TraceSnapshot( visited );
 		PRESENTATION_EVENT( "node.attach", presentation::Node( child.first ), "{\"parent\":" + presentation::Quote( presentation::Node( m_dom_id ) ) + "}" );
 	}
 }

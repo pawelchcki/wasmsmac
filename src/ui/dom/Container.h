@@ -28,7 +28,7 @@ class Button;
 
 class Container : public Area {
 public:
-	void TraceSnapshot() const override;
+	void TraceSnapshot( std::unordered_set< dom_id_t >& visited ) const override;
 
 	Container( DOM_ARGS_T, const bool factories_allowed, const bool has_body );
 
