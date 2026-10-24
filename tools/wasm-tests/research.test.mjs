@@ -40,6 +40,8 @@ function observedScripts() {
   observe('ui/parts/mainmenu/steps/customize_rules.gls.js', 'state.blind = true;',
     "state.blind = true; #print('BRS_RULE|' + #to_string(state.blind));");
   observe('ui/parts/mainmenu/steps/select_faction.gls.js', "random = mode == 'random';", "random = mode == 'random'; #print('BRS_FACTION_MODE|' + mode);");
+  observe('ui/parts/mainmenu/steps/customize_mapsize.gls.js', 'const horizontal = parse_dimension(width_input.value);',
+    "#print('BRS_CUSTOM_INPUT|' + width_input.value + '|' + height_input.value); const horizontal = parse_dimension(width_input.value);");
   observe('main.gls.js', 'glsmac.run();', `
 glsmac.on('configure_game', (e) => {
  const game = e.game;
@@ -57,9 +59,15 @@ glsmac.on('configure_game', (e) => {
   glsmac.ui.root.timer(100, () => {
    if (opening.visible_phase == null) { return true; }
    if (opening.visible_phase == 'map' && game.get_turn() != observed_world.turn) {
-    observed_world.turn = game.get_turn(); let humans = 0; let computers = 0; let units = 0;
-    for (player of game.get_players()) { if (player.type == 'computer') { computers++; } else { humans++; } }
+    observed_world.turn = game.get_turn(); let humans = 0; let computers = 0; let units = 0; let factions = '';
+    for (player of game.get_players()) {
+     if (player.type == 'computer') { computers++; } else { humans++; }
+     if (factions != '') { factions += ','; } factions += player.get_faction().id;
+    }
+    #print('BRS_ROSTER|' + factions);
+    #print('BRS_PLAYER_NAME|' + game.get_player().name);
     const tm = game.get_tm();
+    #print('BRS_GRID|' + #to_string(tm.get_map_width()) + '|' + #to_string(tm.get_map_height()));
     for (let y = 0; y < tm.get_map_height(); y++) { for (let x = y % 2; x < tm.get_map_width(); x += 2) { units += #sizeof(tm.get_tile(x, y).get_units()); } }
     #print('BRS_WORLD|' + #to_string(observed_world.turn) + '|' + #to_string(humans) + '|' + #to_string(computers) + '|' + #to_string(#sizeof(game.get_bm().get_bases())) + '|' + #to_string(units) + '|' + #to_string(#sizeof(game.get_contacts())));
    }
@@ -117,8 +125,10 @@ test('real setup, Shift+R, pointer research commands and persistent native state
     runtime_js_sha256: hash(readFileSync(`${build}/GLSMAC.js`)), runtime_wasm_sha256: hash(readFileSync(`${build}/GLSMAC.wasm`)),
     scope: 'Candidate Chromium keyboard/pointer and native state regression; no original pixel-parity claim',
   }, null, 2));
-  for (const name of ['blind', 'directed', 'random']) {
+  const cases = process.env.RESEARCH_CASES ? process.env.RESEARCH_CASES.split(',') : ['blind', 'directed', 'random', 'custom-minimum'];
+  for (const name of cases) {
     const directed = name === 'directed'; const randomSelection = name === 'random';
+    const customMinimum = name === 'custom-minimum';
     await t.test(name, async () => {
       const context = await browser.newContext({viewport: {width: 1100, height: 1100}});
       const page = await context.newPage(); page.setDefaultTimeout(60000);
@@ -171,7 +181,22 @@ test('real setup, Shift+R, pointer research commands and persistent native state
         await page.locator('#start').click(); await page.waitForFunction(() => document.body.dataset.state === 'running');
         await page.addStyleTag({content: '#canvas {position:fixed;left:0;top:0;margin:0;max-width:none;z-index:10}'});
         await wait(text => text, text => text.includes('BRS_MENU_REST'), 'initial menu');
-        for (const label of ['START GAME', 'MAKE RANDOM MAP', 'TINY PLANET', 'CITIZEN']) { await choose(label); }
+        for (const label of ['START GAME', 'MAKE RANDOM MAP']) { await choose(label); }
+        if (customMinimum) {
+          const oldPopup = (await log()).split('BRS_POPUP|').length;
+          const oldMenu = (await log()).lastIndexOf('BRS_MENU|');
+          await choose('CUSTOM SIZE', false);
+          await wait(text => text, text => text.split('BRS_POPUP|').length > oldPopup, 'custom dimensions');
+          const left = (1024 - 480) / 2 + 3; const top = (768 - 180) / 2 + 23 + 3;
+          await click(left + 305, top + 25); await page.keyboard.press('End');
+          await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace'); await page.keyboard.type('2');
+          await click(left + 305, top + 52); await page.keyboard.press('End');
+          await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace'); await page.keyboard.type('2');
+          await page.keyboard.press('Enter');
+          await wait(text => text, text => text.includes('BRS_CUSTOM_INPUT|2|2'), 'exact typed custom dimensions');
+          await wait(text => text, text => text.lastIndexOf('BRS_MENU|') > oldMenu && text.slice(text.lastIndexOf('BRS_MENU|')).includes('BRS_MENU_REST'), 'custom dimensions accepted');
+        } else { await choose('TINY PLANET'); }
+        await choose('CITIZEN');
         await choose(directed ? 'CUSTOMIZE RULES' : 'PLAY WITH STANDARD RULES', false);
         if (directed) {
           await wait(rule, value => value === 'true', 'custom rule checkbox');
@@ -196,6 +221,13 @@ test('real setup, Shift+R, pointer research commands and persistent native state
           // offsets, left10/top94/width240/height28 from select_faction.
           await click((1024 - 800) / 2 + 3 + 130, (768 - 340) / 2 + 23 + 3 + 108);
           await wait(text => text, text => text.includes('BRS_FACTION_MODE|random'), 'actual Random faction mode');
+          const oldPopup = (await log()).split('BRS_POPUP|').length;
+          await page.keyboard.press('Enter');
+          await wait(text => text, text => text.split('BRS_POPUP|').length > oldPopup, 'generic Random name prompt');
+          for (const character of 'Trace Commander') {
+            const key = /[A-Z]/.test(character) ? `Shift+${character.toLowerCase()}` : character === ' ' ? 'Space' : character;
+            await page.keyboard.press(key);
+          }
           await page.keyboard.press('Enter');
         } else {
           const count = (await log()).split('BRS_POPUP|').length; await page.keyboard.press('Enter');
@@ -206,6 +238,19 @@ test('real setup, Shift+R, pointer research commands and persistent native state
         await wait(opening, value => value[1] === 'map', 'playable map');
         const initialWorld = await wait(text => [...text.matchAll(/BRS_WORLD\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)/g)].at(-1), value => Number(value[1]) === 1, 'complete opening roster');
         assert.deepEqual(initialWorld.slice(2).map(Number), [1, 6, 7, 7, 0]);
+        const roster = [...(await log()).matchAll(/BRS_ROSTER\|([^\r\n]+)/g)].at(-1)[1].split(',');
+        assert.equal(new Set(roster).size, 7, 'Every native faction is distinct');
+        if (!randomSelection) {
+          assert.deepEqual(roster, ['CONSCIOUSNESS', 'PIRATES', 'DRONES', 'ANGELS', 'PLANETCULT', 'CARETAKERS', 'USURPERS'], 'Actual default setup preserves every displayed expansion faction');
+        }
+        if (randomSelection) {
+          assert.deepEqual([...roster].sort(), ['CONSCIOUSNESS', 'PIRATES', 'DRONES', 'ANGELS', 'PLANETCULT', 'CARETAKERS', 'USURPERS'].sort(), 'Random selects the human from the displayed seven without replacing a faction');
+          assert.match(await log(), /BRS_PLAYER_NAME\|Trace Commander(?:\r?\n|$)/, 'The generic name editor reaches the native human participant');
+        }
+        if (customMinimum) {
+          const grid = [...(await log()).matchAll(/BRS_GRID\|(\d+)\|(\d+)/g)].at(-1);
+          assert.deepEqual(grid.slice(1).map(Number), [32, 16], 'Entered 2x2 custom dimensions use the observed original minimum at world creation');
+        }
         await page.keyboard.press('F2');
         const labs = await wait(laboratories, value => value.settled, 'Laboratories F2');
         assert.equal(labs.science, 0); assert.match(labs.accumulated, /: 0$/); assert.match(labs.perTurn, /: [0-9]+$/);

@@ -73,6 +73,13 @@ predates the participant fix; it does not override current comparison results.
 Neither natural trace adds passing original cases to release totals. Different
 starting coordinates prevent isolating placement/RNG and resource rules.
 
+The separate [setup-controls contract](setup-controls/contract-v1.md) retains
+bounded original input/output records for displayed rosters, Random human mode,
+explicit duplicate factions and custom-map generation minima. Its independent
+manifest preserves provenance without changing earlier reference manifests.
+These records guide source-backed regressions and remain outside default
+passing replay totals until a versioned public adapter is integrated.
+
 ## Shared explicit-world comparison
 
 The separately frozen [v2 contract](explicit-world-contract-v2.md) supplies the

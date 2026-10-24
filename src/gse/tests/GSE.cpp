@@ -12,6 +12,7 @@
 #include "gc/Space.h"
 #include "gc/GC.h"
 #include "engine/Engine.h"
+#include "game/backend/settings/Settings.h"
 #include <atomic>
 #include <stdexcept>
 
@@ -19,6 +20,26 @@ namespace gse {
 namespace tests {
 
 void AddGSETests( task::gsetests::GSETests* task ) {
+	task->AddTest(
+		"Custom world generation normalizes each minimum axis without changing editable setup",
+		GT() {
+			// Independent original controls are frozen under
+			// tools/behavior-tests/state_trace/setup-controls/contract-v1.md.
+			game::backend::settings::MapSettings map;
+			map.preset_level = game::backend::settings::MapSettings::CUSTOM_SIZE;
+			for ( const auto& sample : std::vector< std::vector< int64_t > >{ { 4, 2, 32, 16 }, { 4, 32, 32, 32 }, { 64, 2, 64, 16 }, { 32, 16, 32, 16 } } ) {
+				map.size_x = sample[ 0 ]; map.size_y = sample[ 1 ];
+				const auto actual = map.GetGenerationDimensions();
+				GT_ASSERT( actual.first == sample[ 2 ] && actual.second == sample[ 3 ], "generated custom dimensions differ from recorded startup" );
+				GT_ASSERT( map.size_x == sample[ 0 ] && map.size_y == sample[ 1 ] && map.preset_level == 99, "normalization changed editable settings or custom kind" );
+			}
+			map.size_x = 4; map.size_y = 2; map.preset_level = 2;
+			GT_ASSERT( map.GetGenerationDimensions() == std::make_pair( int64_t( 4 ), int64_t( 2 ) ), "named or declared dimensions were normalized as custom input" );
+			map.preset_level = 99; map.type = game::backend::settings::MapSettings::MT_MAPFILE;
+			GT_ASSERT( map.GetGenerationDimensions() == std::make_pair( int64_t( 4 ), int64_t( 2 ) ), "loaded map dimensions were normalized as generated input" );
+			GT_OK();
+		}
+	);
 
 	task->AddTest(
 		"GC accumulation recovers from native and non-standard exceptions",

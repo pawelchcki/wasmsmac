@@ -165,7 +165,7 @@ struct ProductionFixture : gc::Object {
 		delete state;
 		state = nullptr;
 	}
-	backend::slot::Slot* InitializeSinglePlayer( GSE_CALLABLE, const std::string& faction_id, const std::string& difficulty = "Citizen", const bool isolated = false, const bool random_faction = false ) {
+	backend::slot::Slot* InitializeSinglePlayer( GSE_CALLABLE, const std::string& faction_id, const std::string& difficulty = "Citizen", const bool isolated = false, const bool random_faction = false, const std::vector< backend::faction::Faction* >& roster = {}, const bool random_human = false ) {
 		if ( state->m_slots->GetCount() || !game.m_bm->GetBases().empty() || !game.m_um->GetUnits().empty() ) {
 			GSE_ERROR( EC.INVALID_CALL, "Single-player initialization requires an empty world" );
 		}
@@ -187,7 +187,11 @@ struct ProductionFixture : gc::Object {
 			slot.SetPlayer( player, 0, "" );
 			slot.SetPlayerFlag( backend::slot::PF_READY );
 		}
-		else { state->AddSinglePlayerSlot( faction ); }
+		else {
+			const auto error = state->GetSinglePlayerMapError();
+			if ( !error.empty() ) { GSE_ERROR( EC.GAME_ERROR, error ); }
+			state->AddSinglePlayerSlot( faction, false, roster, random_human );
+		}
 		game.m_slot_num = 0;
 		game.m_slot = &state->m_slots->GetSlot( 0 );
 		game.m_player = game.m_slot->GetPlayer();
@@ -1496,6 +1500,16 @@ Value* MakeWorldStartupFixture( GSE_CALLABLE, size_t width, size_t height ) {
 		return session->current->InitializeSinglePlayer( GSE_CALL, faction_id )->Wrap( GSE_CALL );
 	} ), GSE_CALL );
 	object->Set( "participant_codec_invariant", NATIVE_CALL( session ) { N_EXPECT_ARGS( 0 ); return VALUE( value::Bool,, session->current->ParticipantCodecInvariant() ); } ), GSE_CALL );
+	object->Set( "initialize_roster", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 2 ); N_GETVALUE( id, 0, String ); N_GETVALUE( setup, 1, Object );
+		auto& f = *session->current;
+		const bool random = id == "RANDOM";
+		auto* human = random ? nullptr : f.state->GetFM()->Get( id );
+		if ( !human && !random ) { GSE_ERROR( EC.GAME_ERROR, "Unknown startup faction" ); }
+		bool random_human = false;
+		const auto roster = f.state->ParseSinglePlayerRoster( GSE_CALL, setup, human, random_human );
+		return f.InitializeSinglePlayer( GSE_CALL, id, "Citizen", false, random, roster, random_human )->Wrap( GSE_CALL );
+	} ), GSE_CALL );
 	object->Set( "initialize_random_single_player", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->InitializeSinglePlayer( GSE_CALL, "", "Citizen", false, true )->Wrap( GSE_CALL );
 	} ), GSE_CALL );

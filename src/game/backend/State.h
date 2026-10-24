@@ -3,6 +3,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <functional>
+#include <vector>
 
 #include "gse/GCWrappable.h"
 
@@ -62,7 +63,9 @@ CLASS( State, gse::GCWrappable )
 	bool IsSlave();
 
 	void AddPlayer( Player* player );
-	void AddSinglePlayerSlot( faction::Faction* faction, bool name_confirmed = false );
+	std::vector< faction::Faction* > ParseSinglePlayerRoster( GSE_CALLABLE, const gse::value::object_properties_t& setup, faction::Faction* human, bool& random_human );
+	std::string GetSinglePlayerMapError() const;
+	void AddSinglePlayerSlot( faction::Faction* faction, bool name_confirmed = false, const std::vector< faction::Faction* >& roster = {}, bool random_human = false );
 	void FinalizeSinglePlayerRoster();
 	void RemovePlayer( Player* player );
 
@@ -104,6 +107,8 @@ private:
 	Game* m_game = nullptr;
 
 	std::unordered_set< Player* > m_players = {}; // persistent
+	std::vector< faction::Faction* > m_single_player_roster;
+	bool m_single_player_random_human = false;
 	std::unordered_map< network::cid_t, size_t > m_cid_slots = {}; // volatile ( { cid, slot_num } )
 
 };

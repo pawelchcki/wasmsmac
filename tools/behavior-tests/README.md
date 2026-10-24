@@ -968,10 +968,23 @@ optional checks skipped. The installed-source tests execute real native
 movement/Hold and initialized economy/research state; their synthetic natural
 startup map is 16x16 to accommodate all seven participants.
 The hot gate also passed all 32 regression suites (297 scenarios, 2,192
-assertions) and all 44 recorded cases across eleven UI references. The complete
-unsharded GSE/native engine run is still pending; its discovered 152 executable
-scripts include the 143-suite regression catalog, and are not yet a passing
-full-suite claim.
+assertions) and all 44 recorded cases across eleven UI references. Complete
+GSE/native coverage additionally requires all 152 discovered executable scripts
+exactly once, including the 143-suite regression catalog, and successful native
+C++ engine checks. Disjoint partitions must pass strict coverage aggregation;
+the fast catalog alone is not a full-engine result.
+
+The separate [bounded setup controls](state_trace/setup-controls/contract-v1.md)
+record actual original Planetfall rosters, Random-mode naming and custom-size
+minima. Production setup preserves every displayed faction, including explicit
+duplicates. Random human mode chooses within that roster; a selected `RANDOM`
+dropdown row remains a separate deferred faction choice. Native human slot zero
+is the candidate's convention, not a claim of original owner-index parity.
+Custom fields remain editable as entered; world generation applies independent
+minimum native dimensions of 32 columns and 16 rows while retaining Custom kind
+99. These clean setup observations remain outside default passing comparison
+totals until a versioned public replay adapter is integrated. They do not claim
+matching RNG draws, placement, AI decisions or naval production fidelity.
 
 ## Ability-free prototype base costs
 

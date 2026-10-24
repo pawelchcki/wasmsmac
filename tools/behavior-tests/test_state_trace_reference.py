@@ -12,6 +12,34 @@ SUITES = ('natural-startup', 'natural-startup-economy-research')
 
 
 class ReferenceTraceTests(unittest.TestCase):
+    def test_bounded_setup_controls_are_frozen_outside_passing_totals(self):
+        directory = DIRECTORY / 'setup-controls'
+        manifest_path = directory / 'manifest-v1.json'
+        self.assertEqual(hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                         'fb863b7120863b98fe7879a9fa71639f135da8f9ecba6ad30370a171cbff7abd')
+        manifest = decode_json(manifest_path.read_text())
+        self.assertEqual(manifest['status'], 'accepted-original-repeat2-bounded-setup-controls')
+        self.assertIs(manifest['candidate_inspected_or_executed'], False)
+        self.assertIs(manifest['passing_catalog'], False)
+        self.assertEqual(manifest['original_only_adapters_included'], [])
+        self.assertEqual(len(manifest['files']), 10)
+        for relative, digest in manifest['files'].items():
+            with self.subTest(path=relative):
+                path = Path(relative)
+                self.assertFalse(path.is_absolute())
+                self.assertNotIn('..', path.parts)
+                self.assertEqual(hashlib.sha256((directory / path).read_bytes()).hexdigest(), digest)
+        count = 0
+        for path in sorted((directory / 'cases').glob('*.json')):
+            suite = compare.read_json(path)
+            record = compare.read_json(directory / 'observations' / path.name)
+            outputs = compare.validate_observations(record, suite)
+            self.assertEqual(record['repeat'], 2)
+            self.assertEqual(set(outputs), {case['id'] for case in suite['cases']})
+            count += len(suite['cases'])
+        self.assertEqual(count, manifest['case_count'])
+        self.assertEqual(count, 8)
+
     def test_explicit_world_original_artifacts_and_plan_are_frozen(self):
         manifest_path = DIRECTORY / 'explicit-world-reference-manifest.json'
         self.assertEqual(hashlib.sha256(manifest_path.read_bytes()).hexdigest(),

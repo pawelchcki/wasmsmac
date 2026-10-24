@@ -1,5 +1,66 @@
 // Production participant regression; original placement/AI parity remains separately pending.
 const behavior = #include('./_behavior');
+const configure_roster = (f, base_only) => {
+	#include('../default/factions').configure({add: (id, data) => {
+		let included = true;
+		if (#is_defined(base_only) && base_only) {
+			included = false;
+			for (stock of ['GAIANS', 'HIVE', 'UNIVERSITY', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS']) { if (id == stock) { included = true; } }
+		}
+		if (included) { f.fm.add(id, data); }
+	}, import_colors: (name) => { return f.colors; }, import_base_names: (name) => { return {land: ['Synthetic City'], water: ['Synthetic Port']}; }});
+};
+
+behavior.scenario('Displayed expansion roster and an edited opponent create the exact native participants', () => {
+	const f = test.world_startup_fixture(40, 80); configure_roster(f);
+	const ids = ['CONSCIOUSNESS', 'PIRATES', 'GAIANS', 'ANGELS', 'PLANETCULT', 'CARETAKERS', 'USURPERS'];
+	f.initialize_roster('ANGELS', {factions: ids, human_slot: 3, random_human: false});
+	const players = f.game.get_players(); test.assert(#sizeof(players) == 7);
+	const expected = ['ANGELS', 'CONSCIOUSNESS', 'PIRATES', 'GAIANS', 'PLANETCULT', 'CARETAKERS', 'USURPERS'];
+	for (let index = 0; index < 7; index++) { test.assert(players[index].get_faction().id == expected[index], 'Native human slot zero preserves the remaining displayed row order'); }
+	test.assert(f.participant_codec_invariant());
+});
+
+behavior.scenario('Malformed displayed rosters reject atomically and permit a corrected retry', () => {
+	const f = test.world_startup_fixture(40, 80); configure_roster(f, true);
+	for (ids of [
+		['GAIANS'],
+		['GAIANS', 'HIVE', 'MISSING', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'],
+		['HIVE', 'GAIANS', 'UNIVERSITY', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'],
+	]) {
+		let rejected = false; try { f.initialize_roster('GAIANS', {factions: ids, human_slot: 0, random_human: false}); } catch { GSEGameError: (error) => { rejected = true; } }
+		test.assert(rejected && #sizeof(f.game.get_players()) == 0, 'A bad choice leaves every participant unallocated');
+	}
+	f.initialize_roster('GAIANS', {factions: ['GAIANS', 'HIVE', 'UNIVERSITY', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'], human_slot: 0, random_human: false});
+	test.assert(#sizeof(f.game.get_players()) == 7, 'A corrected request uses the same empty native state');
+});
+
+behavior.scenario('Explicit duplicate faction rows remain separate native participants and start their own cities', () => {
+	const f = test.natural_startup_fixture(40, 80, 'flat-arid'); const game = f.game;
+	#include('./_natural_startup_mechanics')(f);
+	const ids = ['GAIANS', 'GAIANS', 'UNIVERSITY', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'];
+	f.initialize_roster('GAIANS', {factions: ids, human_slot: 0, random_human: false}); f.start_world();
+	const players = game.get_players();
+	for (let index = 0; index < 7; index++) { test.assert(players[index].get_faction().id == ids[index] && players[index].id == index); }
+	test.assert(#sizeof(game.bm.get_bases()) == 7 && players[0].type == 'human' && players[1].type == 'computer');
+});
+
+behavior.scenario('An undersized custom world rejects before creating any native participant', () => {
+	for (size of [[4, 2], [4, 4], [4, 8]]) {
+		const f = test.world_startup_fixture(size[0], size[1]); configure_roster(f, true);
+		let rejected = false;
+		try { f.initialize_single_player('GAIANS'); } catch { GSEGameError: (error) => { rejected = error.reason == 'Choose a larger map: seven factions need starting tiles at least two steps apart'; } }
+		test.assert(rejected && #sizeof(f.game.get_players()) == 0 && #sizeof(f.game.bm.get_bases()) == 0);
+	}
+});
+
+behavior.scenario('Small maps that can fit seven separated sites remain selectable', () => {
+	for (size of [[4, 14], [8, 8]]) {
+		const f = test.world_startup_fixture(size[0], size[1]); configure_roster(f, true);
+		f.initialize_single_player('GAIANS');
+		test.assert(#sizeof(f.game.get_players()) == 7, 'Feasible small grids are accepted without changing the roster');
+	}
+});
 behavior.scenario('Empty native startup and production human-slot initialization', () => {
 	const f = test.world_startup_fixture(40, 80);
 	const game = f.game;
@@ -152,4 +213,29 @@ behavior.scenario('Existing Random faction input resolves during native startup 
 		f.process_events(); game.event('complete_turn', {}); f.process_events();
 		test.assert(game.get_turn() == turn + 1, 'Resolved Random participant uses ordinary turn completion');
 	}
+});
+
+behavior.scenario('Random human mode preserves the displayed seven while choosing the local participant', () => {
+	const f = test.natural_startup_fixture(40, 80, 'flat-arid'); const game = f.game;
+	#include('./_natural_startup_mechanics')(f);
+	const stock = ['GAIANS', 'HIVE', 'UNIVERSITY', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'];
+	const human = f.initialize_roster('RANDOM', {factions: stock, human_slot: 5, random_human: true});
+	test.assert(!#is_defined(human.get_faction()) && #sizeof(game.get_players()) == 1, 'Human choice stays deferred to the native startup RNG');
+	f.start_world();
+	const seen = {};
+	for (player of game.get_players()) { const id = player.get_faction().id; test.assert(!#is_defined(seen[id])); seen[id] = true; }
+	for (id of stock) { test.assert(#is_defined(seen[id]), 'Every displayed faction survives Random human selection from a larger catalog'); }
+	test.assert(#sizeof(game.get_players()) == 7 && #sizeof(game.bm.get_bases()) == 7 && human.id == 0);
+});
+
+behavior.scenario('Random faction rows reserve explicit opponents and resolve without duplicates', () => {
+	const f = test.natural_startup_fixture(40, 80, 'flat-arid'); const game = f.game;
+	const stock = ['GAIANS', 'HIVE', 'UNIVERSITY', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'];
+	#include('./_natural_startup_mechanics')(f, #undefined, stock);
+	f.initialize_roster('RANDOM', {factions: ['RANDOM', 'HIVE', 'RANDOM', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'], human_slot: 0, random_human: false});
+	f.start_world();
+	const players = game.get_players(); const seen = {};
+	for (player of players) { const id = player.get_faction().id; test.assert(!#is_defined(seen[id]), 'Random rows never reuse a reserved faction'); seen[id] = true; }
+	for (id of stock) { test.assert(#is_defined(seen[id])); }
+	test.assert(players[1].get_faction().id == 'HIVE' && players[3].get_faction().id == 'MORGANITES');
 });

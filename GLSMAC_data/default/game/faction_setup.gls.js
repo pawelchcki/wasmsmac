@@ -57,6 +57,7 @@ return (glsmac, rules, common) => {
 	for (ordinal of [174, 175, 176, 177, 483, 484, 485]) { setup.labels :+ label(ordinal); }
 	setup.genders = genders;
 	setup.name = [editor(common, 'NAME', 1, true), editor(common, 'NAME2', 1, true)];
+	setup.random_name = editor(common, 'NAME3', 1, false);
 	setup.customize = editor(common, 'CUSTOMNAMES', 0, true);
 	const imported = {};
 	for (group of [['FACTIONS', 'base'], ['NEWFACTIONS', 'expansion']]) {

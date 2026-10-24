@@ -353,7 +353,7 @@ WRAPIMPL_BEGIN( GLSMAC )
 		{
 			"start_game",
 			NATIVE_CALL( this ) {
-				N_EXPECT_ARGS_MAX( 2 );
+				N_EXPECT_ARGS_MAX( 3 );
 				if ( !m_state ) {
 					GSE_ERROR( gse::EC.GAME_ERROR, "Game not initialized" );
 				}
@@ -376,7 +376,18 @@ WRAPIMPL_BEGIN( GLSMAC )
 						}
 					}
 				}
-				if ( arguments.size() == 2 ) {
+				std::vector< game::backend::faction::Faction* > roster;
+				bool random_human = false;
+				if ( arguments.size() == 3 ) {
+					N_GETVALUE( setup, 2, Object );
+					roster = m_state->ParseSinglePlayerRoster( GSE_CALL, setup, faction, random_human );
+				}
+				if ( m_state->m_slots->GetSlots().empty() ) {
+					const auto error = m_state->GetSinglePlayerMapError();
+					if ( !error.empty() ) { GSE_ERROR( gse::EC.GAME_ERROR, error ); }
+				}
+				const bool has_identity = arguments.size() >= 2 && arguments[ 1 ]->type != gse::VT_NULL;
+				if ( has_identity ) {
 					if ( !faction ) { GSE_ERROR( gse::EC.GAME_ERROR, "Identity requires an explicitly selected faction" ); }
 					N_GETVALUE( values, 1, Array );
 					const auto identity = game::backend::faction::Faction::ParseIdentity( GSE_CALL, values );
@@ -386,7 +397,7 @@ WRAPIMPL_BEGIN( GLSMAC )
 					faction->SetIdentity( identity );
 				}
 				if ( m_state->m_slots->GetSlots().empty() ) {
-					AddSinglePlayerSlot( faction, arguments.size() == 2 );
+					AddSinglePlayerSlot( faction, has_identity || arguments.size() == 3, roster, random_human );
 				}
 				StartGame( GSE_CALL );
 				return VALUE( gse::value::Undefined );
@@ -694,11 +705,11 @@ void GLSMAC::RandomizeSettings( GSE_CALLABLE ) {
 	}
 }
 
-void GLSMAC::AddSinglePlayerSlot( game::backend::faction::Faction* const faction, const bool name_confirmed ) {
+void GLSMAC::AddSinglePlayerSlot( game::backend::faction::Faction* const faction, const bool name_confirmed, const std::vector< game::backend::faction::Faction* >& roster, const bool random_human ) {
 	const auto& rules = m_state->m_settings.global.rules;
 	const auto& difficulty = rules.m_difficulty_levels.GetString( m_state->m_settings.global.difficulty_level );
 	Log( "Single-player setup: faction=" + ( faction ? faction->m_id : "RANDOM" ) + ", difficulty=" + difficulty );
-	m_state->AddSinglePlayerSlot( faction, name_confirmed );
+	m_state->AddSinglePlayerSlot( faction, name_confirmed, roster, random_human );
 }
 
 void GLSMAC::StartGame( GSE_CALLABLE ) {

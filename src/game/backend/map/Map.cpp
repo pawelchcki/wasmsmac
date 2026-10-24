@@ -763,9 +763,10 @@ const Map::error_code_t Map::Generate( settings::MapSettings* map_settings, MT_C
 			? c->GetQuickstartMapCloudCover()
 			: random->GetFloat( 0.2, 0.8f );
 	}
-	Log( "Generating map of size " + std::to_string( map_settings->size_x ) + "x" + std::to_string( map_settings->size_y ) );
+	const auto dimensions = map_settings->GetGenerationDimensions();
+	Log( "Generating map of size " + std::to_string( dimensions.first ) + "x" + std::to_string( dimensions.second ) );
 	ASSERT( !m_tiles, "tiles already set" );
-	NEW( m_tiles, tile::Tiles, this, map_settings->size_x, map_settings->size_y );
+	NEW( m_tiles, tile::Tiles, this, dimensions.first, dimensions.second );
 	generator.Generate( m_tiles, map_settings, MT_C );
 	if ( canceled ) {
 		Log( "Map generation canceled" );
