@@ -18,10 +18,14 @@ jobs:
     if: github.repository == 'pawelchcki/wasmsmac' && inputs.engine-artifact == ''
     uses: ./.github/workflows/test-engine.yml
   hot:
-    name: Hot tests
+    name: Hot lane (${{ matrix.kind }})
     needs: [engine]
     if: always() && github.repository == 'pawelchcki/wasmsmac'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [regression, ui]
     steps:
       - uses: actions/checkout@v4
       - name: Require a successful engine producer
@@ -47,7 +51,27 @@ jobs:
       - name: Test FLIC decoding with synthetic assets
         run: python3 tools/texture-tests/run.py
       - name: Replay hot production controls and original comparisons
-        run: python3 tools/behavior-tests/lanes.py --lane hot --jobs 2 --report build/hot-artifacts/hot.json
+        run: python3 tools/behavior-tests/lanes.py --lane hot --kind '${{ matrix.kind }}' --jobs 2 --report build/hot-artifacts/hot.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hot-behavior-${{ matrix.kind }}
+          path: build/hot-artifacts
+  complete:
+    name: Hot tests
+    needs: [hot]
+    if: always() && github.repository == 'pawelchcki/wasmsmac'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both hot lanes to succeed
+        env:
+          HOT_LANES_RESULT: ${{ needs.hot.result }}
+        run: test "$HOT_LANES_RESULT" = success
+      - uses: actions/download-artifact@v4
+        if: always()
+        with:
+          pattern: hot-behavior-*
+          path: build/hot-artifacts
       - uses: actions/upload-artifact@v4
         if: always()
         with:
