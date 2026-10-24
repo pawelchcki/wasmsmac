@@ -49,6 +49,20 @@ loss counter, including after drain; all consumers reject any loss. A disabled
 producer cannot pass as an empty observation. No default tracing work constructs
 payload strings.
 
+Native semantic registrations use protocol version 2. Every role record carries
+explicit constructor provenance, supplied only by native constructors; script
+annotations are distinct even when their source string is empty. Version 1
+semantic streams are rejected with a rebuild requirement rather than guessed
+constructor origins. The separate delivered-input protocol remains version 1.
+
+A new logical birth uses its final explicitly identified native constructor role
+available through that fence. Later script annotations remain ordered refinements,
+and every provisional raw registration remains in diagnostic history. A cached
+selected-node ID is published only while its logical target is live. Retirement
+clears the canonical reference with unavailable-target evidence while preserving
+the actual raw cached ID; this does not assert native deselection. Unclassified
+media lifecycle/control records retain their specific unknown-media disposition.
+
 Final browser capture requests a seal through a diagnostic WASM export without
 injecting gameplay input. The existing application-thread drain timer performs
 one atomic final drain and disables recording under the queue lock, then emits

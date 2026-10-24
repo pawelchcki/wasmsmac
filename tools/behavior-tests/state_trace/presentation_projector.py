@@ -74,6 +74,7 @@ class Projector:
         self.dispositions, self.observations = {}, []
         self.fields, self.native_fields, self.geometry, self.choice_items = {}, {}, {}, {}
         self.choice_pending = {}
+        self.constructor_roles, self.selected_targets = {}, {}
         self.raw_seq = 0
 
     @staticmethod
@@ -116,17 +117,23 @@ class Projector:
         self.update(target, {**fields, 'field_availability': availability})
 
     def ingest_interval(self, events):
+        # Only explicit native constructor registrations can establish a new
+        # birth's initialized type. Later script annotations remain ordered.
+        self.constructor_roles = {}
         # Resolve only explicit ownership evidence available through this fence.
         for event in events:
             target, kind, data = (event[k] for k in ('target', 'kind', 'data'))
             if kind == 'semantic.role' and data['role'] in ROLES:
                 self.roles.setdefault(target, deepcopy(data))
+                if data['constructor'] and target not in self.nodes:
+                    self.constructor_roles[target] = deepcopy(data)
             elif kind == 'semantic.part':
                 if data['relation'] not in PARTS | LOGICAL_RELATIONS:
                     continue
                 self.parts[target] = deepcopy(data)
             elif kind == 'semantic.factory':
                 self.factories[target] = deepcopy(data)
+        self.roles.update(self.constructor_roles)
         for event in events:
             if event['seq'] != self.raw_seq + 1:
                 raise ProtocolError('semantic source sequence gap')
@@ -176,6 +183,7 @@ class Projector:
         if values:
             self.verified_update(target, values, 'current previously observed fields at actual registration')
         self.reconcile_parents()
+        self.reconcile_selections()
 
     def reconcile_parents(self):
         for target in self.nodes:
@@ -185,6 +193,23 @@ class Projector:
             parent = self.parent(target)
             if self.semantic.objects[identity]['parent'] != parent:
                 self.update(target, {'parent': parent})
+
+    def reconcile_selections(self):
+        # Keep the native cached ID in raw observations. An unavailable logical
+        # reference does not claim that native code deselected that ID.
+        for owner, target in self.selected_targets.items():
+            if self.identity(owner) not in self.semantic.objects:
+                continue
+            retired = target is not None and self.dispositions.get(target, {}).get('retirement_sequence') is not None
+            if retired:
+                value, evidence = None, 'unavailable: target retired'
+            elif target is None:
+                value, evidence = None, 'actual native selected_node null'
+            elif self.identity(target) in self.semantic.objects:
+                value, evidence = self.identity(target), 'actual native live logical selection target'
+            else:
+                value, evidence = None, 'unavailable: selection target not yet a live logical control'
+            self.verified_update(owner, {'selected': value}, evidence)
 
     def record(self, event):
         target, kind, data = (event[k] for k in ('target', 'kind', 'data'))
@@ -203,9 +228,11 @@ class Projector:
                 self.create_logical(target)
         elif kind == 'node.destroy':
             self.dispositions[target]['retirement_sequence'] = event['seq']
+            self.reconcile_selections()
             if self.identity(target) in self.semantic.objects:
                 self.emit(self.domain(target), 'destroy', target, {})
             self.nodes.pop(target)
+            self.selected_targets.pop(target, None)
             self.reconcile_parents()
         elif kind in ('node.show', 'node.hide'):
             self.nodes[target]['visible_local'] = kind == 'node.show'
@@ -220,7 +247,10 @@ class Projector:
             self.update(target, {'mounted': bool(parents)})
         elif kind == 'semantic.role':
             if data['role'] in ROLES:
-                self.roles[target] = deepcopy(data)
+                # Fold only proven constructor initialization, retaining every
+                # provisional raw role. Annotations are never folded forward.
+                role = self.constructor_roles[target] if data['constructor'] and target in self.constructor_roles else data
+                self.roles[target] = deepcopy(role)
                 if self.logical(target) and target in self.nodes:
                     if self.identity(target) not in self.semantic.objects:
                         self.create_logical(target)
@@ -228,8 +258,9 @@ class Projector:
                         disposition_record.setdefault('classification_history', []).append({
                             'sequence': event['seq'], 'previous': disposition_record['disposition'], 'current': 'logical'})
                         disposition_record['disposition'] = 'logical'
-                    self.update(target, {'role': data['role'], 'source': data.get('source') or None})
-                    self.dispositions[target]['role'] = deepcopy(data)
+                    self.update(target, {'role': role['role'], 'source': role.get('source') or None})
+                    self.dispositions[target]['role'] = deepcopy(role)
+                self.reconcile_selections()
             else:
                 disposition = 'unknown-role'
         elif kind in ('semantic.part', 'semantic.factory'):
@@ -280,13 +311,15 @@ class Projector:
             self.fields.setdefault(target, {})[key] = value
             if kind == 'semantic.field':
                 self.native_fields.setdefault(target, {})[key] = value
+                if key == 'selected_node':
+                    self.selected_targets[target] = value
+                    self.reconcile_selections()
             owner = self.owner(target)
             relation = self.parts.get(target, {}).get('relation')
             canonical = None
             if self.logical(target):
                 if kind == 'semantic.field' and key == 'selected_node':
-                    canonical = 'selected'
-                    value = self.identity(value)
+                    pass  # Published only by live-target reconciliation above.
                 elif kind == 'semantic.field' and key in ('selected', 'full_text'):
                     canonical = 'text' if key == 'full_text' else key
                 elif kind == 'semantic.field' and key in ('value', 'max_length') and self.roles[target]['role'] == 'text-editor':
@@ -297,6 +330,8 @@ class Projector:
                 canonical = 'text' if key == 'rendered_text' else 'requested_text'
             if canonical:
                 self.verified_update(owner or target, {canonical: value}, 'actual native field or explicit producer/part mapping')
+            elif kind == 'semantic.field' and key == 'selected_node':
+                pass  # The raw reference is understood even while unavailable.
             else:
                 disposition = 'unknown-field'
         elif kind == 'ui.focus':
@@ -316,7 +351,7 @@ class Projector:
             disposition = 'input'
         elif kind.startswith('trace.'):
             disposition = 'action'
-        if target in self.dispositions and self.dispositions[target]['disposition'] == 'unknown':
+        if disposition == 'diagnostic' and target in self.dispositions and self.dispositions[target]['disposition'] == 'unknown':
             disposition = 'unknown-object'
         observation = {'raw_sequence': event['seq'], 'kind': kind,
                        'target': target, 'disposition': disposition, 'data': deepcopy(data)}

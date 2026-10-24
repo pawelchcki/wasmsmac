@@ -38,6 +38,30 @@ test('threaded pinned captures reconcile all observed inputs and preserve exact 
   assert.equal(reconcilePresentationInputs(capture.batches.flatMap(batch=>batch.events),capture.browser_inputs).complete,true);
   assert.equal(capture.capture.terminal_drain_observed,true);
   const rawEvents=capture.batches.flatMap(batch=>batch.events);
+  assert.ok(rawEvents.some(event=>event.kind==='semantic.protocol'&&event.data.version===2),'fresh v2 constructor provenance is required');
+  const semanticEvents=[...semantic.checkpoints.flatMap(point=>point.state.presentation.events),...semantic.diagnostics.tail_presentation.events];
+  const live=new Set(),selected=new Map();
+  for(const event of semanticEvents){
+   if(event.kind==='create')live.add(event.object_id);
+   if(event.kind==='update'&&Object.hasOwn(event.fields,'selected')){
+    if(event.fields.field_availability?.selected==='actual native live logical selection target'){
+     assert.ok(live.has(event.fields.selected),'selected logical target must already be born');
+     selected.set(event.object_id,event.fields.selected);
+    }else selected.delete(event.object_id);
+   }
+   if(event.kind==='destroy'){
+    assert.ok(![...selected.values()].includes(event.object_id),'selected references clear before target retirement');
+    live.delete(event.object_id);selected.delete(event.object_id);
+   }
+   if(event.kind==='observed'&&event.fields.kind.startsWith('media.'))assert.equal(event.fields.disposition,'unknown-media');
+  }
+  const windows=new Set(rawEvents.filter(event=>event.kind==='semantic.role'&&event.data.constructor===true&&event.data.role==='window').map(event=>event.target));
+  if(id==='presentation-opening-keyboard')assert.ok(windows.size>0,'real native Window constructor path executed');
+  for(const nativeId of windows){
+   if(semantic.diagnostics.dispositions[nativeId].disposition!=='logical')continue;
+   const birth=semanticEvents.find(event=>event.kind==='create'&&event.object_id===`candidate-birth:${nativeId}`);
+   assert.ok(birth,'native logical Window has a canonical birth');assert.equal(birth.domain,'windows');
+  }
   const births=rawEvents.filter(event=>event.kind==='node.create'||event.kind==='media.create');
   assert.equal(Object.keys(semantic.diagnostics.dispositions).length,births.length,'every real native/media birth has a disposition');
   assert.equal(semantic.diagnostics.observed_events,rawEvents.length,'every raw event survives projection including transients');

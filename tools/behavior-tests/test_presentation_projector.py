@@ -10,8 +10,9 @@ from state_trace.presentation_schema import validate_output
 def fixture():
     rows = []
     def add(kind, target='trace', **data):
+        if kind == 'semantic.role': data.setdefault('constructor', False)
         rows.append(dict(seq=len(rows)+1,kind=kind,target=target,data=data))
-    add('semantic.protocol',version=1)
+    add('semantic.protocol',version=2)
     add('trace.protocol',version=1,physical_os_complete=False)
     add('trace.action',op=1,action=1,checkpoint=0,nonce=0)
     add('node.create','n1',parent=None,tag='$root')
@@ -50,6 +51,108 @@ def fixture():
 
 
 class ProjectionTests(unittest.TestCase):
+    def assert_live_selection_history(self, events):
+        live, selections = set(), {}
+        for event in events:
+            target, fields = event['object_id'], event['fields']
+            if event['kind'] == 'create':
+                live.add(target)
+            elif event['kind'] == 'update' and 'selected' in fields:
+                if fields['field_availability']['selected'] == 'actual native live logical selection target':
+                    self.assertIn(fields['selected'], live)
+                    selections[target] = fields['selected']
+                else:
+                    selections.pop(target, None)
+            elif event['kind'] == 'destroy':
+                self.assertNotIn(target, selections.values())
+                live.remove(target)
+                selections.pop(target, None)
+
+    def test_protocol_v2_requires_explicit_typed_constructor_provenance(self):
+        for corrupt in ('legacy', 'missing', 'untyped'):
+            inputs, capture, _ = fixture()
+            rows = capture['batches'][0]['events']
+            if corrupt == 'legacy':
+                rows[0]['data']['version'] = 1
+                message = 'v2 required; rebuild'
+            else:
+                role = next(e['data'] for e in rows if e['kind'] == 'semantic.role')
+                if corrupt == 'missing':
+                    del role['constructor']
+                    message = 'malformed'
+                else:
+                    role['constructor'] = 'true'
+                    message = 'constructor provenance'
+            with self.subTest(corrupt=corrupt), self.assertRaisesRegex(ProtocolError, message):
+                project_capture(capture, inputs)
+
+    def test_native_window_constructor_birth_and_later_annotations_stay_distinct(self):
+        inputs, capture, _ = fixture()
+        rows = capture['batches'][0]['events']
+        index = next(i for i, e in enumerate(rows) if e['target'] == 'n2' and e['kind'] == 'semantic.role')
+        rows[index]['data'].update(role='window', constructor=True)
+        rows.insert(index, dict(kind='semantic.role', target='n2', data=dict(role='container', source='', constructor=True)))
+        rows[-2:-2] = [dict(kind='semantic.role', target='n2', data=dict(role='container', source='runtime-container', constructor=False)),
+                       dict(kind='semantic.role', target='n2', data=dict(role='dialog', source='runtime-dialog', constructor=False))]
+        for seq, event in enumerate(rows, 1): event['seq'] = seq
+        events = project_capture(capture, inputs)['checkpoints'][0]['state']['presentation']['events']
+        canonical = [e for e in events if e['object_id'] == 'candidate-birth:n2' and e['kind'] in ('create', 'update')]
+        self.assertEqual((canonical[0]['kind'], canonical[0]['domain'], canonical[0]['fields']['role']), ('create', 'windows', 'window'))
+        roles = [e['fields']['role'] for e in canonical if 'role' in e['fields']]
+        self.assertEqual(roles, ['window', 'container', 'dialog'])
+        self.assertEqual(sum(e['kind'] == 'create' for e in canonical), 1)
+        observed = [e['fields']['data'] for e in events if e['kind'] == 'observed' and e['fields']['kind'] == 'semantic.role' and e['fields']['target'] == 'n2']
+        self.assertEqual([e['role'] for e in observed], ['container', 'window', 'container', 'dialog'])
+
+    def test_selected_reference_waits_for_birth_then_becomes_unavailable_on_retirement(self):
+        inputs, capture, _ = fixture()
+        rows = capture['batches'][0]['events']
+        index = next(i for i, e in enumerate(rows) if e['target'] == 'n2' and e['kind'] == 'node.create')
+        rows.insert(index, dict(kind='semantic.field', target='n1', data=dict(key='selected_node', value='n2')))
+        rows[-2:-2] = [dict(kind='node.destroy', target='n3', data={}), dict(kind='node.destroy', target='n2', data={})]
+        for seq, event in enumerate(rows, 1): event['seq'] = seq
+        state = project_capture(capture, inputs)['checkpoints'][0]['state']['presentation']
+        events = state['events']
+        self.assert_live_selection_history(events)
+        birth = next(e['seq'] for e in events if e['kind'] == 'create' and e['object_id'] == 'candidate-birth:n2')
+        selection = next(e['seq'] for e in events if e['kind'] == 'update' and e['object_id'] == 'candidate-birth:n1' and e['fields'].get('selected') == 'candidate-birth:n2')
+        retired = next(e['seq'] for e in events if e['kind'] == 'destroy' and e['object_id'] == 'candidate-birth:n2')
+        unavailable = next(e['seq'] for e in events if e['kind'] == 'update' and e['object_id'] == 'candidate-birth:n1' and e['fields'].get('field_availability', {}).get('selected') == 'unavailable: target retired')
+        self.assertLess(birth, selection)
+        self.assertLess(unavailable, retired)
+        self.assertIsNone(state['objects']['candidate-birth:n1']['selected'])
+        self.assertTrue(any(e['kind'] == 'observed' and e['fields']['data'] == dict(key='selected_node', value='n2') for e in events))
+
+    def test_future_fence_selection_target_cannot_rewrite_an_earlier_prefix(self):
+        inputs, capture, add = fixture()
+        rows = capture['batches'][0]['events']
+        rows.insert(-2, dict(kind='semantic.field', target='n1', data=dict(key='selected_node', value='later')))
+        for seq, event in enumerate(rows, 1): event['seq'] = seq
+        prefix = deepcopy(capture)
+        add('node.create', 'later', parent='n1', tag='$button')
+        add('semantic.role', 'later', role='button', source='', constructor=True)
+        add('trace.checkpoint', op=3, action=1, checkpoint=2, nonce=3)
+        inputs['checkpoints'].append(dict(id='later', after_action='launch'))
+        capture['input_checkpoints'].append(dict(id='later', after_action='launch', checkpoint=2))
+        output = project_capture(capture, inputs)
+        self.assert_live_selection_history([event for point in output['checkpoints'] for event in point['state']['presentation']['events']])
+        self.assertIsNone(output['checkpoints'][0]['state']['presentation']['objects']['candidate-birth:n1']['selected'])
+        self.assertEqual(output['checkpoints'][1]['state']['presentation']['objects']['candidate-birth:n1']['selected'], 'candidate-birth:later')
+        self.assertEqual(project_capture(prefix, dict(inputs, checkpoints=inputs['checkpoints'][:1]))['checkpoints'][0], output['checkpoints'][0])
+
+    def test_media_specific_unknown_disposition_survives_birth_control_and_retirement(self):
+        inputs, capture, _ = fixture()
+        rows = capture['batches'][0]['events']
+        rows[-2:-2] = [dict(kind='media.create', target='m1', data=dict(type='audio', source='synthetic.wav')),
+                       dict(kind='media.control', target='m1', data=dict(evidence='request', volume=.5)),
+                       dict(kind='media.destroy', target='m1', data=dict(evidence='request'))]
+        for seq, event in enumerate(rows, 1): event['seq'] = seq
+        output = project_capture(capture, inputs)
+        observations = output['checkpoints'][0]['state']['presentation']['events']
+        media = [e['fields'] for e in observations if e['kind'] == 'observed' and e['fields']['kind'].startswith('media.')]
+        self.assertEqual([e['disposition'] for e in media], ['unknown-media'] * 3)
+        self.assertEqual(output['diagnostics']['unknown_inventory']['m1']['source']['source'], 'synthetic.wav')
+
     def test_control_fields_use_explicit_mapping_and_actual_edit_state(self):
         inputs,capture,_=fixture();out=project_capture(capture,inputs)
         state=out['checkpoints'][0]['state']['presentation'];objects=state['objects']
@@ -252,7 +355,7 @@ class ProjectionTests(unittest.TestCase):
     def test_logical_owner_born_later_in_fence_never_has_a_forward_birth_reference(self):
         inputs,capture,_=fixture();rows=capture['batches'][0]['events']
         extras=[dict(kind='node.create',target='n11',data=dict(parent='n1',tag='$choicelist')),
-                dict(kind='semantic.role',target='n11',data=dict(role='choice-list',source='actual')),
+                dict(kind='semantic.role',target='n11',data=dict(role='choice-list',source='actual',constructor=False)),
                 dict(kind='semantic.part',target='n2',data=dict(owner='n11',relation='choice-item'))]
         rows[-2:-2]=extras
         for seq,e in enumerate(rows,1):e['seq']=seq
@@ -281,7 +384,7 @@ class ProjectionTests(unittest.TestCase):
 
     def test_role_refinements_follow_the_actual_order_without_rebirth(self):
         inputs,capture,_=fixture();rows=capture['batches'][0]['events']
-        rows.insert(-2,dict(kind='semantic.role',target='n2',data=dict(role='menu-entry',source='actual-entry')))
+        rows.insert(-2,dict(kind='semantic.role',target='n2',data=dict(role='menu-entry',source='actual-entry',constructor=False)))
         for seq,e in enumerate(rows,1):e['seq']=seq
         events=project_capture(capture,inputs)['checkpoints'][0]['state']['presentation']['events']
         control=[e for e in events if e['object_id']=='candidate-birth:n2' and e['kind'] in ('create','update')]

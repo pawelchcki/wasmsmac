@@ -15,7 +15,7 @@ namespace dom {
 ChoiceList::ChoiceList( DOM_ARGS )
 	: Container( DOM_ARGS_PASS, "choicelist", false, true ) {
 
-	TraceRole( "choice-list" );
+	TraceConstructorRole( "choice-list" );
 	Events(
 		{
 			input::EV_SELECT,

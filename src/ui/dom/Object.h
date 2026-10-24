@@ -80,6 +80,7 @@ public:
 	// Detached diagnostics only; does not affect native object state.
 	virtual void TraceSnapshot( std::unordered_set< dom_id_t >& visited ) const;
 	void TraceRole( const std::string& role, const std::string& source = "" );
+	void TraceConstructorRole( const std::string& role );
 	void TracePart( Object* part, const std::string& relation );
 	void TraceField( const std::string& key, const std::string& json ) const;
 
@@ -144,6 +145,7 @@ protected:
 	std::string m_trace_role, m_trace_source, m_trace_relation;
 	dom_id_t m_trace_owner = 0, m_trace_selection = 0;
 	bool m_trace_has_fulltext = false;
+	bool m_trace_role_is_constructor = false;
 	std::string m_trace_fulltext;
 	void TraceRegistration() const;
 

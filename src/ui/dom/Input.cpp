@@ -15,7 +15,7 @@ Input::Input( DOM_ARGS )
 	: Panel( DOM_ARGS_PASS, "Input", false )
 	, Focusable() {
 
-	TraceRole( "text-editor" );
+	TraceConstructorRole( "text-editor" );
 	m_text = new Text( GSE_CALL, ui, this, {} );
 	m_text->GetGeometry()->SetAlign( geometry::Geometry::ALIGN_LEFT_CENTER );
 	m_text->GetGeometry()->SetLeft( 4 ); // TODO: configurable?

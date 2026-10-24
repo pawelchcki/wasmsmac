@@ -133,7 +133,7 @@ class RawRecorder:
                 self.media[target]['lifecycle'] = kind.removeprefix('media.')
         elif kind.startswith('semantic.'):
             layouts = {
-                'semantic.protocol': {'version'}, 'semantic.role': {'role', 'source'},
+                'semantic.protocol': {'version'}, 'semantic.role': {'role', 'source', 'constructor'},
                 'semantic.part': {'owner', 'relation'}, 'semantic.factory': {'owner', 'factory'},
                 'semantic.forward': {'target', 'source_property', 'target_property'},
                 'semantic.field': {'key', 'value'},
@@ -141,11 +141,14 @@ class RawRecorder:
                 'semantic.choices': {'count'}, 'semantic.choice': {'key', 'label', 'index', 'node'}}
             _require(kind in layouts and set(data) == layouts[kind], 'unknown/malformed semantic diagnostic kind')
             if kind == 'semantic.protocol':
-                _require(data == {'version': 1} and not getattr(self, 'semantic_protocol', False), 'invalid/duplicate semantic diagnostic protocol')
+                _require(data == {'version': 2}, 'semantic observer protocol v2 required; rebuild candidate runtime')
+                _require(not getattr(self, 'semantic_protocol', False), 'duplicate semantic diagnostic protocol')
                 self.semantic_protocol = True
             else:
                 _require(getattr(self, 'semantic_protocol', False) and target in self.nodes, 'semantic diagnostic without protocol/live node')
-                if kind == 'semantic.field':
+                if kind == 'semantic.role':
+                    _require(type(data['role']) is str and type(data['source']) is str and type(data['constructor']) is bool, 'invalid native constructor provenance')
+                elif kind == 'semantic.field':
                     _require(type(data['key']) is str and data['key'], 'invalid semantic field key')
                 elif kind == 'semantic.geometry':
                     _require(data['area'] in ('layout', 'effective') and all(type(data[k]) in (int, float) for k in ('left', 'top', 'right', 'bottom', 'zindex')), 'invalid native geometry')

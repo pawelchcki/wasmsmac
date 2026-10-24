@@ -327,7 +327,12 @@ void Object::Destroy( GSE_CALLABLE ) {
 }
 
 void Object::TraceRole( const std::string& role, const std::string& source ) {
-	m_trace_role = role; m_trace_source = source;
+	m_trace_role = role; m_trace_source = source; m_trace_role_is_constructor = false;
+	TraceRegistration();
+}
+
+void Object::TraceConstructorRole( const std::string& role ) {
+	m_trace_role = role; m_trace_source.clear(); m_trace_role_is_constructor = true;
 	TraceRegistration();
 }
 
@@ -342,7 +347,7 @@ void Object::TraceField( const std::string& key, const std::string& json ) const
 
 void Object::TraceRegistration() const {
 	if ( !m_trace_role.empty() ) {
-		PRESENTATION_EVENT( "semantic.role", presentation::Node( m_dom_id ), "{\"role\":" + presentation::Quote( m_trace_role ) + ",\"source\":" + presentation::Quote( m_trace_source ) + "}" );
+		PRESENTATION_EVENT( "semantic.role", presentation::Node( m_dom_id ), "{\"role\":" + presentation::Quote( m_trace_role ) + ",\"source\":" + presentation::Quote( m_trace_source ) + ",\"constructor\":" + ( m_trace_role_is_constructor ? "true" : "false" ) + "}" );
 	}
 	if ( m_trace_owner ) {
 		PRESENTATION_EVENT( "semantic.part", presentation::Node( m_dom_id ), "{\"owner\":" + presentation::Quote( presentation::Node( m_trace_owner ) ) + ",\"relation\":" + presentation::Quote( m_trace_relation ) + "}" );

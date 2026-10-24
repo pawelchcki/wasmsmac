@@ -20,7 +20,7 @@ static const std::unordered_set< std::string > s_blocked_blocker_events = {
 Window::Window( DOM_ARGS )
 	: Panel( DOM_ARGS_PASS, "window", false ) {
 
-	TraceRole( "window" );
+	TraceConstructorRole( "window" );
 	m_geometry->SetAlign( geometry::Geometry::ALIGN_CENTER );
 
 	{

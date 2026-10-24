@@ -12,7 +12,7 @@ namespace dom {
 Button::Button( DOM_ARGS )
 	: Panel( DOM_ARGS_PASS, "button", true ) {
 
-	TraceRole( "button" );
+	TraceConstructorRole( "button" );
 	m_label = new Text( GSE_CALL, ui, this, {} );
 	m_label->GetGeometry()->SetAlign( geometry::Geometry::ALIGN_CENTER );
 	Embed( m_label );

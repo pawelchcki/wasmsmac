@@ -30,7 +30,7 @@ Container::Container( DOM_ARGS_T, const bool factories_allowed, const bool has_b
 	, m_cache( new scene::actor::Cache( "UI::Cache" ) )
 	, m_has_body( has_body ) {
 
-	TraceRole( "container" );
+	TraceConstructorRole( "container" );
 
 	Events( // TODO: refactor this
 		{
