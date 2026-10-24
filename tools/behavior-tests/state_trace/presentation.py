@@ -119,13 +119,32 @@ class RawRecorder:
                 self.modal_stack = [] if data['node'] is None else [data['node']]
         elif kind == 'media.create':
             _require(target not in self.seen, 'playback identity reused')
-            _require(set(data) == {'type', 'source'} and all(type(x) is str and x for x in data.values()), 'invalid media birth')
-            self.media[target] = {'id': target, **data, 'lifecycle': 'created', 'evidence': 'request'}
+            if data.get('type') == 'animation':
+                _require(set(data) == {'type', 'source', 'duration_ms', 'frame_count', 'x', 'y', 'z', 'evidence', 'history'}, 'invalid animation birth fields')
+                _require(type(data['source']) is str and bool(data['source']), 'invalid animation source')
+                _require(type(data['duration_ms']) is int and data['duration_ms'] >= 0 and type(data['frame_count']) is int and data['frame_count'] > 0, 'invalid animation dimensions')
+                _require(all(type(data[key]) in (int, float) for key in ('x', 'y', 'z')), 'invalid animation coordinates')
+                _require(data['evidence'] == 'native-registration' and data['history'] in ('from-construction', 'partial'), 'invalid animation registration evidence')
+            else:
+                _require(set(data) == {'type', 'source'} and all(type(x) is str and x for x in data.values()), 'invalid media birth')
+            self.media[target] = {'id': target, 'lifecycle': 'created', 'evidence': 'request', **data}
             self.seen.add(target)
         elif kind.startswith('media.'):
             _require(target in self.media, 'event for missing playback')
             _require(kind in ('media.request', 'media.start', 'media.frame', 'media.progress', 'media.end', 'media.stop', 'media.failure', 'media.loop', 'media.pause', 'media.volume', 'media.control', 'media.mute', 'media.destroy'), 'unknown media event ' + kind)
-            _require(data.get('evidence') in ('request', 'mixer-buffer', 'device'), 'missing media evidence level')
+            if self.media[target]['type'] == 'animation':
+                _require(data.get('evidence') == 'scene-instance', 'missing animation scene evidence')
+                if kind == 'media.frame':
+                    _require(set(data) == {'evidence', 'frame_index', 'scene_instance_id', 'present'}, 'invalid animation frame fields')
+                    _require(type(data['frame_index']) is int and 0 <= data['frame_index'] < self.media[target]['frame_count'], 'invalid animation frame index')
+                    _require(type(data['scene_instance_id']) is int and data['scene_instance_id'] > 0 and type(data['present']) is bool, 'invalid animation scene instance')
+                elif kind in ('media.stop', 'media.end'):
+                    reason = 'cancelled' if kind == 'media.stop' else 'completed'
+                    _require(data == {'evidence': 'scene-instance', 'reason': reason}, 'invalid animation termination')
+                else:
+                    _require(kind in ('media.start', 'media.destroy') and data == {'evidence': 'scene-instance'}, 'unknown animation lifecycle event')
+            else:
+                _require(data.get('evidence') in ('request', 'mixer-buffer', 'device'), 'missing media evidence level')
             if kind == 'media.destroy':
                 del self.media[target]
             else:
