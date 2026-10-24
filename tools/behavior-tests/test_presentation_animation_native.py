@@ -8,9 +8,12 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from copy import deepcopy
 
 from protocol import ProtocolError
-from state_trace.presentation import RawRecorder
+from state_trace.presentation import RawRecorder, DOMAINS
+from state_trace.presentation_projector import project_capture
+from state_trace.presentation_audit import audit_capture
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -145,6 +148,27 @@ int main() {
             recorder.ingest(rows[index])
             self.assertTrue(all(value is False for value in recorder.checkpoint_coverage().values()))
             reduced.append(recorder.checkpoint())
+            # Controlled input fences frame this actual native producer batch.
+            # Payloads/identities remain unchanged; only execution ordinals shift.
+            # No native seal or device-output evidence is invented by the fixture.
+            plan = dict(fixture=dict(requested_coverage=list(DOMAINS)),
+                        actions=[dict(id='launch', kind='launch')],
+                        checkpoints=[dict(id='done', after_action='launch')])
+            events = [dict(kind='semantic.protocol', target='trace', data=dict(version=2)),
+                      dict(kind='trace.protocol', target='trace', data=dict(version=1, physical_os_complete=False)),
+                      dict(kind='trace.action', target='trace', data=dict(op=1, action=1, checkpoint=0, nonce=0))]
+            events += deepcopy(rows[index]['events'])
+            events += [dict(kind='trace.action', target='trace', data=dict(op=2, action=1, checkpoint=0, nonce=1)),
+                       dict(kind='trace.checkpoint', target='trace', data=dict(op=3, action=1, checkpoint=1, nonce=2))]
+            for sequence, event in enumerate(events, 1):
+                event['seq'] = sequence
+            capture = dict(schema='glsmac.presentation.raw.v1', input_plan=plan,
+                           batches=[dict(enabled=True, dropped=0, events=events)],
+                           input_checkpoints=[dict(id='done', after_action='launch', checkpoint=1)])
+            report = audit_capture(capture, project_capture(capture, plan))
+            self.assertTrue(report['valid'])
+            self.assertFalse(report['transport_complete'])
+            self.assertFalse(report['exhaustive_coverage_complete'])
         for index in (0, 1, 3):
             self.assertFalse(any(item['type'] == 'animation' for item in reduced[index]['media'].values()))
         surviving = [item for item in reduced[2]['media'].values() if item['type'] == 'animation']

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from protocol import ProtocolError
-from state_trace.presentation import CLOCK, DOMAINS
+from state_trace.presentation import CLOCK, DOMAINS, SemanticRecorder
 from state_trace.presentation_audit import audit_capture, main
 from state_trace.presentation_projector import project_capture
 from test_presentation_projector import fixture as projector_fixture
@@ -54,6 +54,29 @@ def attributed_capture():
     return capture, project_capture(capture, inputs)
 
 
+def animation_capture():
+    inputs, capture, rows = empty_capture()
+    rows[3:3] = [
+        dict(kind='media.create', target='animation', data=dict(type='animation', source='synthetic',
+             duration_ms=300, frame_count=3, x=1.0, y=2.0, z=0.0, evidence='native-registration', history='from-construction')),
+        dict(kind='media.start', target='animation', data=dict(evidence='scene-instance')),
+        dict(kind='media.frame', target='animation', data=dict(evidence='scene-instance', frame_index=0, scene_instance_id=7, present=True))]
+    for sequence, event in enumerate(rows, 1): event['seq'] = sequence
+    return capture, project_capture(capture, inputs)
+
+
+def reconstruct(projection):
+    """Make altered canonical events and their snapshots internally consistent."""
+    resequence(projection)
+    reducer = SemanticRecorder()
+    for state in [point['state']['presentation'] for point in projection['checkpoints']] + [projection['diagnostics']['tail_presentation']]:
+        for event in state['events']:
+            reducer.record(event)
+        snapshot = reducer.checkpoint()
+        state.clear()
+        state.update(snapshot)
+
+
 def evidence():
     inputs, capture, _ = fixture()
     capture.update(schema='glsmac.presentation.raw.v1', clock=deepcopy(CLOCK), coverage={})
@@ -72,6 +95,140 @@ def resequence(projection):
 
 
 class AuditTests(unittest.TestCase):
+    def test_coherently_altered_animation_frame_cannot_override_raw_source(self):
+        capture, projection = animation_capture()
+        self.assertTrue(audit_capture(capture, projection)['semantic_understood'])
+        event = next(event for event in projection['checkpoints'][0]['state']['presentation']['events']
+                     if event['domain'] == 'animation' and event['fields'].get('frame_index') == 0)
+        event['fields']['frame_index'] = 2
+        reconstruct(projection)
+        with self.assertRaisesRegex(ProtocolError, 'animation.*source'):
+            audit_capture(capture, projection)
+
+    def test_animation_birth_metadata_is_bound_to_exact_raw_registration(self):
+        for field, value in [('source', 'invented'), ('duration_ms', 999), ('frame_count', 99),
+                             ('coordinates', {'x': 9, 'y': 2, 'z': 0}), ('history', 'partial'),
+                             ('evidence', 'device'), ('role', 'invented'), ('evidence_scope', 'rendered')]:
+            capture, projection = animation_capture()
+            event = next(event for event in projection['checkpoints'][0]['state']['presentation']['events']
+                         if event['domain'] == 'animation' and event['kind'] == 'create')
+            event['fields'][field] = value
+            reconstruct(projection)
+            with self.subTest(field=field), self.assertRaisesRegex(ProtocolError, 'animation.*source'):
+                audit_capture(capture, projection)
+
+    def test_animation_frame_identity_presence_and_evidence_are_bound_to_raw_source(self):
+        for field, value in [('scene_instance_id', 99), ('present', False), ('evidence', 'device'), ('lifecycle', 'frame-removed')]:
+            capture, projection = animation_capture()
+            event = next(event for event in projection['checkpoints'][0]['state']['presentation']['events']
+                         if event['domain'] == 'animation' and event['fields'].get('frame_index') == 0)
+            event['fields'][field] = value
+            reconstruct(projection)
+            with self.subTest(field=field), self.assertRaisesRegex(ProtocolError, 'animation.*source'):
+                audit_capture(capture, projection)
+
+    def test_each_typed_animation_raw_event_requires_one_canonical_transition(self):
+        for corruption in ('omit-all', 'omit-start', 'omit-frame', 'duplicate-frame', 'extra-unrelated-update'):
+            capture, projection = animation_capture()
+            events = projection['checkpoints'][0]['state']['presentation']['events']
+            start = next(event for event in events if event['domain'] == 'animation' and event['fields'].get('lifecycle') == 'started')
+            frame = next(event for event in events if event['domain'] == 'animation' and event['fields'].get('lifecycle') == 'frame-submitted')
+            if corruption == 'omit-all': events[:] = [event for event in events if event['domain'] != 'animation']
+            elif corruption == 'omit-start': events.remove(start)
+            elif corruption == 'omit-frame': events.remove(frame)
+            elif corruption == 'duplicate-frame': events.insert(events.index(frame), deepcopy(frame))
+            else:
+                index = next(i for i, event in enumerate(events) if event['kind'] == 'observed'
+                             and event['fields']['kind'] == 'trace.action' and event['fields']['data']['op'] == 2)
+                events.insert(index, deepcopy(frame))
+            reconstruct(projection)
+            with self.subTest(corruption=corruption), self.assertRaisesRegex(ProtocolError, 'animation.*source'):
+                audit_capture(capture, projection)
+
+    def test_animation_removal_termination_and_retirement_match_raw_sources(self):
+        for termination in ('stop', 'end'):
+            capture, _ = animation_capture()
+            rows = capture['batches'][0]['events']
+            tail = [('media.frame', dict(evidence='scene-instance', frame_index=0, scene_instance_id=7, present=False))]
+            if termination == 'end':
+                for frame in (1, 2):
+                    tail.extend([('media.frame', dict(evidence='scene-instance', frame_index=frame, scene_instance_id=7 + frame, present=True)),
+                                 ('media.frame', dict(evidence='scene-instance', frame_index=frame, scene_instance_id=7 + frame, present=False))])
+            tail.extend([('media.' + termination, dict(evidence='scene-instance', reason='cancelled' if termination == 'stop' else 'completed')),
+                         ('media.destroy', dict(evidence='scene-instance'))])
+            for kind, data in tail: rows.append(dict(seq=len(rows) + 1, kind=kind, target='animation', data=data))
+            projection = project_capture(capture, capture['input_plan'])
+            self.assertTrue(audit_capture(capture, projection)['valid'])
+            for corruption in ('remove-index', 'remove-instance', 'termination', 'destroy'):
+                altered = deepcopy(projection)
+                events = altered['diagnostics']['tail_presentation']['events']
+                if corruption.startswith('remove'):
+                    event = next(event for event in events if event['domain'] == 'animation' and event['fields'].get('lifecycle') == 'frame-removed')
+                    event['fields']['frame_index' if corruption == 'remove-index' else 'scene_instance_id'] = 0
+                elif corruption == 'termination':
+                    event = next(event for event in events if event['domain'] == 'animation' and event['fields'].get('lifecycle') in ('completed', 'cancelled'))
+                    event['fields']['lifecycle'] = 'started'
+                else:
+                    event = next(event for event in events if event['domain'] == 'animation' and event['kind'] == 'destroy')
+                    event['fields']['invented'] = True
+                reconstruct(altered)
+                with self.subTest(termination=termination, corruption=corruption), self.assertRaisesRegex(ProtocolError, 'animation.*source'):
+                    audit_capture(capture, altered)
+
+    def test_retired_transient_unavailability_remains_historical_evidence(self):
+        for location in ('checkpoint', 'terminal-tail'):
+            inputs, capture, rows = empty_capture()
+            additions = [
+                dict(kind='node.create', target='transient', data={'parent': None, 'tag': '$button'}),
+                dict(kind='semantic.role', target='transient', data={'role': 'button', 'source': '', 'constructor': True}),
+                dict(kind='node.destroy', target='transient', data={})]
+            if location == 'checkpoint': rows[3:3] = additions
+            else: rows.extend(additions)
+            for sequence, event in enumerate(rows, 1): event['seq'] = sequence
+            report = audit_capture(capture, project_capture(capture, inputs))
+            self.assertFalse(report['unknown_events'])
+            self.assertFalse(report['unknown_objects'])
+            with self.subTest(location=location):
+                self.assertFalse(report['semantic_understood'])
+                historical = [field for field in report['unavailable_fields'] if field.get('semantic_event_sequence')]
+                self.assertTrue(historical)
+                self.assertTrue(all(field['raw_sequence'] > 0 for field in historical))
+                self.assertTrue(all(field['identity'] == 'candidate-birth:transient' for field in historical))
+                self.assertTrue(all(field['checkpoint'] == ('done' if location == 'checkpoint' else 'terminal-tail') for field in historical))
+
+    def test_unavailable_update_history_survives_later_resolution_and_retirement(self):
+        inputs, capture, rows = empty_capture()
+        rows[3:3] = [
+            dict(kind='node.create', target='transient', data={'parent': None, 'tag': '$button'}),
+            dict(kind='semantic.role', target='transient', data={'role': 'button', 'source': '', 'constructor': True}),
+            dict(kind='node.show', target='transient', data={}),
+            dict(kind='node.hide', target='transient', data={}),
+            dict(kind='node.destroy', target='transient', data={})]
+        for sequence, event in enumerate(rows, 1): event['seq'] = sequence
+        projection = project_capture(capture, inputs)
+        updates = [event for event in projection['checkpoints'][0]['state']['presentation']['events']
+                   if event['domain'] == 'widgets' and event['kind'] == 'update' and 'visible_local' in event['fields']]
+        updates[0]['fields']['field_availability'] = {'transient-field': 'unavailable until sampled'}
+        updates[-1]['fields']['field_availability'] = {'transient-field': 'actual native field'}
+        reconstruct(projection)
+        report = audit_capture(capture, projection)
+        unavailable = [field for field in report['unavailable_fields'] if field['field'] == 'transient-field']
+        self.assertEqual(len(unavailable), 1)
+        self.assertEqual(unavailable[0]['semantic_event_sequence'], updates[0]['seq'])
+        self.assertEqual(unavailable[0]['reason'], 'unavailable until sampled')
+        self.assertFalse(report['semantic_understood'])
+
+    def test_every_checkpoint_requires_exact_complete_boolean_coverage_keys(self):
+        for corruption in ('empty', 'missing', 'unknown', 'integer'):
+            capture, projection = evidence()
+            coverage = projection['checkpoints'][0]['coverage']
+            if corruption == 'empty': coverage.clear()
+            elif corruption == 'missing': del coverage['presentation.audio.output']
+            elif corruption == 'unknown': coverage['presentation.invented'] = False
+            else: coverage['presentation.widgets'] = 0
+            with self.subTest(corruption=corruption), self.assertRaisesRegex(ProtocolError, 'coverage'):
+                audit_capture(capture, projection)
+
     def test_valid_semantic_actions_match_source_before_action_fence_and_in_tail(self):
         capture, projection = attributed_capture()
         self.assertTrue(audit_capture(capture, projection)['valid'])

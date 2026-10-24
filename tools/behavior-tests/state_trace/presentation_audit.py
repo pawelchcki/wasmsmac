@@ -154,6 +154,37 @@ def _native_attribution(capture, events, points):
     return after_inputs, fences
 
 
+def _animation_sources(events):
+    """Bounded typed scene-animation contract, independently bound to raw events."""
+    identities, transitions = set(), {}
+    for event in events:
+        kind, target, data = event['kind'], event['target'], event['data']
+        identity = 'candidate-birth:' + target
+        if kind == 'media.create' and data['type'] == 'animation':
+            identities.add(identity)
+            operation = 'create'
+            fields = {'role': 'scene-animation', 'source': data['source'],
+                      'duration_ms': data['duration_ms'], 'frame_count': data['frame_count'],
+                      'coordinates': {key: data[key] for key in ('x', 'y', 'z')},
+                      'history': data['history'], 'evidence': data['evidence'],
+                      'lifecycle': 'registered', 'frame_index': None, 'scene_instance_id': None,
+                      'evidence_scope': 'native scene instance submission; rendered pixels unobserved'}
+        elif identity in identities and kind.startswith('media.'):
+            operation = 'destroy' if kind == 'media.destroy' else 'update'
+            fields = {} if operation == 'destroy' else deepcopy(data)
+            if kind == 'media.frame':
+                fields['lifecycle'] = 'frame-submitted' if data['present'] else 'frame-removed'
+                if not data['present']:
+                    fields.update(frame_index=None, scene_instance_id=None)
+            elif operation == 'update':
+                fields['lifecycle'] = {'media.start': 'started', 'media.end': 'completed', 'media.stop': 'cancelled'}[kind]
+        else:
+            continue
+        transitions[event['seq']] = {'domain': 'animation', 'kind': operation,
+                                      'object_id': identity, 'fields': fields}
+    return identities, transitions
+
+
 def audit_capture(capture, projection):
     """Return a deterministic accounting report, or raise ProtocolError on loss/omission.
 
@@ -187,10 +218,21 @@ def audit_capture(capture, projection):
                  and type(point.get('id')) is str and bool(point['id']) for point in points),
              'invalid checkpoint plan entry')
     after_inputs, native_fences = _native_attribution(capture, events, points)
+    animation_ids, animation_sources = _animation_sources(events)
+    animation_counts = Counter()
     raw_replay, semantic = RawRecorder(max_events=1000000), SemanticRecorder()
     cursor, previous_boundary, reports, observations = 0, 0, [], []
     semantic_births, semantic_retirements = {}, {}
     declared = {}
+    unavailable = []
+
+    def unavailable_fields(fields, identity, label, **source):
+        availability = fields.get('field_availability', {})
+        _require(type(availability) is dict, 'field availability must be an object')
+        for field, evidence in availability.items():
+            if any(word in str(evidence).lower() for word in ('unavailable', 'unclassified', 'unimplemented')):
+                unavailable.append({'checkpoint': label, 'identity': identity,
+                                    'field': field, 'reason': evidence, **source})
 
     def interval(state, boundary, label):
         nonlocal cursor
@@ -204,6 +246,14 @@ def audit_capture(capture, projection):
             semantic.record(event)
             if event['domain'] in ('windows', 'widgets', 'animation', 'video', 'sfx', 'music'):
                 identity = event['object_id']
+                if event['domain'] == 'animation' or identity in animation_ids:
+                    transition = {key: event[key] for key in ('domain', 'kind', 'object_id', 'fields')}
+                    _require(_same(transition, animation_sources.get(cursor + 1)),
+                             'animation canonical transition differs from raw source at sequence ' + str(cursor + 1))
+                    animation_counts[cursor + 1] += 1
+                if event['kind'] in ('create', 'update'):
+                    unavailable_fields(event['fields'], identity, label,
+                                       semantic_event_sequence=event['seq'], raw_sequence=cursor + 1)
                 _require(identity.startswith('candidate-birth:') and identity[16:] in dispositions,
                          'semantic identity has no native birth: ' + identity)
                 native = dispositions[identity[16:]]
@@ -228,6 +278,9 @@ def audit_capture(capture, projection):
                          and _same(fields['data'], source['data']), 'observed raw payload differs at sequence ' + str(cursor + 1))
                 disposition = fields['disposition']
                 _require(type(disposition) is str and bool(disposition), 'missing event disposition')
+                if cursor + 1 in animation_sources:
+                    _require(animation_counts[cursor + 1] == 1 and disposition == 'animation',
+                             'animation raw source requires exactly one canonical transition and typed disposition at sequence ' + str(cursor + 1))
                 expected_domain = ('unknown' if disposition.startswith('unknown') else
                                    disposition if disposition in ('input', 'action') else 'diagnostic')
                 _require(event['domain'] == expected_domain
@@ -282,8 +335,9 @@ def audit_capture(capture, projection):
         _require(type(checkpoint.get('state')) is dict and set(checkpoint['state']) == {'presentation'},
                  'checkpoint presentation state missing')
         coverage = checkpoint.get('coverage')
-        _require(type(coverage) is dict and all(type(k) is str and type(v) is bool for k, v in coverage.items()),
-                 'invalid checkpoint coverage declarations')
+        _require(type(coverage) is dict and set(coverage) == {'presentation.' + name for name in DOMAINS}
+                 and all(type(value) is bool for value in coverage.values()),
+                 'checkpoint coverage requires exactly all 15 known presentation channels with boolean declarations')
         declared[point['id']] = deepcopy(coverage)
         reports.append(interval(checkpoint['state']['presentation'], boundary, point['id']))
         previous_boundary = boundary
@@ -318,16 +372,12 @@ def audit_capture(capture, projection):
                        if record['disposition'].startswith('unknown')}
     unmapped_fields = [o for o in observations if o['disposition'] == 'unknown-field'
                        or o['kind'] in ('node.unset', 'semantic.forward')]
-    unavailable = []
     availability_states = [(checkpoint['id'], checkpoint['state']['presentation']) for checkpoint in checkpoints]
     availability_states.append(('terminal-tail', diagnostics['tail_presentation']))
     for checkpoint_id, state in availability_states:
         for inventory in ('objects', 'media'):
             for identity, fields in state[inventory].items():
-                for field, evidence in fields.get('field_availability', {}).items():
-                    if any(word in str(evidence).lower() for word in ('unavailable', 'unclassified', 'unimplemented')):
-                        unavailable.append({'checkpoint': checkpoint_id, 'identity': identity,
-                                            'field': field, 'reason': evidence})
+                unavailable_fields(fields, identity, checkpoint_id)
     semantic_understood = not (unknown_events or unknown_objects or unmapped_fields or unavailable)
     reasons = [] if transport_complete else ['A nonempty observer epoch and an acknowledged atomic terminal seal are required.']
     channels = {name: {'complete': False, 'missing_capability_reasons': [GAPS[name],

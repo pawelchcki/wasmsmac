@@ -131,6 +131,9 @@ order, followed by completion or cancellation and eventual destruction. Frame
 zero is observed after its actual `AddInstance`; a timer catch-up retains every
 intermediate submission/removal. These observations use `scene-instance`
 evidence and establish scene submission, not rendered pixels or exact timing.
+The raw reducer checks submission/removal pairing, instance IDs, frame order and
+termination. A partial epoch may observe its initial baseline removal without
+the earlier submission; that exception cannot hide later gaps or mismatches.
 
 Animation births use `native-registration` evidence. A capture started during
 an existing animation registers it lazily with `history: partial` on the next
@@ -157,6 +160,9 @@ and interval event counts, event kinds, lifetimes and live inventory counts.
 The capture must include its validated `input_plan`. Every semantic event is
 bound to its exact native source action, including canonical updates and the
 terminal tail; unknown, reordered or incorrectly attributed actions are rejected.
+Typed animation transitions also match their exact raw source fields once per
+source event. Unavailable field history survives resolution and retirement, and
+every checkpoint must explicitly declare all fifteen known boolean channels.
 
 Transport completeness, semantic understanding, exhaustive channel coverage and
 rendered output are separate results. A quiet interval, an empty channel or a

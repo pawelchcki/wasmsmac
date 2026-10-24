@@ -41,6 +41,7 @@ class RawRecorder:
             self.coverage[name] = observed
         self.max_events = max_events
         self.nodes, self.media, self.seen = {}, {}, set()
+        self.animation_states = {}
         self.focus, self.modal_stack = None, []
         self.seq, self.events = 0, []
 
@@ -125,6 +126,9 @@ class RawRecorder:
                 _require(type(data['duration_ms']) is int and data['duration_ms'] >= 0 and type(data['frame_count']) is int and data['frame_count'] > 0, 'invalid animation dimensions')
                 _require(all(type(data[key]) in (int, float) for key in ('x', 'y', 'z')), 'invalid animation coordinates')
                 _require(data['evidence'] == 'native-registration' and data['history'] in ('from-construction', 'partial'), 'invalid animation registration evidence')
+                self.animation_states[target] = {'partial': data['history'] == 'partial',
+                    'first': True, 'started': False, 'frame': None, 'next': None if data['history'] == 'partial' else 0,
+                    'saw_frame': False, 'terminated': False}
             else:
                 _require(set(data) == {'type', 'source'} and all(type(x) is str and x for x in data.values()), 'invalid media birth')
             self.media[target] = {'id': target, 'lifecycle': 'created', 'evidence': 'request', **data}
@@ -143,10 +147,12 @@ class RawRecorder:
                     _require(data == {'evidence': 'scene-instance', 'reason': reason}, 'invalid animation termination')
                 else:
                     _require(kind in ('media.start', 'media.destroy') and data == {'evidence': 'scene-instance'}, 'unknown animation lifecycle event')
+                self.advance_animation(target, kind, data)
             else:
                 _require(data.get('evidence') in ('request', 'mixer-buffer', 'device'), 'missing media evidence level')
             if kind == 'media.destroy':
                 del self.media[target]
+                self.animation_states.pop(target, None)
             else:
                 self.media[target].update(data)
                 self.media[target]['lifecycle'] = kind.removeprefix('media.')
@@ -185,6 +191,40 @@ class RawRecorder:
             _require(False, 'unknown event ' + kind)
         self.seq = event['seq']
         self.events.append(deepcopy(event))
+
+    def advance_animation(self, target, kind, data):
+        # A partial epoch may first observe an existing frame's removal or an
+        # already-finished instance's destruction. It cannot excuse later gaps.
+        state = dict(self.animation_states[target])
+        if kind == 'media.destroy':
+            _require(state['frame'] is None and (state['terminated'] or state['partial'] and state['first']),
+                     'animation destroyed before frame removal/termination')
+        else:
+            _require(not state['terminated'], 'animation event after termination')
+            if kind == 'media.start':
+                _require(state['first'] and not state['started'], 'animation start repeated or out of order')
+                state.update(started=True, next=0)
+            elif kind == 'media.frame':
+                frame = (data['frame_index'], data['scene_instance_id'])
+                if data['present']:
+                    _require(state['frame'] is None and (state['started'] or state['partial']), 'animation frame submitted before start or previous removal')
+                    _require(state['next'] is None or state['next'] == frame[0], 'animation frame skipped or reordered')
+                    state['frame'] = frame
+                else:
+                    _require(state['frame'] == frame or (state['partial'] and state['first'] and state['next'] is None),
+                             'animation frame removal has no matching submission')
+                    state.update(frame=None, next=frame[0] + 1)
+                state['saw_frame'] = True
+            else:
+                _require(state['frame'] is None, 'animation terminated before removing its frame')
+                if kind == 'media.end':
+                    _require((state['saw_frame'] and state['next'] == self.media[target]['frame_count'])
+                             or state['partial'] and state['first'], 'animation completed before its last frame')
+                else:
+                    _require(state['saw_frame'] or state['partial'] and state['first'], 'animation cancelled without observed playback')
+                state['terminated'] = True
+        state['first'] = False
+        self.animation_states[target] = state
 
     def checkpoint(self):
         state = {'schema': SCHEMA, 'clock': deepcopy(CLOCK),

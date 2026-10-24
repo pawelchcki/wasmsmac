@@ -43,6 +43,7 @@ class AnimationTraceTests(unittest.TestCase):
 
     def test_frame_removal_and_completion_remain_ordered_before_retirement(self):
         case, capture, add = fixture()
+        capture['batches'][0]['events'][3]['data']['frame_count'] = 1
         add('media.frame', evidence='scene-instance', frame_index=0, scene_instance_id=7, present=False)
         add('media.end', evidence='scene-instance', reason='completed')
         add('media.destroy', evidence='scene-instance')
@@ -96,7 +97,51 @@ class AnimationTraceTests(unittest.TestCase):
         bad['batches'][0]['dropped'] = 1
         with self.assertRaises(ProtocolError):
             project_capture(bad, case)
+        add('media.frame', evidence='scene-instance', frame_index=0, scene_instance_id=7, present=False)
+        add('media.stop', evidence='scene-instance', reason='cancelled')
         add('media.destroy', evidence='scene-instance')
         add('media.create', **capture['batches'][0]['events'][3]['data'])
-        with self.assertRaises(ProtocolError):
+        with self.assertRaisesRegex(ProtocolError, 'playback identity reused'):
             project_capture(capture, case)
+
+    def test_full_history_rejects_removal_without_observed_submission(self):
+        _, capture, _ = fixture()
+        rows = capture['batches'][0]['events'][:6]
+        rows[-1]['data']['present'] = False
+        with self.assertRaisesRegex(ProtocolError, 'no matching submission'):
+            RawRecorder().ingest(dict(enabled=True, dropped=0, events=rows))
+
+    def test_impossible_frame_and_termination_sequences_are_rejected(self):
+        def frame(index=0, identifier=7, present=True):
+            return dict(evidence='scene-instance', frame_index=index, scene_instance_id=identifier, present=present)
+        invalid_suffixes = [
+            [('media.frame', frame())],
+            [('media.frame', frame(present=False, identifier=99))],
+            [('media.frame', frame(1))],
+            [('media.frame', frame(present=False)), ('media.frame', frame(2))],
+            [('media.frame', frame(present=False)), ('media.end', dict(evidence='scene-instance', reason='completed'))],
+            [('media.frame', frame(present=False)), ('media.stop', dict(evidence='scene-instance', reason='cancelled')), ('media.frame', frame(1))],
+            [('media.destroy', dict(evidence='scene-instance'))],
+            [('media.frame', frame(present=False)), ('media.destroy', dict(evidence='scene-instance'))],
+            [('media.start', dict(evidence='scene-instance'))],
+        ]
+        for suffix in invalid_suffixes:
+            with self.subTest(suffix=suffix), self.assertRaises(ProtocolError):
+                _, capture, add = fixture()
+                rows = capture['batches'][0]['events']
+                rows[:] = rows[:6]
+                for kind, data in suffix:
+                    add(kind, **data)
+                RawRecorder().ingest(dict(enabled=True, dropped=0, events=rows))
+
+    def test_partial_baseline_allows_first_removal_then_requires_matching_frames(self):
+        _, capture, add = fixture('partial')
+        rows = capture['batches'][0]['events']
+        rows[:] = rows[:4]
+        for index, present in [(1, False), (2, True), (2, False)]:
+            add('media.frame', evidence='scene-instance', frame_index=index, scene_instance_id=9, present=present)
+        add('media.end', evidence='scene-instance', reason='completed')
+        add('media.destroy', evidence='scene-instance')
+        recorder = RawRecorder()
+        recorder.ingest(dict(enabled=True, dropped=0, events=rows))
+        self.assertEqual(recorder.checkpoint()['media'], {})
