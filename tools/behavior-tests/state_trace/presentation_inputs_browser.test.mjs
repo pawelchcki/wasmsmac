@@ -40,7 +40,7 @@ test('threaded pinned captures reconcile all observed inputs and preserve exact 
   const rawEvents=capture.batches.flatMap(batch=>batch.events);
   assert.ok(rawEvents.some(event=>event.kind==='semantic.protocol'&&event.data.version===2),'fresh v2 constructor provenance is required');
   const semanticEvents=[...semantic.checkpoints.flatMap(point=>point.state.presentation.events),...semantic.diagnostics.tail_presentation.events];
-  const live=new Set(),selected=new Map();
+  const live=new Set(),selected=new Map(),membership=new Map();
   for(const event of semanticEvents){
    if(event.kind==='create')live.add(event.object_id);
    if(event.kind==='update'&&Object.hasOwn(event.fields,'selected')){
@@ -49,10 +49,12 @@ test('threaded pinned captures reconcile all observed inputs and preserve exact 
      selected.set(event.object_id,event.fields.selected);
     }else selected.delete(event.object_id);
    }
+   if(event.kind==='update'&&Object.hasOwn(event.fields,'items'))membership.set(event.object_id,event.fields.items);
    if(event.kind==='destroy'){
     assert.ok(![...selected.values()].includes(event.object_id),'selected references clear before target retirement');
-    live.delete(event.object_id);selected.delete(event.object_id);
+    live.delete(event.object_id);selected.delete(event.object_id);membership.delete(event.object_id);
    }
+   for(const items of membership.values())for(const item of items||[])assert.ok(live.has(item.control),'choice membership must never reference an unborn or retired control');
    if(event.kind==='observed'&&event.fields.kind.startsWith('media.'))assert.equal(event.fields.disposition,'unknown-media');
   }
   const windows=new Set(rawEvents.filter(event=>event.kind==='semantic.role'&&event.data.constructor===true&&event.data.role==='window').map(event=>event.target));

@@ -2,7 +2,8 @@
 
 No cross-engine correspondence or exhaustive semantic/media coverage is claimed.
 Every raw event survives with an explicit disposition, including retired unknowns.
-Role/part initialization may be resolved through the current fence, never beyond it.
+Native constructor roles and declared part ownership may be resolved through the
+current fence, never beyond it. Script roles are processed at their own event.
 """
 from copy import deepcopy
 from collections import Counter
@@ -75,6 +76,7 @@ class Projector:
         self.fields, self.native_fields, self.geometry, self.choice_items = {}, {}, {}, {}
         self.choice_pending = {}
         self.constructor_roles, self.selected_targets = {}, {}
+        self.retired_native_ids = set()
         self.raw_seq = 0
 
     @staticmethod
@@ -124,7 +126,6 @@ class Projector:
         for event in events:
             target, kind, data = (event[k] for k in ('target', 'kind', 'data'))
             if kind == 'semantic.role' and data['role'] in ROLES:
-                self.roles.setdefault(target, deepcopy(data))
                 if data['constructor'] and target not in self.nodes:
                     self.constructor_roles[target] = deepcopy(data)
             elif kind == 'semantic.part':
@@ -175,8 +176,6 @@ class Projector:
             values['text'] = native['full_text']
         if 'selected' in native:
             values['selected'] = native['selected']
-        if target in self.choice_items:
-            values['items'] = deepcopy(self.choice_items[target])
         if target in self.geometry:
             values['geometry'] = {'coordinates': 'native-ui-absolute', **deepcopy(self.geometry[target])}
         values.update({key: self.nodes[target][key] for key in ('visible_local', 'mounted') if key in self.nodes[target]})
@@ -184,6 +183,7 @@ class Projector:
             self.verified_update(target, values, 'current previously observed fields at actual registration')
         self.reconcile_parents()
         self.reconcile_selections()
+        self.reconcile_choices()
 
     def reconcile_parents(self):
         for target in self.nodes:
@@ -211,6 +211,21 @@ class Projector:
                 value, evidence = None, 'unavailable: selection target not yet a live logical control'
             self.verified_update(owner, {'selected': value}, evidence)
 
+    def reconcile_choices(self):
+        # Preserve the last complete native snapshot. Missing live controls
+        # make its logical references unavailable, never an invented empty list.
+        for owner, items in self.choice_items.items():
+            if self.identity(owner) not in self.semantic.objects:
+                continue
+            controls = [item['control'] for item in items]
+            if any(control in self.retired_native_ids for control in controls):
+                value, evidence = None, 'unavailable: choice control retired'
+            elif any(control not in self.semantic.objects for control in controls):
+                value, evidence = None, 'unavailable: choice control not yet live'
+            else:
+                value, evidence = deepcopy(items), 'actual native ordered typed choice membership'
+            self.verified_update(owner, {'items': value}, evidence)
+
     def record(self, event):
         target, kind, data = (event[k] for k in ('target', 'kind', 'data'))
         if kind == 'trace.action':
@@ -228,11 +243,14 @@ class Projector:
                 self.create_logical(target)
         elif kind == 'node.destroy':
             self.dispositions[target]['retirement_sequence'] = event['seq']
+            self.retired_native_ids.add(self.identity(target))
             self.reconcile_selections()
+            self.reconcile_choices()
             if self.identity(target) in self.semantic.objects:
                 self.emit(self.domain(target), 'destroy', target, {})
             self.nodes.pop(target)
             self.selected_targets.pop(target, None)
+            self.choice_items.pop(target, None)
             self.reconcile_parents()
         elif kind in ('node.show', 'node.hide'):
             self.nodes[target]['visible_local'] = kind == 'node.show'
@@ -261,6 +279,7 @@ class Projector:
                     self.update(target, {'role': role['role'], 'source': role.get('source') or None})
                     self.dispositions[target]['role'] = deepcopy(role)
                 self.reconcile_selections()
+                self.reconcile_choices()
             else:
                 disposition = 'unknown-role'
         elif kind in ('semantic.part', 'semantic.factory'):
@@ -290,7 +309,7 @@ class Projector:
                 raise ProtocolError('native choice snapshot restarted before completion')
             if data['count'] == 0:
                 self.choice_items[target] = []
-                self.verified_update(target, {'items': []}, 'actual native ordered typed choice membership')
+                self.reconcile_choices()
             else:
                 self.choice_pending[target] = {'count': data['count'], 'items': []}
         elif kind == 'semantic.choice':
@@ -305,7 +324,7 @@ class Projector:
             if len(items) == snapshot['count']:
                 self.choice_items[target] = deepcopy(items)
                 del self.choice_pending[target]
-                self.verified_update(target, {'items': deepcopy(items)}, 'actual native ordered typed choice membership')
+                self.reconcile_choices()
         elif kind in ('node.property', 'semantic.field'):
             key, value = data['key'], data['value']
             self.fields.setdefault(target, {})[key] = value

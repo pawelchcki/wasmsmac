@@ -51,6 +51,55 @@ def fixture():
 
 
 class ProjectionTests(unittest.TestCase):
+    def assert_live_choice_history(self, events):
+        objects = {}
+        for event in events:
+            target = event['object_id']
+            if event['kind'] == 'create': objects[target] = deepcopy(event['fields'])
+            elif event['kind'] == 'update': objects[target].update(deepcopy(event['fields']))
+            elif event['kind'] == 'destroy': del objects[target]
+            for owner in objects.values():
+                for item in owner.get('items') or []:
+                    self.assertIn(item['control'], objects)
+
+    def test_first_script_role_does_not_precede_prior_native_observations(self):
+        inputs, capture, _ = fixture()
+        rows = capture['batches'][0]['events']
+        index = next(i for i, event in enumerate(rows) if event['target'] == 'n10' and event['kind'] == 'node.property')
+        rows[index:index] = [dict(kind='node.show', target='n10', data={}),
+                             dict(kind='node.attach', target='n10', data=dict(parent='n1'))]
+        rows.insert(index + 3, dict(kind='semantic.role', target='n10', data=dict(role='paragraph', source='later-script-binding', constructor=False)))
+        for seq, event in enumerate(rows, 1): event['seq'] = seq
+        state = project_capture(capture, inputs)['checkpoints'][0]['state']['presentation']
+        birth = next(event['seq'] for event in state['events'] if event['kind'] == 'create' and event['object_id'] == 'candidate-birth:n10')
+        prior = [event['seq'] for event in state['events'] if event['kind'] == 'observed' and event['fields']['target'] == 'n10' and event['fields']['kind'] in ('node.show', 'node.attach', 'node.property')]
+        self.assertTrue(all(sequence < birth for sequence in prior))
+        self.assertTrue(state['objects']['candidate-birth:n10']['visible_local'])
+        self.assertTrue(state['objects']['candidate-birth:n10']['mounted'])
+
+    def test_container_destruction_invalidates_membership_without_faking_native_clear(self):
+        inputs, capture, _ = fixture()
+        rows = capture['batches'][0]['events']
+        rows[-2:-2] = [dict(kind='node.destroy', target=target, data={}) for target in ('n7', 'n8', 'n6')]
+        for seq, event in enumerate(rows, 1): event['seq'] = seq
+        state = project_capture(capture, inputs)['checkpoints'][0]['state']['presentation']
+        self.assert_live_choice_history(state['events'])
+        changes = [event['fields'] for event in state['events'] if event['kind'] == 'update' and event['object_id'] == 'candidate-birth:n6' and 'items' in event['fields']]
+        self.assertEqual([len(change['items']) if change['items'] is not None else None for change in changes], [2, None])
+        self.assertEqual(changes[-1]['field_availability']['items'], 'unavailable: choice control retired')
+        self.assertFalse(any(event['kind'] == 'semantic.choices' and event['data']['count'] == 0 for event in rows))
+
+    def test_late_choice_registration_cannot_publish_retired_cached_controls(self):
+        inputs, capture, _ = fixture()
+        rows = capture['batches'][0]['events']
+        rows[:] = [event for event in rows if not (event['target'] == 'n6' and event['kind'] == 'semantic.role')]
+        rows[-2:-2] = [dict(kind='node.destroy', target=target, data={}) for target in ('n7', 'n8')] + [
+            dict(kind='semantic.role', target='n6', data=dict(role='choice-list', source='late-binding', constructor=False))]
+        for seq, event in enumerate(rows, 1): event['seq'] = seq
+        state = project_capture(capture, inputs)['checkpoints'][0]['state']['presentation']
+        self.assert_live_choice_history(state['events'])
+        self.assertIsNone(state['objects']['candidate-birth:n6']['items'])
+        self.assertEqual(state['objects']['candidate-birth:n6']['field_availability']['items'], 'unavailable: choice control retired')
     def assert_live_selection_history(self, events):
         live, selections = set(), {}
         for event in events:
@@ -319,11 +368,12 @@ class ProjectionTests(unittest.TestCase):
             dict(kind='semantic.field',target='n6',data=dict(key='selected',value=None))]
         for seq,event in enumerate(rows,1):event['seq']=seq
         output=project_capture(capture,inputs);state=output['checkpoints'][0]['state']['presentation']
+        self.assert_live_choice_history(state['events'])
         self.assertEqual(state['objects']['candidate-birth:n6']['items'],[])
         self.assertIsNone(state['objects']['candidate-birth:n6']['selected'])
         membership=[event['fields']['items'] for event in state['events'] if event['object_id']=='candidate-birth:n6'
                     and event['kind']=='update' and 'items' in event['fields']]
-        self.assertEqual([len(items) for items in membership],[2,0])
+        self.assertEqual([len(items) if items is not None else None for items in membership],[2,None,0])
 
     def test_late_choice_registration_uses_only_last_complete_membership_cache(self):
         inputs,capture,add=fixture();rows=capture['batches'][0]['events']
