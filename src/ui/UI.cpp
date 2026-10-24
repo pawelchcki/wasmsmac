@@ -1,4 +1,14 @@
 #include "UI.h"
+#include "PresentationTrace.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+// The browser requests an observation boundary without injecting gameplay input.
+// The normal GSE drain timer acknowledges it on the application thread.
+extern "C" EMSCRIPTEN_KEEPALIVE void glsmac_presentation_request_seal() {
+	ui::presentation::Get().RequestSeal();
+}
+#endif
 
 #include <algorithm>
 
@@ -132,6 +142,36 @@ WRAPIMPL_BEGIN( UI )
 			{
 				"root",
 				m_root->Wrap( GSE_CALL )
+			},
+			{
+				"presentation_trace_start",
+				NATIVE_CALL( this ) {
+					N_EXPECT_ARGS( 0 );
+					presentation::Get().Start();
+					m_root->TraceSnapshot();
+					return nullptr;
+				} )
+			},
+			{
+				"presentation_trace_seal_requested",
+				NATIVE_CALL() {
+					N_EXPECT_ARGS( 0 );
+					return VALUE( gse::value::Bool,, presentation::Get().SealRequested() );
+				} )
+			},
+			{
+				"presentation_trace_seal",
+				NATIVE_CALL() {
+					N_EXPECT_ARGS( 0 );
+					return VALUE( gse::value::String,, presentation::Get().Drain( true ) );
+				} )
+			},
+			{
+				"presentation_trace_drain",
+				NATIVE_CALL() {
+					N_EXPECT_ARGS( 0 );
+					return VALUE( gse::value::String,, presentation::Get().Drain() );
+				} )
 			},
 			{
 				"get_width",
@@ -402,6 +442,7 @@ void UI::Focus( dom::Focusable* const element ) {
 	}
 	m_focused_element = element;
 	m_focused_element->OnFocus();
+	if ( const auto* node = dynamic_cast< dom::Object* >( element ) ) { PRESENTATION_EVENT( "ui.focus", "ui", "{\"node\":" + presentation::Quote( presentation::Node( node->m_dom_id ) ) + "}" ); }
 }
 
 void UI::FocusNext() {
@@ -577,6 +618,7 @@ void UI::Defocus( dom::Focusable* const element ) {
 	if ( element == m_focused_element ) {
 		m_focused_element->OnDefocus();
 		m_focused_element = nullptr;
+		PRESENTATION_EVENT( "ui.focus", "ui", "{\"node\":null}" );
 	}
 }
 
@@ -587,6 +629,7 @@ void UI::SetGlobalSingleton( GSE_CALLABLE, dom::Object* const object, const std:
 			RemoveGlobalSingleton( GSE_CALL, m_global_singleton );
 		}
 		m_global_singleton = object;
+		PRESENTATION_EVENT( "ui.modal", "ui", "{\"node\":" + presentation::Quote( presentation::Node( object->m_dom_id ) ) + "}" );
 		m_f_global_singleton_on_deglobalize = f_on_deglobalize;
 		m_global_singleton->Show();
 		m_root->AddChild( GSE_CALL, m_global_singleton, false );
@@ -602,6 +645,7 @@ void UI::RemoveGlobalSingleton( GSE_CALLABLE, dom::Object* const object ) {
 		m_root->RemoveChild( GSE_CALL, m_global_singleton, true );
 		m_global_singleton->Hide();
 		m_global_singleton = nullptr;
+		PRESENTATION_EVENT( "ui.modal", "ui", "{\"node\":null}" );
 		m_f_global_singleton_on_deglobalize = nullptr;
 	}
 }

@@ -2,6 +2,7 @@
 
 #include "Sound.h"
 #include "types/Sound.h"
+#include "ui/PresentationTrace.h"
 
 namespace scene {
 namespace actor {
@@ -9,11 +10,17 @@ namespace actor {
 Sound::Sound( const std::string& name, const types::Sound* sound )
 	: Actor( TYPE_SOUND, name )
 	, m_sound( sound ) {
+	if ( ui::presentation::CanRecordControl() ) {
+		m_presentation_id = ui::presentation::NextPlayback();
+		PRESENTATION_EVENT( "media.create", ui::presentation::Playback( m_presentation_id ), "{\"type\":\"audio\",\"source\":" + ui::presentation::Quote( sound->m_name ) + "}" );
+	}
 	Rewind();
 }
 
 Sound::~Sound() {
-
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.destroy", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\"}" );
+	}
 }
 
 const types::Sound* Sound::GetSound() const {
@@ -29,6 +36,7 @@ void Sound::Rewind() {
 }
 
 void Sound::GetNextBuffer( uint8_t* buffer, int len ) {
+	ui::presentation::AudioCallbackScope presentation_callback_scope;
 
 	ASSERT( len < m_sound->m_buffer_size, "buffer size is smaller than len" );
 
@@ -62,26 +70,41 @@ void Sound::GetNextBuffer( uint8_t* buffer, int len ) {
 }
 
 void Sound::SetRepeatable( const bool repeatable ) {
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.control", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\",\"repeatable\":" + std::string( repeatable ? "true" : "false" ) + "}" );
+	}
 	m_is_repeatable = repeatable;
 	Rewind();
 }
 
 void Sound::SetStartDelay( const size_t start_delay ) {
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.control", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\",\"start_delay\":" + std::to_string( start_delay ) + "}" );
+	}
 	m_start_delay = start_delay;
 	Rewind();
 }
 
 void Sound::SetAutoPlay( const bool autoplay ) {
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.control", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\",\"autoplay\":" + std::string( autoplay ? "true" : "false" ) + "}" );
+	}
 	m_is_autoplay = autoplay;
 	Rewind();
 }
 
 void Sound::SetVolume( const float volume ) {
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.control", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\",\"volume\":" + std::to_string( volume ) + "}" );
+	}
 	ASSERT( volume >= 0 && volume <= 1, "invalid volume " + std::to_string( volume ) );
 	m_volume = volume;
 }
 
 void Sound::Play() {
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.request", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\"}" );
+	}
 	if ( !m_is_playing ) {
 		ASSERT( !m_is_active, "not playing but active" );
 		if ( m_is_finished ) {
@@ -99,6 +122,9 @@ void Sound::Play() {
 }
 
 void Sound::Pause() {
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.pause", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\"}" );
+	}
 	if ( m_is_playing ) {
 		m_is_playing = false;
 		m_is_active = false;
@@ -106,6 +132,9 @@ void Sound::Pause() {
 }
 
 void Sound::Stop() {
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.stop", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\"}" );
+	}
 	m_start_delay_timer.Stop();
 	m_is_playing = false;
 	m_is_active = false;
@@ -118,6 +147,9 @@ void Sound::Stop() {
 }
 
 void Sound::Mute() {
+	if ( m_presentation_id && ui::presentation::CanRecordControl() ) {
+		PRESENTATION_EVENT( "media.mute", ui::presentation::Playback( m_presentation_id ), "{\"evidence\":\"request\"}" );
+	}
 	m_is_muted = true;
 }
 

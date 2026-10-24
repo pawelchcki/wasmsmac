@@ -1,4 +1,5 @@
 #include "Container.h"
+#include "ui/PresentationTrace.h"
 
 #include "ui/geometry/Geometry.h"
 #include "ui/UI.h"
@@ -197,6 +198,14 @@ const bool Container::ProcessEvent( GSE_CALLABLE, const input::Event& event ) {
 	return Area::ProcessEvent( GSE_CALL, event );
 }
 
+void Container::TraceSnapshot() const {
+	Object::TraceSnapshot();
+	for ( const auto& child : m_children ) {
+		child.second.object->TraceSnapshot();
+		PRESENTATION_EVENT( "node.attach", presentation::Node( child.first ), "{\"parent\":" + presentation::Quote( presentation::Node( m_dom_id ) ) + "}" );
+	}
+}
+
 void Container::Show() {
 	if ( !m_is_visible ) {
 		Area::Show();
@@ -347,6 +356,7 @@ void Container::Factory( GSE_CALLABLE, const std::string& name, const std::funct
 			throw e;
 		}
 		m_factory_owner->m_children.insert({ obj->m_dom_id, { obj, false } });
+		PRESENTATION_EVENT( "node.attach", presentation::Node( obj->m_dom_id ), "{\"parent\":" + presentation::Quote( presentation::Node( m_factory_owner->m_dom_id ) ) + "}" );
 		auto* const geometry = obj->GetGeometry();
 		if ( geometry ) {
 			m_factory_owner->UpdateChildZIndex( obj->m_dom_id, {}, geometry->GetZIndex() );
@@ -481,6 +491,7 @@ void Container::AddChild( GSE_CALLABLE, Object* obj, const bool is_visible, cons
 		throw e;
 	}
 	m_children.insert({ obj->m_dom_id, { obj, is_embed } } );
+	PRESENTATION_EVENT( "node.attach", presentation::Node( obj->m_dom_id ), "{\"parent\":" + presentation::Quote( presentation::Node( m_dom_id ) ) + "}" );
 	ASSERT( m_mouse_over_object != obj, "unexpected child mouseover" );
 	const auto* geometry = obj->GetGeometry();
 	if ( geometry ) {
@@ -504,6 +515,7 @@ void Container::RemoveChild( GSE_CALLABLE, Object* obj, const bool nodestroy ) {
 		m_on_remove_child( obj );
 	}
 	m_children.erase( obj->m_dom_id );
+	PRESENTATION_EVENT( "node.detach", presentation::Node( obj->m_dom_id ), "{\"parent\":" + presentation::Quote( presentation::Node( m_dom_id ) ) + "}" );
 	auto* const geometry = obj->GetGeometry();
 	if ( geometry ) {
 		UpdateChildZIndex( obj->m_dom_id, geometry->GetZIndex(), {} );

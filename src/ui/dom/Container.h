@@ -28,6 +28,8 @@ class Button;
 
 class Container : public Area {
 public:
+	void TraceSnapshot() const override;
+
 	Container( DOM_ARGS_T, const bool factories_allowed, const bool has_body );
 
 	void ForwardFactories( GSE_CALLABLE, Object* child );
