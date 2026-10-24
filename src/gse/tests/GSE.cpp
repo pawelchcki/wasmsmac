@@ -13,6 +13,7 @@
 #include "gc/GC.h"
 #include "engine/Engine.h"
 #include "game/backend/settings/Settings.h"
+#include "game/backend/faction/Faction.h"
 #include <atomic>
 #include <stdexcept>
 
@@ -20,6 +21,26 @@ namespace gse {
 namespace tests {
 
 void AddGSETests( task::gsetests::GSETests* task ) {
+	task->AddTest(
+		"Faction instances preserve complete templates without sharing mutable identity",
+		GT() {
+			game::backend::faction::Faction source( "CLONE", "Original Guild" );
+			source.SetIdentity( { "Original Pilot", "Original Guild", "Originals", "Orbital", "Navigator", "brisk" } );
+			source.m_flags = game::backend::faction::Faction::FF_NAVAL | game::backend::faction::Faction::FF_PROGENITOR;
+			source.m_colors.text = types::Color( 0.2f, 0.4f, 0.6f );
+			source.m_base_names.land = { "Land City" }; source.m_base_names.water = { "Water City" };
+			source.m_bases_render.file = "original.pcx"; source.m_bases_render.grid_x = 3;
+			source.SetSocialRatings( 2, -1 ); source.SetStartingTechnologies( { "Ecology", "Biogen" } );
+			const auto original = source.Serialize().ToString();
+			auto copy = source.Clone();
+			GT_ASSERT( copy.get() != &source && copy->Serialize().ToString() == original, "clone changed canonical metadata, colors, rendering, ratings or technologies" );
+			GT_ASSERT( copy->m_flags == source.m_flags && copy->m_base_names.land == source.m_base_names.land && copy->m_base_names.water == source.m_base_names.water, "clone lost fields absent from the persistence codec" );
+			auto identity = copy->GetIdentity(); identity[ 0 ] = "Changed human"; copy->SetIdentity( identity );
+			copy->m_base_names.land[ 0 ] = "Changed city"; copy->m_flags = 0; copy->SetStartingTechnologies( { "Changed" } );
+			GT_ASSERT( source.Serialize().ToString() == original && source.m_base_names.land[ 0 ] == "Land City" && source.m_flags != 0, "instance changes leaked to its source template" );
+			GT_OK();
+		}
+	);
 	task->AddTest(
 		"Custom world generation normalizes each minimum axis without changing editable setup",
 		GT() {

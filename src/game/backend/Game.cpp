@@ -1459,6 +1459,13 @@ void Game::InitComplete( GSE_CALLABLE ) {
 	}
 }
 
+std::string Game::GetStartupMapError() const {
+	if ( !m_state->m_connection && m_state->m_settings.local.game_mode == settings::LocalSettings::GM_SINGLEPLAYER ) {
+		return State::GetSinglePlayerMapError( m_map->GetWidth(), m_map->GetHeight() );
+	}
+	return "";
+}
+
 void Game::InitFailed( const std::string& error_text ) {
 	HideLoader();
 	// need to delete these here because they weren't passed to main thread
@@ -1969,6 +1976,14 @@ void Game::InitGame( MT_Response& response, const bool interactive_opening, MT_C
 		}
 
 		if ( !ec ) {
+			// Validate the actual map after import or CLI overrides, before any
+			// world entities are created. Setup dimensions may describe another map.
+			const auto error = GetStartupMapError();
+			if ( !error.empty() ) {
+				InitFailed( error );
+				response.result = R_ERROR;
+				return;
+			}
 			auto& completed_map = m_state->m_settings.global.map;
 			if ( completed_map.type != settings::MapSettings::MT_RANDOM && completed_map.type != settings::MapSettings::MT_CUSTOM ) { completed_map.preset_level = -1; }
 			m_state->m_settings.global.map.size_x = m_map->GetWidth();

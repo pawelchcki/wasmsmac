@@ -68,7 +68,7 @@ behavior.scenario('Empty declared terrain reaches first playable turn through na
 
 for (difficulty of ['Citizen', 'Specialist', 'Talent', 'Librarian', 'Thinker', 'Transcend']) {
 	behavior.scenario('declared ' + difficulty + ' initializes actual native State and human Player', () => {
-		const f = test.natural_startup_fixture(4, 4, 'flat-arid'); const game = f.game;
+		const f = test.natural_startup_fixture(16, 16, 'flat-arid'); const game = f.game;
 		#include('./_natural_startup_mechanics')(f);
 		const human = f.initialize_single_player('GAIANS', difficulty);
 		test.assert(game.get_settings().global.difficulty_level == difficulty);

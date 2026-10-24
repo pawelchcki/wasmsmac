@@ -986,6 +986,16 @@ minimum native dimensions of 32 columns and 16 rows while retaining Custom kind
 totals until a versioned public replay adapter is integrated. They do not claim
 matching RNG draws, placement, AI decisions or naval production fidelity.
 
+Every offline participant owns an independent faction instance copied from the
+configured template, including naval/progenitor flags, base names, rendering,
+ratings and starting technologies. Human identity customization changes that
+instance without modifying a duplicate opponent or the catalog. Separate
+[all-player identity controls](state_trace/all-player-identity/contract-v1.md)
+retain the observed original fields and unsupported values outside passing
+totals; duplicate collision suffixes and general identity parity remain gaps.
+The startup geometry check also runs against the actual loaded or generated map
+after imports and CLI overrides, before world entities are created.
+
 ## Ability-free prototype base costs
 
 The original-game replay additionally checks **5,531** synthetic unit component

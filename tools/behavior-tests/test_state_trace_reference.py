@@ -12,6 +12,26 @@ SUITES = ('natural-startup', 'natural-startup-economy-research')
 
 
 class ReferenceTraceTests(unittest.TestCase):
+    def test_all_player_identity_controls_are_frozen_without_full_parity_claim(self):
+        directory = DIRECTORY / 'all-player-identity'
+        manifest_path = directory / 'manifest-v1.json'
+        self.assertEqual(hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                         'db2dede186561db7d37f4007e8a88eec22cb37af736c81636207de92e8498c88')
+        manifest = decode_json(manifest_path.read_text())
+        for relative, digest in manifest['files'].items():
+            with self.subTest(path=relative):
+                path = Path(relative)
+                self.assertFalse(path.is_absolute())
+                self.assertNotIn('..', path.parts)
+                self.assertEqual(hashlib.sha256((directory / path).read_bytes()).hexdigest(), digest)
+        suite = compare.read_json(directory / 'cases-v1.json')
+        record = compare.read_json(directory / 'observations-v1.json')
+        outputs = compare.validate_observations(record, suite)
+        self.assertEqual(record['repeat'], 2)
+        self.assertEqual(len(outputs), 2)
+        for output in outputs.values():
+            self.assertEqual(len(output['after_launch']['players']), 7)
+
     def test_bounded_setup_controls_are_frozen_outside_passing_totals(self):
         directory = DIRECTORY / 'setup-controls'
         manifest_path = directory / 'manifest-v1.json'

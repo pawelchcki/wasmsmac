@@ -7,6 +7,7 @@
 #include <atomic>
 #include <thread>
 #include <vector>
+#include <array>
 
 #include "common/Common.h"
 #include "gse/Bindings.h"
@@ -102,7 +103,7 @@ private:
 	void InitGameState( GSE_CALLABLE );
 	void RandomizeSettings( GSE_CALLABLE );
 
-	void AddSinglePlayerSlot( game::backend::faction::Faction* const faction, bool name_confirmed = false, const std::vector< game::backend::faction::Faction* >& roster = {}, bool random_human = false );
+	void AddSinglePlayerSlot( game::backend::faction::Faction* const faction, bool name_confirmed = false, const std::vector< game::backend::faction::Faction* >& roster = {}, bool random_human = false, const std::array< std::string, 6 >* identity = nullptr );
 	void StartGame( GSE_CALLABLE );
 
 	game::frontend::Game* m_game = nullptr;

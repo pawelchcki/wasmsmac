@@ -165,7 +165,7 @@ struct ProductionFixture : gc::Object {
 		delete state;
 		state = nullptr;
 	}
-	backend::slot::Slot* InitializeSinglePlayer( GSE_CALLABLE, const std::string& faction_id, const std::string& difficulty = "Citizen", const bool isolated = false, const bool random_faction = false, const std::vector< backend::faction::Faction* >& roster = {}, const bool random_human = false ) {
+	backend::slot::Slot* InitializeSinglePlayer( GSE_CALLABLE, const std::string& faction_id, const std::string& difficulty = "Citizen", const bool isolated = false, const bool random_faction = false, const std::vector< backend::faction::Faction* >& roster = {}, const bool random_human = false, const backend::faction::Faction::identity_t* identity = nullptr ) {
 		if ( state->m_slots->GetCount() || !game.m_bm->GetBases().empty() || !game.m_um->GetUnits().empty() ) {
 			GSE_ERROR( EC.INVALID_CALL, "Single-player initialization requires an empty world" );
 		}
@@ -190,7 +190,7 @@ struct ProductionFixture : gc::Object {
 		else {
 			const auto error = state->GetSinglePlayerMapError();
 			if ( !error.empty() ) { GSE_ERROR( EC.GAME_ERROR, error ); }
-			state->AddSinglePlayerSlot( faction, false, roster, random_human );
+			state->AddSinglePlayerSlot( faction, identity != nullptr, roster, random_human, identity );
 		}
 		game.m_slot_num = 0;
 		game.m_slot = &state->m_slots->GetSlot( 0 );
@@ -203,6 +203,7 @@ struct ProductionFixture : gc::Object {
 			Process();
 		}
 	}
+	std::string StartupMapError() const { return game.GetStartupMapError(); }
 	bool ParticipantCodecInvariant() {
 		if ( state->GetCidSlots().size() != 1 || state->GetCidSlots().at( 0 ) != 0 ) { return false; }
 		for ( auto& slot : state->m_slots->GetSlots() ) {
@@ -1501,14 +1502,23 @@ Value* MakeWorldStartupFixture( GSE_CALLABLE, size_t width, size_t height ) {
 	} ), GSE_CALL );
 	object->Set( "participant_codec_invariant", NATIVE_CALL( session ) { N_EXPECT_ARGS( 0 ); return VALUE( value::Bool,, session->current->ParticipantCodecInvariant() ); } ), GSE_CALL );
 	object->Set( "initialize_roster", NATIVE_CALL( session ) {
-		N_EXPECT_ARGS( 2 ); N_GETVALUE( id, 0, String ); N_GETVALUE( setup, 1, Object );
+		N_EXPECT_ARGS_MIN_MAX( 2, 3 ); N_GETVALUE( id, 0, String ); N_GETVALUE( setup, 1, Object );
 		auto& f = *session->current;
 		const bool random = id == "RANDOM";
 		auto* human = random ? nullptr : f.state->GetFM()->Get( id );
 		if ( !human && !random ) { GSE_ERROR( EC.GAME_ERROR, "Unknown startup faction" ); }
 		bool random_human = false;
 		const auto roster = f.state->ParseSinglePlayerRoster( GSE_CALL, setup, human, random_human );
-		return f.InitializeSinglePlayer( GSE_CALL, id, "Citizen", false, random, roster, random_human )->Wrap( GSE_CALL );
+		backend::faction::Faction::identity_t identity;
+		if ( arguments.size() == 3 ) {
+			if ( !human ) { GSE_ERROR( EC.GAME_ERROR, "Identity requires an explicitly selected faction" ); }
+			N_GETVALUE( fields, 2, Array ); identity = backend::faction::Faction::ParseIdentity( GSE_CALL, fields );
+			f.state->m_settings.local.player_name = identity[ 0 ];
+		}
+		return f.InitializeSinglePlayer( GSE_CALL, id, "Citizen", false, random, roster, random_human, arguments.size() == 3 ? &identity : nullptr )->Wrap( GSE_CALL );
+	} ), GSE_CALL );
+	object->Set( "startup_map_error", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return VALUE( value::String,, session->current->StartupMapError() );
 	} ), GSE_CALL );
 	object->Set( "initialize_random_single_player", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->InitializeSinglePlayer( GSE_CALL, "", "Citizen", false, true )->Wrap( GSE_CALL );

@@ -433,6 +433,7 @@ private:
 	std::vector< FrontendRequest >* m_pending_frontend_requests = nullptr;
 
 	void InitGame( MT_Response& response, const bool interactive_opening, MT_CANCELABLE );
+	std::string GetStartupMapError() const;
 	void ResetGame();
 
 	// seed needs to be consistent during session (to prevent save-scumming and for easier reproduction of bugs)

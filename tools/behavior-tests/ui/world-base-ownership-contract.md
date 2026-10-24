@@ -35,8 +35,9 @@ The declared Doctor and resource stores are initialized directly through native
 Base methods under a fixture write guard; this does not claim the full city
 initialization lifecycle was replayed.
 
-Offline production startup now fills the selected human slot and up to six
-configured computer participants in declared faction order. Computer roles have
+This probe omits a UI roster, so production startup fills the selected human
+slot and up to six configured computers in declared faction order. Ordinary UI
+startup instead supplies every displayed faction choice. Computer roles have
 no network connection identity. Native turn lifecycle completes their currently
 unimplemented order phase so they do not block the human round; AI decisions
 and movement remain separate gaps.
@@ -46,6 +47,9 @@ one human faction, one human base, seven owners with bases, seven total bases
 and six other owner counts of one. This one case is included in the hot passing
 catalog. It establishes only the declared ownership counts; the complete
 natural-state traces retain inventory, resource, placement and AI differences.
+This replay executes the compiled C++ State, slots, event queue and entity
+managers in WASM. It is separate from the full-discovery C++/GSE engine gate and
+does not claim execution of a desktop-native binary.
 The hot `world-single-player-setup` regression separately checks participant
 identity, role transfer, source order, repeated ordinary rounds and authority.
 

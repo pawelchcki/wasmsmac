@@ -387,17 +387,17 @@ WRAPIMPL_BEGIN( GLSMAC )
 					if ( !error.empty() ) { GSE_ERROR( gse::EC.GAME_ERROR, error ); }
 				}
 				const bool has_identity = arguments.size() >= 2 && arguments[ 1 ]->type != gse::VT_NULL;
+				game::backend::faction::Faction::identity_t identity;
 				if ( has_identity ) {
 					if ( !faction ) { GSE_ERROR( gse::EC.GAME_ERROR, "Identity requires an explicitly selected faction" ); }
 					N_GETVALUE( values, 1, Array );
-					const auto identity = game::backend::faction::Faction::ParseIdentity( GSE_CALL, values );
+					identity = game::backend::faction::Faction::ParseIdentity( GSE_CALL, values );
 					if ( identity[ 0 ] != m_state->m_settings.local.player_name ) {
 						GSE_ERROR( gse::EC.GAME_ERROR, "Leader identity must match the confirmed player name" );
 					}
-					faction->SetIdentity( identity );
 				}
 				if ( m_state->m_slots->GetSlots().empty() ) {
-					AddSinglePlayerSlot( faction, has_identity || arguments.size() == 3, roster, random_human );
+					AddSinglePlayerSlot( faction, has_identity || arguments.size() == 3, roster, random_human, has_identity ? &identity : nullptr );
 				}
 				StartGame( GSE_CALL );
 				return VALUE( gse::value::Undefined );
@@ -705,11 +705,11 @@ void GLSMAC::RandomizeSettings( GSE_CALLABLE ) {
 	}
 }
 
-void GLSMAC::AddSinglePlayerSlot( game::backend::faction::Faction* const faction, const bool name_confirmed, const std::vector< game::backend::faction::Faction* >& roster, const bool random_human ) {
+void GLSMAC::AddSinglePlayerSlot( game::backend::faction::Faction* const faction, const bool name_confirmed, const std::vector< game::backend::faction::Faction* >& roster, const bool random_human, const std::array< std::string, 6 >* identity ) {
 	const auto& rules = m_state->m_settings.global.rules;
 	const auto& difficulty = rules.m_difficulty_levels.GetString( m_state->m_settings.global.difficulty_level );
 	Log( "Single-player setup: faction=" + ( faction ? faction->m_id : "RANDOM" ) + ", difficulty=" + difficulty );
-	m_state->AddSinglePlayerSlot( faction, name_confirmed, roster, random_human );
+	m_state->AddSinglePlayerSlot( faction, name_confirmed, roster, random_human, identity );
 }
 
 void GLSMAC::StartGame( GSE_CALLABLE ) {

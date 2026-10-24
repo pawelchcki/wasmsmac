@@ -35,14 +35,15 @@ behavior.scenario('Malformed displayed rosters reject atomically and permit a co
 	test.assert(#sizeof(f.game.get_players()) == 7, 'A corrected request uses the same empty native state');
 });
 
-behavior.scenario('Explicit duplicate faction rows remain separate native participants and start their own cities', () => {
-	const f = test.natural_startup_fixture(40, 80, 'flat-arid'); const game = f.game;
-	#include('./_natural_startup_mechanics')(f);
-	const ids = ['GAIANS', 'GAIANS', 'UNIVERSITY', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'];
-	f.initialize_roster('GAIANS', {factions: ids, human_slot: 0, random_human: false}); f.start_world();
-	const players = game.get_players();
-	for (let index = 0; index < 7; index++) { test.assert(players[index].get_faction().id == ids[index] && players[index].id == index); }
-	test.assert(#sizeof(game.bm.get_bases()) == 7 && players[0].type == 'human' && players[1].type == 'computer');
+behavior.scenario('Direct native human identity setup leaves a duplicate opponent and the catalog unchanged', () => {
+	const f = test.world_startup_fixture(16, 16); configure_roster(f, true);
+	const catalog = f.fm.list(); const original = #clone(catalog[0].identity);
+	const authored = #clone(original); authored[0] = 'Trace Commander';
+	f.initialize_roster('GAIANS', {factions: ['GAIANS', 'GAIANS', 'UNIVERSITY', 'MORGANITES', 'SPARTANS', 'BELIEVERS', 'PEACEKEEPERS'], human_slot: 0, random_human: false}, authored);
+	const players = f.game.get_players();
+	test.assert(players[0].get_faction().identity == authored && players[1].get_faction().identity == original);
+	const templates = f.fm.list(); test.assert(templates[0].identity == original);
+	test.assert(#sizeof(f.game.bm.get_bases()) == 0, 'Identity isolation needs no world-placement fixture');
 });
 
 behavior.scenario('An undersized custom world rejects before creating any native participant', () => {
@@ -61,6 +62,19 @@ behavior.scenario('Small maps that can fit seven separated sites remain selectab
 		test.assert(#sizeof(f.game.get_players()) == 7, 'Feasible small grids are accepted without changing the roster');
 	}
 });
+
+behavior.scenario('Actual imported and CLI-sized grids are checked independently of setup dimensions', () => {
+	for (type of ['mapfile', 'random']) {
+		const f = test.world_startup_fixture(4, 2);
+		const map = f.game.get_settings().global.map; map.type = type;
+		test.assert(map.size_x > 4 && map.size_y > 2, 'The setup still describes a different, larger map');
+		test.assert(f.startup_map_error() != '', 'Post-load validation uses actual map geometry for imports and effective CLI dimensions');
+		test.assert(#sizeof(f.game.get_players()) == 0 && #sizeof(f.game.bm.get_bases()) == 0);
+		f.enable_transport();
+		test.assert(f.startup_map_error() == '', 'Network startup retains its existing separate roster contract');
+	}
+});
+
 behavior.scenario('Empty native startup and production human-slot initialization', () => {
 	const f = test.world_startup_fixture(40, 80);
 	const game = f.game;

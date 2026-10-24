@@ -80,6 +80,12 @@ manifest preserves provenance without changing earlier reference manifests.
 These records guide source-backed regressions and remain outside default
 passing replay totals until a versioned public adapter is integrated.
 
+[All-player identity evidence](all-player-identity/contract-v1.md) separately
+freezes both authored-name cases for a duplicate-Gaia roster. The candidate
+isolates each participant's mutable identity from its catalog template and
+opponents. Observed duplicate collision suffixes remain an explicit difference;
+the evidence adds no passing identity comparison or full-parity claim.
+
 ## Shared explicit-world comparison
 
 The separately frozen [v2 contract](explicit-world-contract-v2.md) supplies the

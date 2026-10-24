@@ -931,7 +931,7 @@
       },
       "verification_wasm_sha256": "206327679ea3206e96e98734e2011e10f741de21ceea3c58949dca65cf276d67",
       "verification_scripts_sha256": "01351c037a38e30b3f062ea3e581ffd19d48b86dd1c5defbade6554e43b234e7",
-      "verification_scope": "Current runtime hot replay: all eleven references / 44 cases matched, including unchanged ownership evidence; full 152-script GSE/native engine run remains pending."
+      "verification_scope": "Recorded C++ State/base-manager replay in WASM: all eleven references / 44 cases matched, including this ownership projection. This is separate from the full-discovery GSE/C++ engine gate and does not claim a desktop-native binary run."
     },
     {
       "id": "natural-first-city-population-and-stores",

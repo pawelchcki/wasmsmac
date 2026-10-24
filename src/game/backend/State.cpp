@@ -148,7 +148,10 @@ std::string State::GetSinglePlayerMapError() const {
 	const auto& map = m_settings.global.map;
 	if ( map.type != settings::MapSettings::MT_RANDOM && map.type != settings::MapSettings::MT_CUSTOM ) { return ""; }
 	const auto dimensions = map.GetGenerationDimensions();
-	const auto width = dimensions.first; const auto height = dimensions.second;
+	return GetSinglePlayerMapError( dimensions.first, dimensions.second );
+}
+
+std::string State::GetSinglePlayerMapError( const int64_t width, const int64_t height ) {
 	const std::string error = "Choose a larger map: seven factions need starting tiles at least two steps apart";
 	if ( width < 4 || height < 2 || width % 2 ) { return error; }
 	// A tile has at most eight neighbors at distance one. Greedy placement
@@ -184,7 +187,15 @@ std::string State::GetSinglePlayerMapError() const {
 	return fits( ( uint64_t( 1 ) << tiles.size() ) - 1, 7 ) ? "" : error;
 }
 
-void State::AddSinglePlayerSlot( faction::Faction* faction, const bool name_confirmed, const std::vector< faction::Faction* >& roster, const bool random_human ) {
+faction::Faction* State::CreateSinglePlayerFaction( const faction::Faction* source, const std::array< std::string, 6 >* identity ) {
+	auto instance = source->Clone();
+	if ( identity ) { instance->SetIdentity( *identity ); }
+	auto* result = instance.get();
+	m_single_player_factions.push_back( std::move( instance ) );
+	return result;
+}
+
+void State::AddSinglePlayerSlot( faction::Faction* faction, const bool name_confirmed, const std::vector< faction::Faction* >& roster, const bool random_human, const std::array< std::string, 6 >* identity ) {
 	ASSERT( !m_connection && m_settings.local.game_mode == settings::LocalSettings::GM_SINGLEPLAYER, "single-player participants require offline single-player" );
 	ASSERT( m_players.empty() && m_cid_slots.empty() && m_slots->GetCount() == 0, "single-player participants already initialized" );
 	ASSERT( !m_fm->GetAll().empty(), "single-player requires configured factions" );
@@ -196,7 +207,8 @@ void State::AddSinglePlayerSlot( faction::Faction* faction, const bool name_conf
 	if ( !name_confirmed && m_settings.local.player_name.empty() ) {
 		m_settings.local.player_name = "Player";
 	}
-	NEWV( player, Player, m_settings.local.player_name, Player::PR_SINGLE, faction, difficulty );
+	auto* human_faction = faction ? CreateSinglePlayerFaction( faction, identity ) : nullptr;
+	NEWV( player, Player, m_settings.local.player_name, Player::PR_SINGLE, human_faction, difficulty );
 	AddPlayer( player );
 	const size_t slot_num = 0; // player always has slot 0
 	AddCIDSlot( 0, slot_num );
@@ -240,10 +252,10 @@ void State::FinalizeSinglePlayerRoster() {
 			m_single_player_roster.erase( m_single_player_roster.begin() + index );
 			m_single_player_roster.insert( m_single_player_roster.begin(), selected );
 		}
-		human->SetFaction( m_single_player_roster.front() );
+		if ( !human->GetFaction() ) { human->SetFaction( CreateSinglePlayerFaction( m_single_player_roster.front() ) ); }
 		const auto& difficulty = human->GetDifficultyLevel();
 		for ( size_t index = 1; index < m_single_player_roster.size(); ++index ) {
-			auto* selected = m_single_player_roster.at( index );
+			auto* selected = CreateSinglePlayerFaction( m_single_player_roster.at( index ) );
 			NEWV( opponent, Player, selected->m_name, Player::PR_COMPUTER, selected, difficulty );
 			AddPlayer( opponent );
 			auto& slot = m_slots->GetSlot( index ); slot.SetPlayer( opponent, 0, "" ); slot.SetPlayerFlag( slot::PF_READY );
@@ -255,7 +267,7 @@ void State::FinalizeSinglePlayerRoster() {
 	auto* faction = human->GetFaction();
 	if ( !faction ) {
 		ASSERT( m_game && m_game->GetRandom(), "random faction resolution requires initialized game RNG" );
-		faction = factions.at( m_game->GetRandom()->GetUInt( 0, factions.size() - 1 ) );
+		faction = CreateSinglePlayerFaction( factions.at( m_game->GetRandom()->GetUInt( 0, factions.size() - 1 ) ) );
 		human->SetFaction( faction );
 	}
 	const auto& difficulty = human->GetDifficultyLevel();
@@ -265,9 +277,10 @@ void State::FinalizeSinglePlayerRoster() {
 	// that catalog without duplicating it or manufacturing network clients.
 	size_t next_slot = 1;
 	for ( auto* opponent_faction : factions ) {
-		if ( opponent_faction == faction ) { continue; }
+		if ( opponent_faction->m_id == faction->m_id ) { continue; }
 		if ( next_slot == m_slots->GetCount() ) { break; }
-		NEWV( opponent, Player, opponent_faction->m_name, Player::PR_COMPUTER, opponent_faction, difficulty );
+		auto* instance = CreateSinglePlayerFaction( opponent_faction );
+		NEWV( opponent, Player, instance->m_name, Player::PR_COMPUTER, instance, difficulty );
 		AddPlayer( opponent );
 		auto& opponent_slot = m_slots->GetSlot( next_slot++ );
 		opponent_slot.SetPlayer( opponent, 0, "" );
@@ -348,6 +361,7 @@ void State::Reset() {
 	m_single_player_random_human = false;
 	m_slots->Clear();
 	m_cid_slots.clear();
+	m_single_player_factions.clear();
 	m_game = nullptr;
 	m_on_gse_error = nullptr;
 }
