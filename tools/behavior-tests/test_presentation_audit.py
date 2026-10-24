@@ -9,7 +9,49 @@ from protocol import ProtocolError
 from state_trace.presentation import CLOCK, DOMAINS
 from state_trace.presentation_audit import audit_capture, main
 from state_trace.presentation_projector import project_capture
-from test_presentation_projector import fixture
+from test_presentation_projector import fixture as projector_fixture
+
+
+def fixture():
+    inputs, capture, add = projector_fixture()
+    capture['input_plan'] = inputs
+    return inputs, capture, add
+
+
+def empty_capture():
+    inputs = dict(fixture={'requested_coverage': list(DOMAINS)},
+                  actions=[dict(id='launch', kind='launch')],
+                  checkpoints=[dict(id='done', after_action='launch')])
+    rows = [dict(seq=1, target='trace', kind='semantic.protocol', data={'version': 2}),
+            dict(seq=2, target='trace', kind='trace.protocol', data={'version': 1, 'physical_os_complete': False}),
+            dict(seq=3, target='trace', kind='trace.action', data={'op': 1, 'action': 1, 'checkpoint': 0, 'nonce': 0}),
+            dict(seq=4, target='trace', kind='trace.action', data={'op': 2, 'action': 1, 'checkpoint': 0, 'nonce': 1}),
+            dict(seq=5, target='trace', kind='trace.checkpoint', data={'op': 3, 'checkpoint': 1, 'action': 1, 'nonce': 2})]
+    capture = dict(schema='glsmac.presentation.raw.v1', batches=[dict(enabled=True, dropped=0, events=rows)],
+                   input_plan=inputs, input_checkpoints=[dict(id='done', after_action='launch', checkpoint=1)])
+    return inputs, capture, rows
+
+
+def attributed_capture():
+    inputs, capture, rows = empty_capture()
+    inputs['actions'].extend([dict(id='second', kind='key.press'), dict(id='third', kind='key.press')])
+    inputs['checkpoints'].extend([dict(id='second-done', after_action='second'), dict(id='third-done', after_action='third')])
+    capture['input_checkpoints'].extend([dict(id='second-done', after_action='second', checkpoint=2),
+                                        dict(id='third-done', after_action='third', checkpoint=3)])
+    additions = [
+        ('trace.action', 'trace', dict(op=1, action=2, checkpoint=0, nonce=3)),
+        ('node.create', 'control', dict(parent=None, tag='$button')),
+        ('semantic.role', 'control', dict(role='button', source='', constructor=True)),
+        ('trace.action', 'trace', dict(op=2, action=2, checkpoint=0, nonce=4)),
+        ('trace.checkpoint', 'trace', dict(op=3, action=2, checkpoint=2, nonce=5)),
+        ('trace.action', 'trace', dict(op=1, action=3, checkpoint=0, nonce=6)),
+        ('node.show', 'control', {}),
+        ('trace.action', 'trace', dict(op=2, action=3, checkpoint=0, nonce=7)),
+        ('trace.checkpoint', 'trace', dict(op=3, action=3, checkpoint=3, nonce=8)),
+        ('node.hide', 'control', {})]
+    for kind, target, data in additions:
+        rows.append(dict(seq=len(rows) + 1, kind=kind, target=target, data=data))
+    return capture, project_capture(capture, inputs)
 
 
 def evidence():
@@ -30,6 +72,74 @@ def resequence(projection):
 
 
 class AuditTests(unittest.TestCase):
+    def test_valid_semantic_actions_match_source_before_action_fence_and_in_tail(self):
+        capture, projection = attributed_capture()
+        self.assertTrue(audit_capture(capture, projection)['valid'])
+        first = projection['checkpoints'][0]['state']['presentation']['events']
+        self.assertEqual([event['after_input'] for event in first], ['initial', 'initial', 'launch', 'launch', 'launch'])
+        second = projection['checkpoints'][1]['state']['presentation']['events']
+        self.assertTrue(all(event['after_input'] == 'second' for event in second))
+        self.assertTrue(all(event['after_input'] == 'third' for event in projection['diagnostics']['tail_presentation']['events']))
+
+    def test_invented_after_input_rejected_for_canonical_and_observed_events(self):
+        for kind in ('create', 'observed'):
+            capture, projection = attributed_capture()
+            event = next(event for event in projection['checkpoints'][1]['state']['presentation']['events'] if event['kind'] == kind)
+            event['after_input'] = 'invented-action'
+            with self.subTest(kind=kind), self.assertRaisesRegex(ProtocolError, 'after_input differs from native source action'):
+                audit_capture(capture, projection)
+
+    def test_wrong_valid_future_and_backward_after_input_rejected(self):
+        for checkpoint_index, wrong in ((0, 'second'), (1, 'launch'), (1, 'third'), (2, 'second')):
+            capture, projection = attributed_capture()
+            event = projection['checkpoints'][checkpoint_index]['state']['presentation']['events'][-1]
+            event['after_input'] = wrong
+            with self.subTest(checkpoint=checkpoint_index, wrong=wrong), self.assertRaisesRegex(ProtocolError, 'after_input differs from native source action'):
+                audit_capture(capture, projection)
+
+    def test_tail_only_wrong_valid_after_input_rejected_for_every_semantic_event_kind(self):
+        for kind in ('update', 'observed'):
+            capture, projection = attributed_capture()
+            event = next(event for event in projection['diagnostics']['tail_presentation']['events'] if event['kind'] == kind)
+            event['after_input'] = 'second'
+            with self.subTest(kind=kind), self.assertRaisesRegex(ProtocolError, 'after_input differs from native source action'):
+                audit_capture(capture, projection)
+
+    def test_missing_or_invalid_bound_input_plan_fails_closed(self):
+        for corruption in ('missing', 'invalid-action', 'missing-named-checkpoints'):
+            capture, projection = attributed_capture()
+            if corruption == 'missing': del capture['input_plan']
+            elif corruption == 'invalid-action': capture['input_plan']['actions'][1]['id'] = 'launch'
+            else: del capture['input_plan']['checkpoints']
+            with self.subTest(corruption=corruption), self.assertRaises(ProtocolError):
+                audit_capture(capture, projection)
+
+    def test_checkpoint_names_indexes_actions_and_order_match_bound_plan(self):
+        for corruption in ('name', 'index', 'action', 'declaration', 'order'):
+            capture, projection = attributed_capture()
+            if corruption == 'name':
+                capture['input_checkpoints'][1]['id'] = projection['checkpoints'][1]['id'] = 'invented'
+            elif corruption == 'index':
+                capture['input_checkpoints'][1]['checkpoint'] = 3
+            elif corruption == 'action':
+                capture['input_checkpoints'][1]['after_action'] = projection['checkpoints'][1]['after_action'] = 'third'
+            elif corruption == 'declaration':
+                capture['input_plan']['checkpoints'][1]['after_action'] = 'third'
+            else:
+                capture['input_checkpoints'][0], capture['input_checkpoints'][1] = capture['input_checkpoints'][1], capture['input_checkpoints'][0]
+                projection['checkpoints'][0], projection['checkpoints'][1] = projection['checkpoints'][1], projection['checkpoints'][0]
+            with self.subTest(corruption=corruption), self.assertRaises(ProtocolError):
+                audit_capture(capture, projection)
+
+    def test_native_source_action_fences_cannot_move_backward_or_skip_actions(self):
+        for action in (1, 3):
+            capture, projection = attributed_capture()
+            event = next(event for event in capture['batches'][0]['events']
+                         if event['kind'] == 'trace.action' and event['data']['op'] == 1 and event['data']['action'] == 2)
+            event['data']['action'] = action
+            with self.subTest(action=action), self.assertRaisesRegex(ProtocolError, 'native action begin'):
+                audit_capture(capture, projection)
+
     def test_reconciles_all_events_births_retirements_and_unknown_transients(self):
         capture, projection = evidence()
         report = audit_capture(capture, projection)
@@ -63,12 +173,7 @@ class AuditTests(unittest.TestCase):
         self.assertTrue(all(not value['complete'] for value in report['coverage'].values()))
 
     def test_no_channel_events_does_not_prove_complete_channel(self):
-        inputs = dict(fixture={'requested_coverage': list(DOMAINS)},
-                      actions=[dict(id='launch', kind='launch')], checkpoints=[dict(id='done', after_action='launch')])
-        rows = [dict(seq=1, target='trace', kind='semantic.protocol', data={'version': 2}),
-                dict(seq=2, target='trace', kind='trace.checkpoint', data={'checkpoint': 1, 'action': 1})]
-        capture = dict(schema='glsmac.presentation.raw.v1', batches=[dict(enabled=True, dropped=0, events=rows)],
-                       input_checkpoints=[dict(id='done', after_action='launch', checkpoint=1)])
+        inputs, capture, _ = empty_capture()
         report = audit_capture(capture, project_capture(capture, inputs))
         self.assertTrue(report['semantic_understood'])
         self.assertFalse(report['transport_complete'])
@@ -163,7 +268,7 @@ class AuditTests(unittest.TestCase):
         first_boundary = len(capture['batches'][0]['events'])
         add('node.create', 'transient', parent='n1', tag='$unexpected')
         add('node.destroy', 'transient')
-        add('trace.checkpoint', action=1, checkpoint=2)
+        add('trace.checkpoint', op=3, action=1, checkpoint=2, nonce=3)
         second_boundary = len(capture['batches'][0]['events'])
         capture['input_checkpoints'].append(dict(id='later', after_action='launch', checkpoint=2))
         inputs['checkpoints'].append(dict(id='later', after_action='launch'))
@@ -210,17 +315,11 @@ class AuditTests(unittest.TestCase):
             audit_capture(capture, projection)
 
     def test_tail_only_logical_unavailable_fields_prevent_semantic_understanding(self):
-        inputs = dict(fixture={'requested_coverage': list(DOMAINS)},
-                      actions=[dict(id='launch', kind='launch')],
-                      checkpoints=[dict(id='done', after_action='launch')])
-        rows = [dict(seq=1, target='trace', kind='semantic.protocol', data={'version': 2}),
-                dict(seq=2, target='trace', kind='trace.checkpoint', data={'checkpoint': 1, 'action': 1})]
-        capture = dict(schema='glsmac.presentation.raw.v1', batches=[dict(enabled=True, dropped=0, events=rows)],
-                       input_checkpoints=[dict(id='done', after_action='launch', checkpoint=1)])
+        inputs, capture, rows = empty_capture()
         self.assertTrue(audit_capture(capture, project_capture(capture, inputs))['semantic_understood'])
         rows.extend([
-            dict(seq=3, target='tail-widget', kind='node.create', data={'parent': None, 'tag': '$button'}),
-            dict(seq=4, target='tail-widget', kind='semantic.role',
+            dict(seq=6, target='tail-widget', kind='node.create', data={'parent': None, 'tag': '$button'}),
+            dict(seq=7, target='tail-widget', kind='semantic.role',
                  data={'role': 'button', 'source': '', 'constructor': True})])
         report = audit_capture(capture, project_capture(capture, inputs))
         self.assertFalse(report['unknown_events'])

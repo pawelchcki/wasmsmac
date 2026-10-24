@@ -154,6 +154,9 @@ one unchanged disposition for every raw event, with correct birth, retirement,
 live inventories and checkpoint watermarks. It retains retired unknown objects,
 unmapped fields and unavailable field evidence. Each checkpoint reports prefix
 and interval event counts, event kinds, lifetimes and live inventory counts.
+The capture must include its validated `input_plan`. Every semantic event is
+bound to its exact native source action, including canonical updates and the
+terminal tail; unknown, reordered or incorrectly attributed actions are rejected.
 
 Transport completeness, semantic understanding, exhaustive channel coverage and
 rendered output are separate results. A quiet interval, an empty channel or a

@@ -16,6 +16,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from protocol import ProtocolError, canonical, fingerprint
 from state_trace.presentation import CLOCK, DOMAINS, RawRecorder, SemanticRecorder
+from state_trace.presentation_schema import validate_input
 
 SCHEMA = 'glsmac.presentation.audit.v1'
 GAPS = {
@@ -100,6 +101,59 @@ def _validate_dispositions(events, diagnostics):
     return dispositions
 
 
+def _native_attribution(capture, events, points):
+    """Bind every raw source ordinal to the independently validated input plan."""
+    plan = capture.get('input_plan')
+    _require(type(plan) is dict, 'missing bound input_plan')
+    actions = validate_input(plan)
+    wanted_points = plan.get('checkpoints')
+    _require(type(wanted_points) is list, 'input_plan requires named checkpoint declarations')
+    _require(len(points) <= len(wanted_points), 'capture has undeclared checkpoints')
+    after_inputs, fences = [], {}
+    action, checkpoint, nonce, protocol = 0, 0, 0, 0
+    opened = False
+    for event in events:
+        kind, data = event['kind'], event['data']
+        if kind == 'trace.protocol':
+            protocol += 1
+            _require(protocol == 1 and _same(data, {'version': 1, 'physical_os_complete': False}),
+                     'missing/duplicate/invalid native input protocol')
+        if kind in ('trace.action', 'trace.checkpoint'):
+            _require(protocol == 1 and set(data) == {'op', 'action', 'checkpoint', 'nonce'}
+                     and all(type(value) is int for value in data.values()), 'invalid native action/checkpoint fence')
+            _require(data['nonce'] == nonce, 'native action/checkpoint nonce order differs')
+            nonce += 1
+            if kind == 'trace.action':
+                _require(data['checkpoint'] == 0, 'native action carries a checkpoint index')
+                if data['op'] == 1:
+                    _require(not opened and data['action'] == action + 1 and data['action'] <= len(actions),
+                             'native action begin is unknown, skipped or out of order')
+                    action, opened = data['action'], True
+                else:
+                    _require(data['op'] == 2 and opened and data['action'] == action,
+                             'native action end differs from its open action')
+                    opened = False
+            else:
+                checkpoint += 1
+                _require(data['op'] == 3 and not opened and data['action'] == action
+                         and action > 0 and data['checkpoint'] == checkpoint,
+                         'native checkpoint action/index/order differs')
+                _require(checkpoint <= len(points), 'native checkpoint omitted from capture plan')
+                wanted, observed = wanted_points[checkpoint - 1], points[checkpoint - 1]
+                _require(observed['checkpoint'] == checkpoint and observed['id'] == wanted['id']
+                         and observed.get('after_action') == wanted['after_action'] == actions[action - 1]['id'],
+                         'native checkpoint name/action differs from bound input_plan')
+                fences[checkpoint] = event['seq']
+        after_inputs.append(actions[action - 1]['id'] if action else 'initial')
+    _require(protocol == 1, 'native input protocol absent')
+    _require(checkpoint == len(points), 'declared capture checkpoint lacks a native fence')
+    _require(type(capture.get('capture', {})) is dict, 'invalid capture metadata')
+    if capture.get('capture', {}).get('terminal_drain_observed') is True:
+        _require(not opened and action == len(actions) and checkpoint == len(wanted_points),
+                 'sealed capture omits declared actions/checkpoints or leaves an action open')
+    return after_inputs, fences
+
+
 def audit_capture(capture, projection):
     """Return a deterministic accounting report, or raise ProtocolError on loss/omission.
 
@@ -132,14 +186,7 @@ def audit_capture(capture, projection):
     _require(all(type(point) is dict and type(point.get('checkpoint')) is int
                  and type(point.get('id')) is str and bool(point['id']) for point in points),
              'invalid checkpoint plan entry')
-    native_fences = {}
-    for event in events:
-        if event['kind'] == 'trace.checkpoint':
-            checkpoint = event['data'].get('checkpoint')
-            _require(type(checkpoint) is int and checkpoint not in native_fences, 'duplicate/invalid native checkpoint fence')
-            native_fences[checkpoint] = event['seq']
-    _require(set(native_fences) == {point.get('checkpoint') for point in points},
-             'native checkpoint fence omitted from capture plan')
+    after_inputs, native_fences = _native_attribution(capture, events, points)
     raw_replay, semantic = RawRecorder(max_events=1000000), SemanticRecorder()
     cursor, previous_boundary, reports, observations = 0, 0, [], []
     semantic_births, semantic_retirements = {}, {}
@@ -151,6 +198,9 @@ def audit_capture(capture, projection):
                  'missing semantic state/events at ' + label)
         seen = []
         for event in state['events']:
+            _require(cursor < boundary, 'semantic event has no raw source event at ' + label)
+            _require(type(event) is dict and event.get('after_input') == after_inputs[cursor],
+                     'semantic after_input differs from native source action at sequence ' + str(cursor + 1))
             semantic.record(event)
             if event['domain'] in ('windows', 'widgets', 'animation', 'video', 'sfx', 'music'):
                 identity = event['object_id']
