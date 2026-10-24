@@ -162,3 +162,74 @@ Recording requires independent repeated original observations and complete
 requested coverage; no reference output has been accepted for these cases.
 Asset-free observer/transport tests run in the hot PR workflow. Full existing
 Python test discovery also includes their invariants on main.
+
+## Ordered input ledger and diagnostic checkpoints
+
+The optional browser capture now also arms `glsmac.presentation.inputs.v1` via
+`presentation_trace_inputs_start()` immediately after UI bootstrap and before
+production includes. A `trace.protocol` record binds that version; launch is
+actual action 1. Numeric action ordinals refer to the complete input plan saved
+in the capture, never to expected output objects.
+
+The bounded diagnostic export `glsmac_presentation_command(op, action,
+checkpoint, nonce)` queues primitive commands only. Opcodes 1/2/3 are begin,
+end, and checkpoint; commands are applied and acknowledged in the same native
+observer sequence at the end of SDL input iteration, after its pending coalesced
+mouse dispatch. Browser waits for begin acknowledgement before planned sends.
+Nonces/order are strict, the queue holds at most 64 pending commands, and an
+unapplied/in-flight command at terminal seal invalidates capture. No diagnostic
+control injects gameplay input or traverses UI/GSE on the browser thread.
+
+`input.ingress` retains every polled SDL event before production translation and
+motion coalescing. `input.disposition` identifies coalesced/not-dispatched events;
+`input.dispatch` retains actual translated payload, begin/end, ingress identity
+and handled result. Rejected SDL events remain `input.filtered`; the verified
+SDL poll-cycle sentinel is explicitly classified as internal bookkeeping.
+Unknown filtered events invalidate attribution. Native hover transitions are
+retained separately as `input.ui-transition`, with actual node/container IDs and
+source ingress or zero for transitions outside external dispatch. This does not
+introduce semantic control roles or native-to-original DOM correspondence.
+
+A capture-phase browser ledger preserves actual trusted/untrusted inputs,
+companions and extra/unplanned events. The reducer checks the independently
+observed key/button/motion payloads, native provenance and action boundaries.
+Unsupported wheel scaling, unknown keys, missing/unmatched/filtered/proxy inputs,
+untrusted input or non-mouse pointer input makes attribution incomplete; records
+remain diagnostic. End/checkpoint controls can still establish an ordered raw
+boundary for incomplete intervals, but cannot promote them to verified action
+attribution. Browser/native ledgers each hold at most 100,000 entries; oversized
+browser text or transport overflow is an error. Gap summaries are bounded while
+all source events remain retained.
+
+`input_validation` validates the complete action/checkpoint protocol independently
+of `input_attribution.complete`. Normal pinned captures save five opening or two
+intro immutable raw prefix files at acknowledged native sequence watermarks.
+Each prefix recomputes attribution using its own browser watermark and contains
+no later native events. The current intro route reaches the menu without video;
+its conditional skip creates no fabricated Escape input. Final capture retains
+the existing native atomic seal and structural quiet checks. Internal poll-cycle
+records do not count as presentation activity for structural quiet.
+
+This is candidate diagnostic evidence. A matching browser/native ledger does
+not establish physical OS input completeness, prelaunch history, controlled
+timing or cross-engine presentation parity. `physical_os_complete` stays false.
+Concurrent trusted-CDP motion stress exposed browser/native coordinate mismatch
+upstream of actual dispatch; the integration case deliberately requires that
+observed mismatch to remain incomplete. Production coalescing and dispatch order
+are preserved. Semantic roles, complete media classification and audio/video
+output coverage remain false/unimplemented.
+
+Asset-free checks also include:
+
+```sh
+python3 -m unittest discover -s tools/behavior-tests -p 'test_presentation*.py' -v
+node tools/behavior-tests/state_trace/presentation_inputs.test.mjs
+```
+
+Actual threaded integration, requiring installed assets, the private rebuilt
+runtime, and the existing browser dependencies:
+
+```sh
+SMAC_ASSETS_DIR=/path/to/game WASM_APP_DIR=/path/to/private/bin \
+  node --test tools/behavior-tests/state_trace/presentation_inputs_browser.test.mjs
+```

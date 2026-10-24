@@ -416,11 +416,23 @@ void Container::SetMouseOverChild( GSE_CALLABLE, Object* obj, const types::Vec2<
 		e.data.mouse = { mouse_coords.x, mouse_coords.y };
 		if ( m_mouse_over_object ) {
 			e.SetType( input::EV_MOUSE_OUT );
+			if ( presentation::Get().LedgerEnabled() ) {
+				presentation::Event( "input.ui-transition", presentation::Node( m_mouse_over_object->m_dom_id ),
+					"{\"type\":" + presentation::Quote( e.GetTypeStr() ) + ",\"container\":" + presentation::Quote( presentation::Node( m_dom_id ) ) +
+					",\"source_ingress\":" + std::to_string( presentation::dispatch_ingress ) + ",\"action\":" + std::to_string( presentation::Get().Action() ) +
+					",\"x\":" + std::to_string( mouse_coords.x ) + ",\"y\":" + std::to_string( mouse_coords.y ) + "}" );
+			}
 			m_mouse_over_object->ProcessEvent( GSE_CALL, e );
 		}
 		m_mouse_over_object = obj;
 		if ( m_mouse_over_object ) {
 			e.SetType( input::EV_MOUSE_OVER );
+			if ( presentation::Get().LedgerEnabled() ) {
+				presentation::Event( "input.ui-transition", presentation::Node( m_mouse_over_object->m_dom_id ),
+					"{\"type\":" + presentation::Quote( e.GetTypeStr() ) + ",\"container\":" + presentation::Quote( presentation::Node( m_dom_id ) ) +
+					",\"source_ingress\":" + std::to_string( presentation::dispatch_ingress ) + ",\"action\":" + std::to_string( presentation::Get().Action() ) +
+					",\"x\":" + std::to_string( mouse_coords.x ) + ",\"y\":" + std::to_string( mouse_coords.y ) + "}" );
+			}
 			m_mouse_over_object->ProcessEvent( GSE_CALL, e );
 		}
 	}

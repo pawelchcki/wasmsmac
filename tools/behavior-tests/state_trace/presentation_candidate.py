@@ -67,7 +67,11 @@ def main():
                 if observed['failure']: raise ProtocolError(observed['failure'])
                 raw = directory/'presentation-raw.json'
                 implementation['captures'][case_id] = observed['implementation']
-            reduced = reduce_capture(json.loads(raw.read_text()))
+            capture = json.loads(raw.read_text())
+            reduced = reduce_capture(capture)
+            implementation['captures'][case_id]['input_ledger'] = dict(
+                raw_path=str(raw), checkpoint_paths=[str(raw.parent/('presentation-checkpoint-'+point['id']+'.json')) for point in capture.get('input_checkpoints',[])],
+                attribution=capture.get('input_attribution'), validation=capture.get('input_validation'))
             (directory/'reduced.json').write_text(json.dumps(reduced,indent=2)+'\n')
             results.append(dict(id=case_id,status='unsupported',reason='Real raw capture retained; complete semantic windows/widgets/focus/modal, animation/video and SFX/music classification/coverage remain unimplemented. No prelaunch-history, mixer/output or timing agreement claimed.'))
         except (OSError, ValueError, subprocess.TimeoutExpired) as error:

@@ -124,6 +124,10 @@ class RawRecorder:
             else:
                 self.media[target].update(data)
                 self.media[target]['lifecycle'] = kind.removeprefix('media.')
+        elif kind in ('trace.protocol', 'trace.action', 'trace.checkpoint', 'input.ingress', 'input.dispatch', 'input.disposition', 'input.filtered', 'input.ui-transition'):
+            pass  # Ordered diagnostic ledger; independently validated by input reducer.
+        elif kind == 'trace.error':
+            _require(False, 'native input/action fence error')
         else:
             _require(False, 'unknown event ' + kind)
         self.seq = event['seq']

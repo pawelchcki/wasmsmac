@@ -8,6 +8,9 @@
 extern "C" EMSCRIPTEN_KEEPALIVE void glsmac_presentation_request_seal() {
 	ui::presentation::Get().RequestSeal();
 }
+extern "C" EMSCRIPTEN_KEEPALIVE int glsmac_presentation_command( uint32_t op, uint32_t action, uint32_t checkpoint, uint32_t nonce ) {
+	return ui::presentation::Get().Command( op, action, checkpoint, nonce );
+}
 #endif
 
 #include <algorithm>
@@ -151,6 +154,10 @@ WRAPIMPL_BEGIN( UI )
 					m_root->TraceSnapshot();
 					return nullptr;
 				} )
+			},
+			{
+				"presentation_trace_inputs_start",
+				NATIVE_CALL( this ) { presentation::Get().StartInputs(); return nullptr; } )
 			},
 			{
 				"presentation_trace_seal_requested",
