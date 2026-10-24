@@ -65,7 +65,7 @@ class RawRecorder:
             _require(target not in self.seen, 'birth identity reused')
             _require(set(data) == {'parent', 'tag'} and type(data['tag']) is str, 'invalid node birth')
             _require(data['parent'] is None or data['parent'] in self.nodes, 'missing parent')
-            self.nodes[target] = {'id': target, 'parent': data['parent'], 'tag': data['tag'], 'visible': False, 'attached': False, 'mounted_parent': None, 'properties': {}}
+            self.nodes[target] = {'id': target, 'parent': data['parent'], 'tag': data['tag'], 'visible': False, 'attached': False, 'mounted_parent': None, 'attachment_parents': [], 'properties': {}}
             self.seen.add(target)
         elif kind.startswith('node.'):
             _require(target in self.nodes, 'event for missing node')
@@ -73,12 +73,15 @@ class RawRecorder:
             if kind == 'node.property':
                 _require(set(data) == {'key', 'value'} and type(data['key']) is str, 'invalid property')
                 node['properties'][data['key']] = data['value']
+                node.get('opaque_properties', {}).pop(data['key'], None)
             elif kind == 'node.opaque':
                 _require(set(data) == {'key', 'type'} and all(type(v) is str for v in data.values()), 'invalid opaque property')
                 node.setdefault('opaque_properties', {})[data['key']] = data['type']
+                node['properties'].pop(data['key'], None)
             elif kind == 'node.unset':
                 _require(set(data) == {'key'} and type(data['key']) is str, 'invalid unset')
                 node['properties'].pop(data['key'], None)
+                node.get('opaque_properties', {}).pop(data['key'], None)
             elif kind in ('node.show', 'node.hide'):
                 _require(not data, 'visibility event has unexpected data')
                 node['visible'] = kind == 'node.show'
@@ -90,10 +93,14 @@ class RawRecorder:
                 self.modal_stack = [item for item in self.modal_stack if item != target]
             elif kind in ('node.attach', 'node.detach'):
                 _require(set(data) == {'parent'} and data['parent'] in self.nodes, 'invalid attachment parent')
+                parents = node['attachment_parents']
                 if kind == 'node.detach':
-                    _require(node['mounted_parent'] == data['parent'], 'detach differs from actual mounted parent')
-                node['attached'] = kind == 'node.attach'
-                node['mounted_parent'] = data['parent'] if kind == 'node.attach' else None
+                    _require(data['parent'] in parents, 'detach differs from actual mounted parent')
+                    parents.remove(data['parent'])
+                elif data['parent'] not in parents:
+                    parents.append(data['parent'])
+                node['attached'] = bool(parents)
+                node['mounted_parent'] = parents[-1] if parents else None
             elif kind == 'node.reparent':
                 _require(set(data) == {'parent'} and (data['parent'] is None or data['parent'] in self.nodes), 'invalid parent')
                 parent = data['parent']

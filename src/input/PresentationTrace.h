@@ -22,7 +22,7 @@ inline std::string PresentationDispatchData( const Event& event, const uint32_t 
 			}
 			break;
 		case EV_MOUSE_SCROLL:
-			data += ",\"scroll_y\":" + std::to_string( event.data.mouse.scroll_y );
+			data += ",\"x\":" + std::to_string( event.data.mouse.x ) + ",\"y\":" + std::to_string( event.data.mouse.y ) + ",\"scroll_y\":" + std::to_string( event.data.mouse.scroll_y );
 			break;
 		case EV_KEY_DOWN:
 		case EV_KEY_UP:

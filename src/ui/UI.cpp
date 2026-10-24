@@ -453,8 +453,8 @@ void UI::Focus( dom::Focusable* const element ) {
 		Defocus( m_focused_element );
 	}
 	m_focused_element = element;
-	m_focused_element->OnFocus();
 	if ( const auto* node = dynamic_cast< dom::Object* >( element ) ) { PRESENTATION_EVENT( "ui.focus", "ui", "{\"node\":" + presentation::Quote( presentation::Node( node->m_dom_id ) ) + "}" ); }
+	m_focused_element->OnFocus();
 }
 
 void UI::FocusNext() {

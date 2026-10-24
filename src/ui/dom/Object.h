@@ -106,6 +106,7 @@ protected:
 	virtual const bool IsEventRelevant( const input::Event& event ) const;
 	virtual const bool ProcessEventImpl( GSE_CALLABLE, const input::Event& event );
 
+	void TraceStoredProperty( const std::string& key, const gse::Value* value ) const;
 	void UpdateProperty( const std::string& name, gse::Value* const v );
 
 	UI* m_ui;

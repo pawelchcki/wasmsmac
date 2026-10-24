@@ -283,6 +283,7 @@ void Container::WrapSet( const std::string& key, gse::Value* const value, GSE_CA
 		}
 		m_manual_properties.insert_or_assign( key, value );
 		m_properties.insert_or_assign( key, value );
+		TraceStoredProperty( key, value );
 	}
 	else {
 		Object::WrapSet( key, value, GSE_CALL );
@@ -326,6 +327,7 @@ void Container::ForwardProperty( GSE_CALLABLE, const std::string& srcname, const
 		target->WrapSet( dstname, it->second, GSE_CALL );
 		m_manual_properties.insert_or_assign( srcname, it->second );
 		m_properties.insert_or_assign( srcname, it->second );
+		TraceStoredProperty( srcname, it->second );
 	}
 }
 

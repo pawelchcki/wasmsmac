@@ -69,13 +69,23 @@ renderer state and application-independent modal ordering are not fully observed
 Starting or restarting an epoch snapshots each native birth ID once, preserving
 all actual attachment edges for shared/globalized nodes. Current focus and the
 global modal singleton are recorded after those births, so a late capture has
-an explicit baseline rather than guessed empty state. Property/unset records
+an explicit baseline rather than guessed empty state. Snapshots also retain the
+current transformed/rendered Text string (including native Input caret text) and
+active native style modifiers. The reducer retains every actual attachment edge,
+so deglobalizing a shared child removes only that edge. Primitive/opaque type
+changes replace the previous representation. Float diagnostics use locale-neutral
+round-trip precision for the actual native float. Property/unset records
 follow actual storage writes/erases before their callbacks; callbacks do not
 emit a second copy. Independent native writes remain separate records, including
 same-value writes; production assignments and callbacks are unchanged.
 
-Every Scene Sound actor gets a separate playback birth identity when created
-while armed; source is the actual loader name. Play, pause, stop, mute, repeat,
+Every Scene Sound actor has a separate playback identity; source is the actual
+loader name. Within each observer epoch, its first observed control or destruction
+atomically registers a `media.create` before that event. Actors constructed while
+armed register immediately. Surviving actors, including actors born before the
+first Start, register lazily on their next observation. This registration time is
+not physical construction/start time: a complete already-playing actor inventory
+and output baseline remain unobserved. Play, pause, stop, mute, repeat,
 delay, autoplay and volume requests are captured with request evidence. Actor
 retirement is distinct from playback completion. This observes overlapping SFX
 and music requests through that shared actor path without guessing which is

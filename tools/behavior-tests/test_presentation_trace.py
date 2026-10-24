@@ -166,6 +166,39 @@ class RecorderTests(unittest.TestCase):
         self.assertEqual(detached['parent'], 'n1')
         with self.assertRaises(ProtocolError): recorder.record(raw(5, 'node.attach', target='n2', parent='missing'))
 
+    def test_type_switch_and_unset_replace_primitive_and_opaque_inventory(self):
+        recorder = RawRecorder()
+        recorder.record(raw(1, 'node.create', parent=None, tag='$text'))
+        recorder.record(raw(2, 'node.opaque', key='color', type='Object'))
+        recorder.record(raw(3, 'node.property', key='color', value='rgb(1,2,3)'))
+        node = recorder.checkpoint()['nodes']['n1']
+        self.assertEqual(node['properties']['color'], 'rgb(1,2,3)')
+        self.assertNotIn('color', node['opaque_properties'])
+        recorder.record(raw(4, 'node.opaque', key='color', type='Object'))
+        self.assertNotIn('color', recorder.checkpoint()['nodes']['n1']['properties'])
+        recorder.record(raw(5, 'node.unset', key='color'))
+        node = recorder.checkpoint()['nodes']['n1']
+        self.assertNotIn('color', node['properties'])
+        self.assertNotIn('color', node['opaque_properties'])
+
+    def test_shared_select_child_retains_embedded_edge_after_deglobalize(self):
+        recorder = RawRecorder()
+        for event in [raw(1, 'node.create', target='root', parent=None, tag='$root'),
+                      raw(2, 'node.create', target='select', parent='root', tag='$select'),
+                      raw(3, 'node.create', target='choices', parent='root', tag='$choicelist'),
+                      raw(4, 'node.attach', target='choices', parent='select'),
+                      raw(5, 'node.attach', target='choices', parent='root'),
+                      raw(6, 'node.detach', target='choices', parent='root')]:
+            recorder.record(event)
+        node = recorder.checkpoint()['nodes']['choices']
+        self.assertTrue(node['attached'])
+        self.assertEqual(node['attachment_parents'], ['select'])
+        self.assertEqual(node['parent'], 'root')
+        recorder.record(raw(7, 'node.detach', target='choices', parent='select'))
+        self.assertFalse(recorder.checkpoint()['nodes']['choices']['attached'])
+        recorder.record(raw(8, 'node.destroy', target='choices'))
+        recorder.record(raw(9, 'node.destroy', target='select'))
+
     def test_actual_native_bounded_buffer(self):
         compiler = shutil.which('g++')
         if not compiler: self.skipTest('host C++ compiler unavailable')

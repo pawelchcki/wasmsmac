@@ -27,7 +27,7 @@ int main() {
  };
  event.SetType(input::EV_KEY_DOWN);event.data.key.is_printable=true;event.data.key.code=input::K_A;event.data.key.key='A';event.data.key.modifiers=input::KM_SHIFT;emit();
  // Reuse the same data union, exactly as the input poller does. Do not clean it.
- event.SetType(input::EV_MOUSE_SCROLL);event.data.mouse.scroll_y=-2;emit();
+ event.SetType(input::EV_MOUSE_SCROLL);event.data.mouse.x=91;event.data.mouse.y=73;event.data.mouse.scroll_y=-2;emit();
  event.SetType(input::EV_MOUSE_MOVE);event.data.mouse.x=12;event.data.mouse.y=34;emit();
  event.SetType(input::EV_MOUSE_DOWN);event.data.mouse.x=43;event.data.mouse.y=21;event.data.mouse.button=input::MB_RIGHT;emit();
 }
@@ -40,7 +40,7 @@ int main() {
         rows = [json.loads(line) for line in run.stdout.splitlines()]
         common = dict(phase='begin', ingress=0, action=1)
         self.assertEqual(rows, [dict(common, type='keydown', code='A', key=65, modifiers=1, printable=True),
-                                dict(common, type='mousescroll', scroll_y=-2),
+                                dict(common, type='mousescroll', x=91, y=73, scroll_y=-2),
                                 dict(common, type='mousemove', x=12, y=34),
                                 dict(common, type='mousedown', x=43, y=21, button=2)])
 

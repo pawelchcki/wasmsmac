@@ -8,6 +8,11 @@
 #include <string>
 #include <vector>
 #include <deque>
+#include <cmath>
+#include <iomanip>
+#include <limits>
+#include <locale>
+#include <sstream>
 
 namespace ui::presentation {
 
@@ -33,6 +38,7 @@ public:
 		std::lock_guard< std::mutex > lock( m_mutex );
 		m_events.clear(); m_bytes = 0; m_dropped = 0; m_seq = 0; m_seal_requested.store( false );
 		m_commands.clear(); m_applying_commands = false; m_nonce = 0; m_action = 0; m_checkpoint = 0; m_action_open = false; m_ledger = false; m_ingress = 0;
+		++m_epoch;
 		m_enabled.store( true, std::memory_order_relaxed );
 	}
 	void Stop() { m_enabled.store( false, std::memory_order_relaxed ); }
@@ -42,14 +48,20 @@ public:
 		if ( !Enabled() ) { return; }
 		std::lock_guard< std::mutex > lock( m_mutex );
 		if ( !Enabled() ) { return; }
-		const auto seq = ++m_seq;
-		if ( m_events.size() >= MAX_EVENTS || data.size() > MAX_PAYLOAD_BYTES || m_bytes + data.size() + kind.size() + target.size() + 100 > MAX_BYTES ) {
-			++m_dropped;
-			return;
+		RecordLocked( kind, target, data );
+	}
+	// A surviving actor is lazily registered on its first observation in an
+	// epoch. Birth and control share the lock; this is not an output baseline.
+	void RecordPlayback( const uint64_t id, uint64_t& epoch, const std::string& source, const std::string& kind, const std::string& data ) {
+		if ( !Enabled() ) { return; }
+		std::lock_guard< std::mutex > lock( m_mutex );
+		if ( !Enabled() ) { return; }
+		const auto target = "m" + std::to_string( id );
+		if ( epoch != m_epoch ) {
+			epoch = m_epoch;
+			RecordLocked( "media.create", target, "{\"type\":\"audio\",\"source\":" + Quote( source ) + "}" );
 		}
-		auto record = "{\"seq\":" + std::to_string( seq ) + ",\"kind\":" + Quote( kind ) + ",\"target\":" + Quote( target ) + ",\"data\":" + data + "}";
-		m_bytes += record.size();
-		m_events.push_back( std::move( record ) );
+		if ( !kind.empty() ) { RecordLocked( kind, target, data ); }
 	}
 	// Numeric command payloads cross the browser/application thread boundary.
 	// Only InputBarrier applies them, after SDL's pending coalesced dispatch.
@@ -108,6 +120,17 @@ public:
 		return result + "]}";
 	}
 private:
+	void RecordLocked( const std::string& kind, const std::string& target, const std::string& data ) {
+		const auto seq = ++m_seq;
+		if ( m_events.size() >= MAX_EVENTS || data.size() > MAX_PAYLOAD_BYTES || m_bytes + data.size() + kind.size() + target.size() + 100 > MAX_BYTES ) {
+			++m_dropped;
+			return;
+		}
+		auto record = "{\"seq\":" + std::to_string( seq ) + ",\"kind\":" + Quote( kind ) + ",\"target\":" + Quote( target ) + ",\"data\":" + data + "}";
+		m_bytes += record.size();
+		m_events.push_back( std::move( record ) );
+	}
+	uint64_t m_epoch = 0;
 	struct CommandData { uint32_t op, action, checkpoint, nonce; };
 	std::deque< CommandData > m_commands;
 	uint32_t m_nonce = 0, m_checkpoint = 0;
@@ -145,6 +168,19 @@ private:
 };
 
 inline Observer& Get() { static Observer observer; return observer; }
+// JSON numbers round-trip the actual native float, independent of locale.
+inline std::string Float( const float value ) {
+	if ( !std::isfinite( value ) ) {
+		Get().Record( "trace.error", "trace", "{\"reason\":\"non-finite native float\"}" );
+		return "null";
+	}
+	std::ostringstream stream;
+	stream.imbue( std::locale::classic() );
+	stream << std::setprecision( std::numeric_limits< float >::max_digits10 ) << value;
+	auto result = stream.str();
+	if ( result.find_first_of( ".eE" ) == std::string::npos ) { result += ".0"; }
+	return result;
+}
 inline bool CanRecordControl() { return !in_audio_callback && Get().Enabled(); }
 inline std::string Node( const uint64_t id ) { return "n" + std::to_string( id ); }
 inline std::string Playback( const uint64_t id ) { return "m" + std::to_string( id ); }

@@ -40,7 +40,8 @@ static void TraceProperty( const dom_id_t id, const std::string& key, const gse:
 	std::string json;
 	if ( !value || value->type == gse::VT_NULL || value->type == gse::VT_UNDEFINED ) { json = "null"; }
 	else if ( value->type == gse::VT_STRING ) { json = presentation::Quote( ((const gse::value::String*)value)->value ); }
-	else if ( value->type == gse::VT_BOOL || value->type == gse::VT_INT || value->type == gse::VT_FLOAT ) { json = value->ToString(); }
+	else if ( value->type == gse::VT_FLOAT ) { json = presentation::Float( ((const gse::value::Float*)value)->value ); }
+	else if ( value->type == gse::VT_BOOL || value->type == gse::VT_INT ) { json = value->ToString(); }
 	else {
 		PRESENTATION_EVENT( "node.opaque", presentation::Node( id ), "{\"key\":" + presentation::Quote( key ) + ",\"type\":" + presentation::Quote( value->GetTypeString() ) + "}" );
 		return;
@@ -305,6 +306,7 @@ void Object::TraceSnapshot( std::unordered_set< dom_id_t >& visited ) const {
 	if ( !presentation::Get().Enabled() || !visited.insert( m_dom_id ).second ) { return; }
 	PRESENTATION_EVENT( "node.create", presentation::Node( m_dom_id ), "{\"parent\":" + ( m_parent ? presentation::Quote( presentation::Node( m_parent->m_dom_id ) ) : "null" ) + ",\"tag\":" + presentation::Quote( m_tag ) + "}" );
 	for ( const auto& property : m_properties ) { TraceProperty( m_dom_id, property.first, property.second ); }
+	for ( const auto modifier : m_modifiers ) { PRESENTATION_EVENT( "node.property", presentation::Node( m_dom_id ), "{\"key\":\"modifier." + std::to_string( modifier ) + "\",\"value\":true}" ); }
 	if ( m_is_visible ) { PRESENTATION_EVENT( "node.show", presentation::Node( m_dom_id ) ); }
 }
 
@@ -418,6 +420,10 @@ const bool Object::ProcessEventImpl( GSE_CALLABLE, const input::Event& event ) {
 		}
 	}
 	return false;
+}
+
+void Object::TraceStoredProperty( const std::string& key, const gse::Value* value ) const {
+	TraceProperty( m_dom_id, key, value );
 }
 
 void Object::UpdateProperty( const std::string& k, gse::Value* const v ) {

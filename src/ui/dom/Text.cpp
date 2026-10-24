@@ -111,6 +111,12 @@ Text::Text( DOM_ARGS )
 Text::~Text() {
 }
 
+void Text::TraceSnapshot( std::unordered_set< dom_id_t >& visited ) const {
+	if ( !presentation::Get().Enabled() || visited.count( m_dom_id ) ) { return; }
+	Object::TraceSnapshot( visited );
+	PRESENTATION_EVENT( "node.property", presentation::Node( m_dom_id ), "{\"key\":\"rendered_text\",\"value\":" + presentation::Quote( m_text ) + "}" );
+}
+
 void Text::SetText( const std::string& text ) {
 	if ( m_geometry->IsDestroying() ) {
 		return;
