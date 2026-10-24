@@ -87,6 +87,11 @@ mismatch or worker error. They do not run a native desktop executable or the
 original executable. Reference-integrity unit tests are separate and do not
 establish candidate agreement. The original recording adapters remain in the
 preserved reference worktree; implementation work does not read or modify them.
+The required HOT regression job also runs the current-source projection without
+the optional baseline overlay, against all eight unchanged 40×80 records. Its
+report and per-case logs are part of the uploaded hot artifacts; a mismatch or
+execution error fails the job and its aggregate. Schema/integrity unit tests run
+separately, and the full v2 UI contract remains pending.
 
 The shared-consumer baseline has eight strict mismatches and zero worker errors;
 the candidate matches all eight projected records. The separate parser regression

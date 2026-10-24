@@ -1,5 +1,6 @@
 """Frozen original production phases, isolated inputs and complete roster contexts."""
 from pathlib import Path
+from copy import deepcopy
 import json
 import unittest
 import compare
@@ -57,3 +58,98 @@ class ProductionControlTests(unittest.TestCase):
         base=dict(faction='GAIANS',difficulty='CITIZEN',text_profile='stock',world_width=40,world_height=80,map_route='load-map',research='directed',target_id=5)
         for change in (dict(difficulty='TRANSCEND'),dict(text_profile='gaian-formers-cost-3'),dict(world_width=80),dict(faction='HIVE',text_profile='gaian-physics')):
             with self.assertRaises(ProtocolError):validate_input(dict(base,**change))
+
+    def valid_output(self):
+        _, datasets = self.datasets()
+        return deepcopy(datasets[0][2]['observations'][0]['output'])
+
+    def output_object_paths(self):
+        return [(), ('operations',), ('panel',), ('panel', 'allocation'), ('social_after',)] + [
+            path for phase in PHASES for path in ((phase,), (phase, 'city'))]
+
+    def replace_output_value(self, output, path, value):
+        if not path:
+            return value
+        container = output
+        for key in path[:-1]:
+            container = container[key]
+        container[path[-1]] = value
+        return output
+
+    def test_every_output_object_rejects_wrong_container_types(self):
+        for path in self.output_object_paths():
+            for value in (None, True, 1, 'not an object', [], [{}]):
+                with self.subTest(path=path, value=value), self.assertRaises(ProtocolError):
+                    validate_output(self.replace_output_value(self.valid_output(), path, value))
+
+    def test_every_output_object_requires_all_and_only_its_declared_keys(self):
+        valid = self.valid_output()
+        for path in self.output_object_paths():
+            container = valid
+            for key in path:
+                container = container[key]
+            for missing in container:
+                value = dict(container)
+                del value[missing]
+                with self.subTest(path=path, missing=missing), self.assertRaises(ProtocolError):
+                    validate_output(self.replace_output_value(deepcopy(valid), path, value))
+            with self.subTest(path=path, extra=True), self.assertRaises(ProtocolError):
+                validate_output(self.replace_output_value(deepcopy(valid), path, dict(container, unexpected=0)))
+
+    def test_every_numeric_output_field_rejects_bool_float_and_string(self):
+        valid = self.valid_output()
+        paths = []
+        for phase in PHASES:
+            paths.extend((phase, key) for key in valid[phase] if key not in ('city', 'owned_ids'))
+            paths.extend((phase, 'city', key) for key in valid[phase]['city'])
+        paths.extend(('panel', key) for key in valid['panel'] if key not in ('allocation', 'project'))
+        paths.extend(('panel', 'allocation', key) for key in valid['panel']['allocation'])
+        paths.extend([('operations', 'turns'), ('social_after', 'industry')])
+        for path in paths:
+            for value in (True, 1.0, '1', None):
+                with self.subTest(path=path, value=value), self.assertRaises(ProtocolError):
+                    validate_output(self.replace_output_value(deepcopy(valid), path, value))
+
+    def test_owned_ids_and_production_pair_require_integer_arrays(self):
+        for phase in PHASES:
+            for value in (None, True, 6, '6', (6,), {'id': 6}, [True], [6.0], ['6'], [{}]):
+                with self.subTest(phase=phase, value=value), self.assertRaises(ProtocolError):
+                    validate_output(self.replace_output_value(self.valid_output(), (phase, 'owned_ids'), value))
+        for value in (None, True, 9, '91', (9, 16), {'first': 9}, [], [9], [9, 16, 7],
+                      [True, 16], [9, False], ['9', 16], [9, 16.0], [9, {}]):
+            with self.subTest(pair=value), self.assertRaises(ProtocolError):
+                validate_output(self.replace_output_value(self.valid_output(), ('operations', 'pair'), value))
+
+    def test_project_names_require_nonempty_strings(self):
+        for section in ('operations', 'panel'):
+            for value in (None, True, 1, 1.0, [], {}, ''):
+                with self.subTest(section=section, value=value), self.assertRaises(ProtocolError):
+                    validate_output(self.replace_output_value(self.valid_output(), (section, 'project'), value))
+
+    def test_projection_rejects_malformed_nested_data_before_unpacking_it(self):
+        from ui.production_controls_native import project_reference
+        for path, value in [
+            ((PHASES[0], 'city'), 'city'), ((PHASES[0], 'city'), ['city']),
+            ((PHASES[0], 'owned_ids'), ['6']), (('operations', 'turns'), '7'),
+            (('panel', 'project'), 42), (('panel', 'allocation'), '50/0/50'),
+        ]:
+            with self.subTest(path=path, value=value), self.assertRaises(ProtocolError):
+                project_reference(self.replace_output_value(self.valid_output(), path, value))
+
+    def test_malformed_inputs_consistently_raise_protocol_error(self):
+        _, datasets = self.datasets()
+        valid = datasets[0][1]['cases'][0]['input']
+        for value in (None, True, 1, 'input', [], [{}]):
+            with self.subTest(container=value), self.assertRaises(ProtocolError):
+                validate_input(value)
+        for key, original in valid.items():
+            missing = dict(valid)
+            del missing[key]
+            with self.subTest(missing=key), self.assertRaises(ProtocolError):
+                validate_input(missing)
+            values = (True, 1.0, '40', None, [], {}) if type(original) is int else (True, 1, None, [], {})
+            for value in values:
+                with self.subTest(field=key, value=value), self.assertRaises(ProtocolError):
+                    validate_input(dict(valid, **{key: value}))
+        with self.assertRaises(ProtocolError):
+            validate_input(dict(valid, unexpected=0))

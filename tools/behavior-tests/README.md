@@ -7,6 +7,11 @@ mineral income. The comparison preserves the full original records; Operations,
 allocation and Social Engineering controls remain a pending UI contract. The
 shared-source-consumer baseline retains eight strict mismatches, and the untouched
 baseline's two positive-cost parser failures are preserved separately.
+The required HOT regression job replays all eight 40×80 projections against the
+actual C++ WASM engine without installed assets and retains its report/logs.
+Any mismatch or worker error fails the job. This additional bounded check is
+documented in [contracts.md](contracts.md); it does not promote full v2 UI to
+passing catalog totals.
 
 Five HOT `startup-production*` application suites add fifteen scenarios/171
 assertions for creation credit, first income, computer exclusion, active/later-city
