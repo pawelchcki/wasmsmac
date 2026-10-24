@@ -396,6 +396,9 @@ private:
 	animation::AnimationManager* m_am = nullptr;
 	technology::Table m_technologies;
 	technology::Research m_research;
+	// Established contacts are separate from participant membership. Discovery
+	// and diplomacy are not implemented; new sessions begin with none.
+	std::array< std::unordered_set< size_t >, technology::Research::PLAYERS > m_contacts = {};
 	struct research_receipt_t {
 		int64_t token;
 		size_t turn;

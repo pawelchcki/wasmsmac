@@ -1,7 +1,9 @@
 #include "State.h"
 
 #include "game/backend/faction/FactionManager.h"
+#include "game/backend/faction/Faction.h"
 #include "Game.h"
+#include "Random.h"
 #include "game/backend/connection/Connection.h"
 #include "Bindings.h"
 #include "game/backend/slot/Slots.h"
@@ -102,6 +104,10 @@ void State::AddPlayer( Player* player ) {
 }
 
 void State::AddSinglePlayerSlot( faction::Faction* faction, const bool name_confirmed ) {
+	ASSERT( !m_connection && m_settings.local.game_mode == settings::LocalSettings::GM_SINGLEPLAYER, "single-player participants require offline single-player" );
+	ASSERT( m_players.empty() && m_cid_slots.empty() && m_slots->GetCount() == 0, "single-player participants already initialized" );
+	ASSERT( !m_fm->GetAll().empty(), "single-player requires configured factions" );
+	ASSERT( !faction || m_fm->Get( faction->m_id ) == faction, "single-player faction is not configured" );
 	m_slots->Resize( 7 ); // TODO: make dynamic?
 	const auto& difficulty = m_settings.global.rules.m_difficulty_levels.GetString( m_settings.global.difficulty_level );
 	if ( !name_confirmed && m_settings.local.player_name.empty() ) {
@@ -115,6 +121,41 @@ void State::AddSinglePlayerSlot( faction::Faction* faction, const bool name_conf
 	slot.SetPlayer( player, 0, "" );
 	slot.SetPlayerFlag( slot::PF_READY );
 	slot.SetLinkedGSID( m_settings.local.account.GetGSID() );
+
+	// Keep Random unresolved until the ordinary native startup stage, when
+	// the backend RNG is available. Explicit selections can fill immediately.
+	if ( faction ) { FinalizeSinglePlayerRoster(); }
+}
+
+void State::FinalizeSinglePlayerRoster() {
+	ASSERT( !m_connection && m_settings.local.game_mode == settings::LocalSettings::GM_SINGLEPLAYER, "single-player participants require offline single-player" );
+	ASSERT( m_slots->GetCount() == 7 && m_slots->GetSlot( 0 ).GetState() == slot::Slot::SS_PLAYER, "single-player human slot is missing" );
+	auto* human = m_slots->GetSlot( 0 ).GetPlayer();
+	ASSERT( human->GetRole() == Player::PR_SINGLE, "single-player human role is missing" );
+	if ( m_players.size() > 1 ) { return; }
+	const auto factions = m_fm->GetAll();
+	ASSERT( !factions.empty(), "single-player requires configured factions" );
+	auto* faction = human->GetFaction();
+	if ( !faction ) {
+		ASSERT( m_game && m_game->GetRandom(), "random faction resolution requires initialized game RNG" );
+		faction = factions.at( m_game->GetRandom()->GetUInt( 0, factions.size() - 1 ) );
+		human->SetFaction( faction );
+	}
+	const auto& difficulty = human->GetDifficultyLevel();
+
+	// Faction-manager order is declared by the active game script. Keep the
+	// selected faction in the local slot and fill the remaining six slots from
+	// that catalog without duplicating it or manufacturing network clients.
+	size_t next_slot = 1;
+	for ( auto* opponent_faction : factions ) {
+		if ( opponent_faction == faction ) { continue; }
+		if ( next_slot == m_slots->GetCount() ) { break; }
+		NEWV( opponent, Player, opponent_faction->m_name, Player::PR_COMPUTER, opponent_faction, difficulty );
+		AddPlayer( opponent );
+		auto& opponent_slot = m_slots->GetSlot( next_slot++ );
+		opponent_slot.SetPlayer( opponent, 0, "" );
+		opponent_slot.SetPlayerFlag( slot::PF_READY );
+	}
 }
 
 void State::RemovePlayer( Player* player ) {

@@ -63,6 +63,7 @@ CLASS( State, gse::GCWrappable )
 
 	void AddPlayer( Player* player );
 	void AddSinglePlayerSlot( faction::Faction* faction, bool name_confirmed = false );
+	void FinalizeSinglePlayerRoster();
 	void RemovePlayer( Player* player );
 
 	// used only on host

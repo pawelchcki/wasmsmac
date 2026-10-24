@@ -168,7 +168,7 @@ void Space::AccumulateImpl( const f_accum_t& f ) {
 		try {
 			f();
 		}
-		catch ( const gse::Exception& e ) {
+		catch ( ... ) {
 			commit();
 			throw;
 		}

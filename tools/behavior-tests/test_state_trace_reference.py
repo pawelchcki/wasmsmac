@@ -12,6 +12,31 @@ SUITES = ('natural-startup', 'natural-startup-economy-research')
 
 
 class ReferenceTraceTests(unittest.TestCase):
+    def test_explicit_world_original_artifacts_and_plan_are_frozen(self):
+        manifest_path = DIRECTORY / 'explicit-world-reference-manifest.json'
+        self.assertEqual(hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                         '749b288db5253f929628cb2a010f742e11faca8d7df3f66e71420884a355df02')
+        manifest = decode_json(manifest_path.read_text())
+        self.assertEqual(manifest['status'], 'accepted-original-repeat2')
+        self.assertIs(manifest['candidate_executed'], False)
+        for relative, digest in manifest['files'].items():
+            with self.subTest(path=relative):
+                path = Path(relative)
+                self.assertFalse(path.is_absolute())
+                self.assertNotIn('..', path.parts)
+                self.assertEqual(hashlib.sha256((DIRECTORY / path).read_bytes()).hexdigest(), digest)
+        suite = compare.read_json(DIRECTORY / 'cases/explicit-seven-world-v2.json')
+        record = compare.read_json(DIRECTORY / 'observations/smacx-gog-2.0-explicit-seven-world-v2-native-defaults.json')
+        outputs = compare.validate_observations(record, suite)
+        self.assertEqual(record['repeat'], 2)
+        self.assertEqual(len(suite['cases']), 3)
+        points = [point for case in suite['cases']
+                  for point in validate_reference_output(outputs[case['id']], case['input'])]
+        self.assertEqual(len(points), 7)
+        for point in points:
+            for domain in ('players', 'units', 'bases'):
+                self.assertEqual(len(point['state'][domain]), 7)
+
     def test_frozen_manifest_and_original_artifact_hashes(self):
         manifest_path = DIRECTORY / 'reference-manifest.json'
         self.assertEqual(hashlib.sha256(manifest_path.read_bytes()).hexdigest(),

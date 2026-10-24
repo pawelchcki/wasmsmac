@@ -605,6 +605,12 @@ WRAPIMPL_BEGIN( Game )
 				return VALUE( gse::value::Array,, elements );
 			} )
 		},
+		{ "get_contacts", NATIVE_CALL( this ) {
+			N_EXPECT_ARGS( 0 );
+			gse::value::array_elements_t contacts;
+			for ( const auto id : m_contacts.at( m_slot_num ) ) { contacts.push_back( VALUE( gse::value::Int,, id ) ); }
+			return VALUE( gse::value::Array,, contacts );
+		} ) },
 		{ "get_opening_state", NATIVE_CALL( this ) { N_EXPECT_ARGS( 0 ); return GetOpeningState( GSE_CALL ); } ) },
 		{ "set_auto_end_turn", NATIVE_CALL( this ) { N_EXPECT_ARGS( 1 ); N_GETVALUE( enabled, 0, Bool ); if ( !m_state || m_state->m_connection || m_state->m_settings.local.game_mode != settings::LocalSettings::GM_SINGLEPLAYER ) { GSE_ERROR( gse::EC.GAME_ERROR, "Automatic end turn requires offline single-player" ); } m_auto_end_turn = enabled; return VALUE( gse::value::Undefined ); } ) },
 		{ "validate_opening", NATIVE_CALL( this ) { N_EXPECT_ARGS( 6 ); N_GETVALUE( caller, 0, Int ); N_GETVALUE( session, 1, Int ); N_GETVALUE( action, 2, String ); N_GETVALUE( id, 3, Int ); N_GETVALUE( previous, 4, String ); N_GETVALUE( name, 5, String ); const auto error = ValidateOpening( GSE_CALL, caller, session, action, id, previous, name ); return error.empty() ? (gse::Value*)VALUE( gse::value::Undefined ) : VALUE( gse::value::String,, error ); } ) },
@@ -1321,7 +1327,16 @@ void Game::AdvanceTurn( const size_t turn_id ) {
 
 	for ( const auto& slot : m_state->m_slots->GetSlots() ) {
 		if ( slot.GetState() == slot::Slot::SS_PLAYER ) {
-			slot.GetPlayer()->UncompleteTurn();
+			auto* player = slot.GetPlayer();
+			player->UncompleteTurn();
+			// Offline computer participants have no socket from which to receive
+			// completion. Their current controller submits no orders; per-turn
+			// unit/base mechanics above still execute for every participant.
+			// AI decisions and movement remain unimplemented. Never complete a
+			// remote human (or any network participant) through this controller.
+			if ( !m_state->m_connection && m_state->m_settings.local.game_mode == settings::LocalSettings::GM_SINGLEPLAYER && player->GetRole() == Player::PR_COMPUTER ) {
+				player->CompleteTurn();
+			}
 		}
 	}
 
@@ -1694,6 +1709,10 @@ void Game::InitGame( MT_Response& response, const bool interactive_opening, MT_C
 	auto* const connection = m_state->m_connection;
 
 	if ( m_state->IsMaster() ) {
+
+		if ( !m_state->m_connection && m_state->m_settings.local.game_mode == settings::LocalSettings::GM_SINGLEPLAYER ) {
+			m_state->FinalizeSinglePlayerRoster();
+		}
 
 		// assign random factions to players
 		auto factions = m_state->GetFM()->GetAll();
@@ -2082,6 +2101,7 @@ void Game::InitGame( MT_Response& response, const bool interactive_opening, MT_C
 }
 
 void Game::ResetGame() {
+	for ( auto& contacts : m_contacts ) { contacts.clear(); }
 	m_technologies.Clear();
 	m_research.Clear();
 	for ( auto& receipt : m_research_receipts ) { receipt.reset(); }

@@ -39,6 +39,7 @@ function observedScripts() {
     "state.blind = !state.blind; #print('BRS_RULE|' + #to_string(state.blind));");
   observe('ui/parts/mainmenu/steps/customize_rules.gls.js', 'state.blind = true;',
     "state.blind = true; #print('BRS_RULE|' + #to_string(state.blind));");
+  observe('ui/parts/mainmenu/steps/select_faction.gls.js', "random = mode == 'random';", "random = mode == 'random'; #print('BRS_FACTION_MODE|' + mode);");
   observe('main.gls.js', 'glsmac.run();', `
 glsmac.on('configure_game', (e) => {
  const game = e.game;
@@ -52,8 +53,16 @@ glsmac.on('configure_game', (e) => {
   const research = #include('ui/parts/game/popup/research');
   const labs = #include('ui/parts/game/popup/laboratories');
   const objects = #include('ui/parts/game/bottom_bar/objects_list');
+  const observed_world = {turn: (0 - 1)};
   glsmac.ui.root.timer(100, () => {
    if (opening.visible_phase == null) { return true; }
+   if (opening.visible_phase == 'map' && game.get_turn() != observed_world.turn) {
+    observed_world.turn = game.get_turn(); let humans = 0; let computers = 0; let units = 0;
+    for (player of game.get_players()) { if (player.type == 'computer') { computers++; } else { humans++; } }
+    const tm = game.get_tm();
+    for (let y = 0; y < tm.get_map_height(); y++) { for (let x = y % 2; x < tm.get_map_width(); x += 2) { units += #sizeof(tm.get_tile(x, y).get_units()); } }
+    #print('BRS_WORLD|' + #to_string(observed_world.turn) + '|' + #to_string(humans) + '|' + #to_string(computers) + '|' + #to_string(#sizeof(game.get_bm().get_bases())) + '|' + #to_string(units) + '|' + #to_string(#sizeof(game.get_contacts())));
+   }
    let dx = 0; let dy = 0;
    if (opening.dismiss != null) { dx = opening.dismiss_x; dy = opening.dismiss_y; }
    #print('BRS_OPENING|' + opening.visible_phase + '|' + #to_string(dx) + '|' + #to_string(dy));
@@ -108,8 +117,8 @@ test('real setup, Shift+R, pointer research commands and persistent native state
     runtime_js_sha256: hash(readFileSync(`${build}/GLSMAC.js`)), runtime_wasm_sha256: hash(readFileSync(`${build}/GLSMAC.wasm`)),
     scope: 'Candidate Chromium keyboard/pointer and native state regression; no original pixel-parity claim',
   }, null, 2));
-  for (const directed of [false, true]) {
-    const name = directed ? 'directed' : 'blind';
+  for (const name of ['blind', 'directed', 'random']) {
+    const directed = name === 'directed'; const randomSelection = name === 'random';
     await t.test(name, async () => {
       const context = await browser.newContext({viewport: {width: 1100, height: 1100}});
       const page = await context.newPage(); page.setDefaultTimeout(60000);
@@ -182,11 +191,21 @@ test('real setup, Shift+R, pointer research commands and persistent native state
           await click(left + 25 + 100, top + 151 - 15 - 13);
         }
         await wait(text => text, text => /BRS_POPUP\|Choose Your Factions/i.test(text), 'faction selector');
-        const count = (await log()).split('BRS_POPUP|').length; await page.keyboard.press('Enter');
-        await wait(text => text, text => text.split('BRS_POPUP|').length > count, 'name prompt'); await page.keyboard.press('Enter');
+        if (randomSelection) {
+          // Actual source mode button: 800x340 popup, native header/body
+          // offsets, left10/top94/width240/height28 from select_faction.
+          await click((1024 - 800) / 2 + 3 + 130, (768 - 340) / 2 + 23 + 3 + 108);
+          await wait(text => text, text => text.includes('BRS_FACTION_MODE|random'), 'actual Random faction mode');
+          await page.keyboard.press('Enter');
+        } else {
+          const count = (await log()).split('BRS_POPUP|').length; await page.keyboard.press('Enter');
+          await wait(text => text, text => text.split('BRS_POPUP|').length > count, 'name prompt'); await page.keyboard.press('Enter');
+        }
         for (const phase of ['planetfall', 'first-base-name']) { await wait(opening, value => value[1] === phase, phase); await page.keyboard.press('Enter'); }
         const tour = await wait(opening, value => value[1] === 'tour', 'tour prompt'); await click(Number(tour[2]), Number(tour[3]));
         await wait(opening, value => value[1] === 'map', 'playable map');
+        const initialWorld = await wait(text => [...text.matchAll(/BRS_WORLD\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)/g)].at(-1), value => Number(value[1]) === 1, 'complete opening roster');
+        assert.deepEqual(initialWorld.slice(2).map(Number), [1, 6, 7, 7, 0]);
         await page.keyboard.press('F2');
         const labs = await wait(laboratories, value => value.settled, 'Laboratories F2');
         assert.equal(labs.science, 0); assert.match(labs.accumulated, /: 0$/); assert.match(labs.perTurn, /: [0-9]+$/);
@@ -230,6 +249,11 @@ test('real setup, Shift+R, pointer research commands and persistent native state
           await page.keyboard.press('Shift+r');
           await wait(state, value => value.settled && value.target === before.ids[0], 'directed reopen');
           await page.keyboard.press('Escape'); await page.waitForTimeout(300); assert.equal(state(await log()).shown, true);
+          const lastResearch = state(await log()); await click((1024 - 656) / 2 + 3 + 160, lastResearch.top + 27 + 27);
+          await wait(state, value => !value.shown, 'close directed research for session exit');
+          const worlds = [...(await log()).matchAll(/BRS_WORLD\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)/g)];
+          assert.deepEqual(worlds.map(value => Number(value[1])), [1, 2, 3, 4, 5, 6]);
+          for (const world of worlds) { assert.deepEqual([world[2], world[3], world[4], world[6]].map(Number), [1, 6, 7, 0]); assert.ok(Number(world[5]) >= 7, 'Full native unit inventory includes every initial Scout and any new production'); }
         } else {
           assert.equal(before.checks, before.bits); const expected = before.bits.slice(0, 1) + (before.bits[1] === '1' ? '0' : '1') + before.bits.slice(2);
           await click(512, before.top + 27 + 68 + 38 + 15);
@@ -241,6 +265,21 @@ test('real setup, Shift+R, pointer research commands and persistent native state
           await click(512, reopened.top + 27 + 330 - 8 - 12);
           await wait(state, value => !value.shown && value.bits === expected, 'pointer OK footer');
         }
+        if (randomSelection) {
+          assert.match(await log(), /Single-player setup: faction=RANDOM/, 'The actual nullable production setup path was used');
+          for (let turn = 2; turn <= 4; turn++) {
+            await click(899, 585);
+            const ending = await wait(modal, value => value.turn === turn || (value.id === 'turn_confirmation' && value.settled), `Random end-turn control ${turn}`);
+            if (ending.id === 'turn_confirmation') { await click(512, ending.top + 27 + 68 + 10); }
+            await wait(modal, value => value.id === 'none' && value.turn === turn && (value.status === 'active' || value.status === 'turn_complete'), `Random native turn ${turn}`);
+          }
+        }
+        await wait(modal, value => value.id === 'none' && value.settled, 'playable session before exit');
+        const menuBeforeExit = (await log()).lastIndexOf('BRS_MENU|');
+        await page.keyboard.press('Control+Shift+q');
+        const quitting = await wait(modal, value => value.id === 'please_dont_go' && value.settled, 'native session exit confirmation');
+        await click(512, quitting.top + 27 + 147 + 10);
+        await wait(text => text, text => text.lastIndexOf('BRS_MENU|') > menuBeforeExit && text.slice(text.lastIndexOf('BRS_MENU|')).includes('BRS_MENU_REST'), 'main menu after native game reset');
         assert.deepEqual(errors, []);
       } finally {
         writeFileSync(`${artifacts}/${name}.log`, await log().catch(() => ''));

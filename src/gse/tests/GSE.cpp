@@ -10,11 +10,64 @@
 #include "gse/value/Callable.h"
 #include "gse/ExecutionPointer.h"
 #include "gc/Space.h"
+#include "gc/GC.h"
+#include "engine/Engine.h"
+#include <atomic>
+#include <stdexcept>
 
 namespace gse {
 namespace tests {
 
 void AddGSETests( task::gsetests::GSETests* task ) {
+
+	task->AddTest(
+		"GC accumulation recovers from native and non-standard exceptions",
+		GT() {
+			class Root : public gc::Object {
+			public:
+				Root() : gc::Object( nullptr ) {}
+				gc::Object* kept = nullptr;
+				void GetReachableObjects( std::unordered_set< gc::Object* >& reachable_objects ) override {
+					gc::Object::GetReachableObjects( reachable_objects );
+					if ( kept ) { GC_REACHABLE( kept ); }
+				}
+			} root;
+			class Tracked : public gc::Object {
+			public:
+				Tracked( gc::Space* space, std::atomic< int >& destroyed ) : gc::Object( space ), destroyed( destroyed ) {}
+				~Tracked() override { destroyed++; }
+			private:
+				std::atomic< int >& destroyed;
+			};
+			std::atomic< int > destroyed = 0;
+			gc::Space space( &root );
+			space.SetThreadId( std::this_thread::get_id() );
+			for ( int phase = 0; phase < 2; phase++ ) {
+				bool propagated = false;
+				try {
+					space.Accumulate( &root, [ & ]() {
+						new Tracked( &space, destroyed );
+						space.Accumulate( &root, [ & ]() {
+							root.kept = new Tracked( &space, destroyed );
+							if ( phase == 0 ) { throw std::runtime_error( "native failure" ); }
+							throw 73;
+						} );
+					} );
+				}
+				catch ( const std::runtime_error& error ) { propagated = phase == 0 && std::string( error.what() ) == "native failure"; }
+				catch ( int error ) { propagated = phase == 1 && error == 73; }
+				GT_ASSERT( propagated, "exception payload changed" );
+				GT_ASSERT( !space.IsAccumulating(), "failed callback left accumulation active" );
+				// Force real collection at each boundary; no timer or allocation-pressure assumptions.
+				g_engine->GetGC()->Iterate();
+				GT_ASSERT( destroyed.load() == phase * 2 + 1, "failed callback's unreachable allocation was not collected" );
+				space.Accumulate( &root, [ & ]() { root.kept = nullptr; } );
+				g_engine->GetGC()->Iterate();
+				GT_ASSERT( destroyed.load() == phase * 2 + 2, "later accumulation failed to release the retained allocation" );
+			}
+			GT_OK();
+		}
+	);
 
 	class Sum : public value::Callable {
 	public:
