@@ -97,6 +97,12 @@ only if actually playing. Structural/request quiet is scoped to 150 ms and must
 not wait for ongoing music to end. No accepted original neutral observations
 exist. Existing original sampled opening/pod contracts are separate evidence.
 
+The immutable `presentation-capability-manifest.json` binds a separate original-only
+diagnostic producer and clean capability report. That prefix observed native
+widget lifetime and focus/modal writes through the leader editor. It contains
+zero accepted presentation observations and declares every semantic channel
+incomplete; these counts cannot substitute for repeated semantic reference gold.
+
 `presentation_candidate.py` executes real candidate captures and returns
 `unsupported` while semantic projection or requested channels remain incomplete.
 The current candidate actually displays a logo for one second and enters the

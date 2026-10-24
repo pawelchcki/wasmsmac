@@ -1,6 +1,7 @@
 """Presentation observer invariants. Synthetic evidence is never parity evidence."""
 from copy import deepcopy
 import json
+import hashlib
 from pathlib import Path
 import shutil
 import sys
@@ -13,6 +14,27 @@ from state_trace.presentation import RawRecorder, SemanticRecorder, DOMAINS
 from state_trace.compare import compare_outputs
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class OriginalCapabilityIntegrityTests(unittest.TestCase):
+    def test_original_capability_package_is_frozen_and_not_accepted_gold(self):
+        directory=ROOT/'tools/behavior-tests/state_trace'
+        raw_manifest=(directory/'presentation-capability-manifest.json').read_bytes()
+        self.assertEqual(hashlib.sha256(raw_manifest).hexdigest(),
+                         'd0456db0098bc7bc7d79531c8bfab97a48f70c5cfeb218b523f21d332d292bb1')
+        manifest=json.loads(raw_manifest)
+        self.assertEqual(manifest['status'],'diagnostic-only-not-reference-gold')
+        for relative,digest in manifest['files'].items():
+            path=Path(relative)
+            self.assertFalse(path.is_absolute());self.assertNotIn('..',path.parts)
+            # Original-only adapters remain opaque bytes; never import/execute.
+            self.assertEqual(hashlib.sha256((directory/path).read_bytes()).hexdigest(),digest)
+        proof=json.loads((directory/'presentation-original-capability-v1.json').read_text())
+        self.assertIs(proof['original_executed'],True)
+        self.assertIs(proof['candidate_executed'],False)
+        self.assertEqual(proof['accepted_original_presentation_observations'],0)
+        self.assertTrue(proof['coverage'])
+        self.assertTrue(all(value is False for value in proof['coverage'].values()))
 
 
 def raw(seq, kind, target='n1', **data):
