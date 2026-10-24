@@ -204,6 +204,37 @@ struct ProductionFixture : gc::Object {
 		}
 	}
 	std::string StartupMapError() const { return game.GetStartupMapError(); }
+	bool ProbeQueuedInitFailure() {
+		// The declared fixture retains its native manager ownership separately
+		// while actual failure teardown detaches them from the live game graph.
+		auto* bm = game.m_bm; auto* um = game.m_um;
+		auto* tm = game.m_tm; auto* rm = game.m_rm;
+		bool owned_error = false;
+		std::exception_ptr failure;
+		std::thread backend( [ & ](){
+			try {
+				game.QueueStartupInitialize();
+				game.QueueStartupConfigure();
+				game.InitFailed( "Declared native startup failure after owner drain" );
+				backend::MT_Request request = {}; request.op = backend::OP_GET_MAP_DATA;
+				common::mt_flag_t cancelled = false;
+				auto response = game.ProcessRequest( request, cancelled );
+				owned_error = response.result == backend::R_ERROR && response.data.error.error_text && *response.data.error.error_text == "Declared native startup failure after owner drain";
+				game.DestroyResponse( response );
+			}
+			catch ( ... ) { failure = std::current_exception(); }
+		} );
+		backend.join();
+		// Deliver only after the native failure has already returned its response.
+		// The real queued callbacks must reject the failed epoch.
+		state->m_gc_space->ProcessAccumulations();
+		const bool stale_rejected = !game.m_state && !game.m_tm && !game.m_rm && !game.m_um && !game.m_bm && !game.m_am && game.m_game_state == backend::Game::GS_NONE;
+		// Restore only fixture-owned teardown handles after the assertion boundary.
+		game.m_bm = bm; game.m_um = um; game.m_tm = tm; game.m_rm = rm;
+		if ( failure ) { std::rethrow_exception( failure ); }
+		return owned_error && stale_rejected;
+	}
+
 	bool ParticipantCodecInvariant() {
 		if ( state->GetCidSlots().size() != 1 || state->GetCidSlots().at( 0 ) != 0 ) { return false; }
 		for ( auto& slot : state->m_slots->GetSlots() ) {
@@ -1519,6 +1550,12 @@ Value* MakeWorldStartupFixture( GSE_CALLABLE, size_t width, size_t height ) {
 	} ), GSE_CALL );
 	object->Set( "startup_map_error", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return VALUE( value::String,, session->current->StartupMapError() );
+	} ), GSE_CALL );
+	object->Set( "probe_queued_init_failure", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return VALUE( value::Bool,, session->current->ProbeQueuedInitFailure() );
+	} ), GSE_CALL );
+	object->Set( "has_offline_single_player_roster", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return VALUE( value::Bool,, session->current->state->HasOfflineSinglePlayerRoster() );
 	} ), GSE_CALL );
 	object->Set( "initialize_random_single_player", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->InitializeSinglePlayer( GSE_CALL, "", "Citizen", false, true )->Wrap( GSE_CALL );

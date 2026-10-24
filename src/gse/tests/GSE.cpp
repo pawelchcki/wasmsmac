@@ -63,6 +63,51 @@ void AddGSETests( task::gsetests::GSETests* task ) {
 	);
 
 	task->AddTest(
+		"Queued accumulations retain both callback owner and detached script context",
+		GT() {
+			class Root : public gc::Object {
+			public:
+				Root() : gc::Object( nullptr ) {}
+				gc::Object* owner = nullptr; gc::Object* context = nullptr;
+				void GetReachableObjects( std::unordered_set< gc::Object* >& objects ) override {
+					gc::Object::GetReachableObjects( objects );
+					if ( owner ) { owner->GetReachableObjects( objects ); }
+					if ( context ) { context->GetReachableObjects( objects ); }
+				}
+			} root;
+			std::atomic< int > destroyed = 0;
+			class Tracked : public gc::Object {
+			public:
+				Tracked( gc::Space* space, std::atomic< int >& destroyed ) : gc::Object( space ), destroyed( destroyed ) {}
+				~Tracked() override { ++destroyed; }
+			private:
+				std::atomic< int >& destroyed;
+			};
+			gc::Space space( &root );
+			space.SetThreadId( std::this_thread::get_id() );
+			Tracked* owner = nullptr;
+			Tracked* context = nullptr;
+			space.Accumulate( &root, [ & ](){ owner = new Tracked( &space, destroyed ); root.owner = owner; context = new Tracked( &space, destroyed ); root.context = context; } );
+			bool delivered = false;
+			std::thread producer( [ & ](){
+				space.Accumulate( owner, [ & ](){ delivered = true; }, nullptr, false, context );
+			} );
+			producer.join();
+			space.Accumulate( &root, [ & ](){ root.owner = nullptr; root.context = nullptr; } );
+			// Neither object is otherwise rooted. Collection before UI delivery
+			// must preserve both independently of the live game's State pointer.
+			g_engine->GetGC()->Iterate();
+			GT_ASSERT( destroyed == 0, "pending callback lost an owner or context root" );
+			GT_ASSERT( !delivered, "producer executed a UI-thread callback" );
+			space.ProcessAccumulations();
+			GT_ASSERT( delivered, "queued callback was not delivered" );
+			g_engine->GetGC()->Iterate();
+			GT_ASSERT( destroyed == 2, "completed callback leaked its lifetime roots" );
+			GT_OK();
+		}
+	);
+
+	task->AddTest(
 		"GC accumulation recovers from native and non-standard exceptions",
 		GT() {
 			class Root : public gc::Object {

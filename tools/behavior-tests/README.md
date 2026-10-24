@@ -962,17 +962,16 @@ to also run emulator guard tests. Those tests contain explicitly synthetic x86
 instructions and need no original executable; without Unicorn they report
 skips. They are separate from the genuine game observations.
 
-The seven-participant startup verification ran all 796 Python harness tests
-with `STATE_TRACE_RUNTIME` and `STATE_TRACE_ASSETS` set: 761 passed and 35
-optional checks skipped. The installed-source tests execute real native
-movement/Hold and initialized economy/research state; their synthetic natural
-startup map is 16x16 to accommodate all seven participants.
-The hot gate also passed all 32 regression suites (297 scenarios, 2,192
-assertions) and all 44 recorded cases across eleven UI references. Complete
-GSE/native coverage additionally requires all 152 discovered executable scripts
-exactly once, including the 143-suite regression catalog, and successful native
-C++ engine checks. Disjoint partitions must pass strict coverage aggregation;
-the fast catalog alone is not a full-engine result.
+Seven-participant startup verification requires the full Python harness with
+`STATE_TRACE_RUNTIME` and `STATE_TRACE_ASSETS` set. Installed-source tests
+execute real native movement/Hold and initialized economy/research state; their
+synthetic natural startup map is 16x16 to accommodate all seven participants.
+The hot gate includes 32 regression suites and all 44 recorded cases across
+eleven UI references. Complete GSE/native coverage additionally requires all
+152 discovered executable scripts exactly once, including the 143-suite
+regression catalog, and successful native C++ engine checks. Disjoint
+partitions must pass strict coverage aggregation; the fast catalog alone is
+not a full-engine result.
 
 The separate [bounded setup controls](state_trace/setup-controls/contract-v1.md)
 record actual original Planetfall rosters, Random-mode naming and custom-size
@@ -993,8 +992,30 @@ instance without modifying a duplicate opponent or the catalog. Separate
 [all-player identity controls](state_trace/all-player-identity/contract-v1.md)
 retain the observed original fields and unsupported values outside passing
 totals; duplicate collision suffixes and general identity parity remain gaps.
-The startup geometry check also runs against the actual loaded or generated map
-after imports and CLI overrides, before world entities are created.
+Generation validates effective dimensions after CLI overrides and custom-size
+normalization, before allocating tiles or entering the terrain generator. The
+seven-player rule applies to the actual offline roster, preserving editor,
+network and pure-map contexts. Startup separately checks the actual imported or
+generated map before world entities are created.
+
+Native backend initialization errors travel as owned, copied response text to
+the global UI. Errors already delivered by an accumulating script's game hook
+are marked to prevent a second popup. The error dialog wraps measured text,
+supports pointer/Enter/Escape acknowledgment and closes once. Quickstart errors
+exit; ordinary setup returns to the menu and supports a valid retry. Pending
+startup callbacks retain both their owner and State/context and reject a failed
+session before reading its managers. GC and thread-affinity checks remain active.
+
+The optional actual Chromium recovery probes use declared fault inputs: an
+impossible CLI size, Planet files removed only from the disposable mounted VFS,
+and a single caught script initialization exception. They assert real diagnostic
+delivery, acknowledgment, reset and valid retry; they add no original comparison
+totals. Run these alone before CPU-intensive headless gates:
+
+```sh
+RESEARCH_CASES=init-cli-error,init-menu-retry,init-script-retry \
+  npm --prefix tools/wasm-tests run test:research
+```
 
 ## Ability-free prototype base costs
 

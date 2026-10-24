@@ -63,6 +63,7 @@ CLASS( State, gse::GCWrappable )
 
 	bool IsMaster();
 	bool IsSlave();
+	bool HasOfflineSinglePlayerRoster() const;
 
 	void AddPlayer( Player* player );
 	std::vector< faction::Faction* > ParseSinglePlayerRoster( GSE_CALLABLE, const gse::value::object_properties_t& setup, faction::Faction* human, bool& random_human );

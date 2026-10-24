@@ -23,6 +23,7 @@
 #include "gse/value/Undefined.h"
 #include "gse/value/Array.h"
 #include "gse/value/Int.h"
+#include "gse/value/Bool.h"
 
 #include "game/backend/Game.h"
 #include "game/backend/State.h"
@@ -451,8 +452,31 @@ void GLSMAC::HideLoader() {
 
 void GLSMAC::ShowError( const std::string& text, const std::function< void() >& on_close ) {
 	Log( text );
+	m_gc_space->Accumulate( this, [ this, text, on_close ](){
+		auto close = std::make_shared< std::function< void() > >( on_close );
+		TriggerObject( m_ui, "error", ARGS_F( this, text, close ) {
+			{ "error", VALUEEXT( gse::value::String, m_gc_space, text ) },
+			{ "on_close", VALUEEXT( gse::callable::Native, m_gc_space, m_ctx, [ close ]( GSE_CALLABLE, const gse::value::function_arguments_t& arguments ) -> gse::Value* {
+				auto callback = std::move( *close );
+				*close = nullptr;
+				if ( callback ) { callback(); }
+				return VALUE( gse::value::Bool,, true );
+			} ) },
+		}; } );
+	});
+}
+
+void GLSMAC::RecoverFromGameError() {
+	// The global owner survives frontend teardown and owns this queued action.
 	m_gc_space->Accumulate( this, [ this ](){
-		TriggerObject( m_ui, "error_popup" );
+		const auto* config = g_engine->GetConfig();
+		if ( config->HasLaunchFlag( config::Config::LF_QUICKSTART ) || config->HasLaunchFlag( config::Config::LF_HOST ) || config->HasLaunchFlag( config::Config::LF_JOIN ) ) {
+			g_engine->ShutDown();
+		}
+		else {
+			gse::ExecutionPointer ep;
+			S_Reset( m_gc_space, m_ctx, {}, ep );
+		}
 	});
 }
 

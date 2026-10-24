@@ -46,6 +46,12 @@ behavior.scenario('Direct native human identity setup leaves a duplicate opponen
 	test.assert(#sizeof(f.game.bm.get_bases()) == 0, 'Identity isolation needs no world-placement fixture');
 });
 
+behavior.scenario('A native failure returned after the owner drain invalidates actual queued startup callbacks', () => {
+	const f = test.world_startup_fixture(16, 16); configure_roster(f, true);
+	f.initialize_single_player('GAIANS');
+	test.assert(f.probe_queued_init_failure(), 'Owned error survives backend return and stale initialize/configure do not recreate the failed session');
+});
+
 behavior.scenario('An undersized custom world rejects before creating any native participant', () => {
 	for (size of [[4, 2], [4, 4], [4, 8]]) {
 		const f = test.world_startup_fixture(size[0], size[1]); configure_roster(f, true);
@@ -158,9 +164,12 @@ behavior.scenario('Offline computer completion allows ordinary rounds while pres
 
 behavior.scenario('Network turn boundaries never auto-complete participants through the offline controller', () => {
 	const f = test.world_startup_fixture(40, 80); const game = f.game;
+	test.assert(!f.has_offline_single_player_roster(), 'Empty map/editor-style fixtures have no active offline roster');
 	#include('../default/factions').configure({add: (id, data) => { f.fm.add(id, data); }, import_colors: (name) => { return f.colors; }, import_base_names: (name) => { return {land: [], water: []}; }});
 	f.initialize_single_player('GAIANS');
+	test.assert(f.has_offline_single_player_roster(), 'The early generation guard recognizes the actual seven-player roster');
 	f.enable_transport();
+	test.assert(!f.has_offline_single_player_roster(), 'A network transport retains its separate map-generation contract');
 	f.with_write(() => { game.advance_turn(2); });
 	for (player of game.get_players()) { test.assert(!game.is_turn_complete(player.id), 'A connection disables the offline computer controller'); }
 });

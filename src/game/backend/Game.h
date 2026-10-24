@@ -6,6 +6,7 @@
 #include <map>
 #include <vector>
 #include <memory>
+#include <mutex>
 
 #include "common/MTModule.h"
 #include "gse/GCWrappable.h"
@@ -235,6 +236,7 @@ struct MT_Response {
 		response_map_data_t* get_map_data;
 		struct {
 			const std::string* error_text;
+			bool already_notified;
 		} error;
 		struct {
 			tile_query_purpose_t purpose;
@@ -419,6 +421,11 @@ private:
 	std::atomic< game_state_t > m_game_state = GS_NONE;
 	common::mt_flag_t m_init_cancel = false;
 	std::string m_initialization_error = "";
+	bool m_initialization_error_notified = false;
+	// Serialize pending startup callbacks against teardown; generations reject
+	// callbacks from a cancelled or failed startup before they touch its state.
+	std::recursive_mutex m_startup_mutex;
+	uint64_t m_startup_generation = 0;
 
 	Player* m_player = nullptr;
 	bool m_is_master = true;
@@ -488,6 +495,8 @@ private:
 	bool IsOpeningEventAllowed( const std::string& name ) const;
 	void InitComplete( GSE_CALLABLE );
 	void InitFailed( const std::string& error_text );
+	void QueueStartupInitialize();
+	void QueueStartupConfigure();
 
 	void SetTurnStatus( const backend::turn::turn_status_t status );
 

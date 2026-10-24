@@ -67,12 +67,13 @@ Game* State::GetGame() const {
 void State::WithGSE( gc::Object* const owner, const gse_func_t& f, const f_cleanup_t& f_cleanup, const bool need_now ) {
 	m_gc_space->Accumulate(
 		owner,
-		[ this, f ]() {
+		[ space = m_gc_space, context = m_ctx, f ]() {
 			gse::ExecutionPointer ep;
-			f( m_gc_space, m_ctx, {}, ep );
+			f( space, context, {}, ep );
 		},
 		f_cleanup,
-		need_now
+		need_now,
+		this // retain State and its context even after the game detaches it
 	);
 }
 
@@ -102,6 +103,17 @@ bool State::IsMaster() {
 bool State::IsSlave() {
 	//std::lock_guard guard( m_connection_mutex );
 	return m_connection && m_connection->IsClient();
+}
+
+bool State::HasOfflineSinglePlayerRoster() const {
+	if ( m_connection || m_settings.local.game_mode != settings::LocalSettings::GM_SINGLEPLAYER || m_players.size() != 7 || m_slots->GetCount() != 7 ) { return false; }
+	const auto& human = m_slots->GetSlot( 0 );
+	if ( human.GetState() != slot::Slot::SS_PLAYER || human.GetPlayer()->GetRole() != Player::PR_SINGLE ) { return false; }
+	for ( size_t index = 1; index < 7; ++index ) {
+		const auto& opponent = m_slots->GetSlot( index );
+		if ( opponent.GetState() != slot::Slot::SS_PLAYER || opponent.GetPlayer()->GetRole() != Player::PR_COMPUTER ) { return false; }
+	}
+	return true;
 }
 
 void State::AddPlayer( Player* player ) {

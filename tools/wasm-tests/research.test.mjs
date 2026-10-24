@@ -42,6 +42,7 @@ function observedScripts() {
   observe('ui/parts/mainmenu/steps/select_faction.gls.js', "random = mode == 'random';", "random = mode == 'random'; #print('BRS_FACTION_MODE|' + mode);");
   observe('ui/parts/mainmenu/steps/customize_mapsize.gls.js', 'const horizontal = parse_dimension(width_input.value);',
     "#print('BRS_CUSTOM_INPUT|' + width_input.value + '|' + height_input.value); const horizontal = parse_dimension(width_input.value);");
+  observe('ui/parts/error.gls.js', "ui.on('error', (e) => {", "ui.on('error', (e) => { #print('BRS_UI_ERROR|' + e.error);");
   observe('main.gls.js', 'glsmac.run();', `
 glsmac.on('configure_game', (e) => {
  const game = e.game;
@@ -129,6 +130,10 @@ test('real setup, Shift+R, pointer research commands and persistent native state
   for (const name of cases) {
     const directed = name === 'directed'; const randomSelection = name === 'random';
     const customMinimum = name === 'custom-minimum';
+    const cliError = name === 'init-cli-error'; const scriptError = name === 'init-script-error';
+    const scriptRetry = name === 'init-script-retry';
+    const menuRetry = name === 'init-menu-retry' || scriptRetry;
+    const quickError = cliError || scriptError;
     await t.test(name, async () => {
       const context = await browser.newContext({viewport: {width: 1100, height: 1100}});
       const page = await context.newPage(); page.setDefaultTimeout(60000);
@@ -137,7 +142,11 @@ test('real setup, Shift+R, pointer research commands and persistent native state
       const wait = async (read, predicate, label) => {
         console.log(`research browser ${name}: waiting for ${label}`);
         for (let count = 0; count < 400; count++) {
-          assert.deepEqual(errors, []); const text = await log(); assert.doesNotMatch(text, /FATAL ERROR|Unhandled exception|Aborted\(/i);
+          assert.deepEqual(errors, []); const text = await log();
+          // A caught, deliberately injected script exception is this case's
+          // declared input. Fatal/native/worker failures remain failures.
+          const unexpected = scriptError || scriptRetry ? text.replaceAll('Unhandled exception (Error): Declared script initialization failure', 'Declared script initialization failure') : text;
+          assert.doesNotMatch(unexpected, /FATAL ERROR|Unhandled exception|Aborted\(|uncaught|Pthread .*sent an error!/i);
           const value = read(text); if (value && predicate(value)) { return value; } await page.waitForTimeout(100);
         }
         throw Error(`Research browser did not settle: ${label}`);
@@ -174,13 +183,67 @@ test('real setup, Shift+R, pointer research commands and persistent native state
       try {
         await page.goto(origin); await page.waitForFunction(() => document.body.dataset.state === 'ready');
         await page.locator('#asset-source').selectOption('remote'); await page.locator('#asset-url').fill(`${origin}/assets/manifest.json`);
-        await page.evaluate(scripts => {
+        await page.evaluate(({scripts, cliError, scriptError, scriptRetry}) => {
           for (const [name, contents] of Object.entries(scripts)) { const path = `/research-browser/GLSMAC_data/default/${name}`; Module.FS.mkdirTree(path.slice(0, path.lastIndexOf('/'))); Module.FS.writeFile(path, contents); }
-          const run = Module.callMain; Module.callMain = args => run([...args, '--skipintro', '--datapath', '/research-browser/GLSMAC_data']);
-        }, scripts);
+          if (scriptError || scriptRetry) {
+            const path = '/research-browser/GLSMAC_data/default/main.gls.js';
+            const source = Module.FS.readFile(path, {encoding: 'utf8'});
+            Module.FS.writeFile(path, "let declared_failure_pending = true;\n" + source.replace('glsmac.run();', "glsmac.on('configure_game', (e) => { e.game.on('create_world', (e) => { if (declared_failure_pending) { declared_failure_pending = false; throw Error('Declared script initialization failure'); } }); }); glsmac.run();"));
+          }
+          const extra = cliError || scriptError ? ['--quickstart', '--quickstart-mapsize', cliError ? '4x2' : '32x16'] : [];
+          const run = Module.callMain; Module.callMain = args => run([...args, ...extra, '--skipintro', '--datapath', '/research-browser/GLSMAC_data']);
+        }, {scripts, cliError, scriptError, scriptRetry});
         await page.locator('#start').click(); await page.waitForFunction(() => document.body.dataset.state === 'running');
         await page.addStyleTag({content: '#canvas {position:fixed;left:0;top:0;margin:0;max-width:none;z-index:10}'});
+        if (quickError) {
+          const expected = cliError ? 'seven factions need starting tiles' : 'Declared script initialization failure';
+          await wait(text => [...text.matchAll(/BRS_UI_ERROR\|([^\r\n]+)/g)].at(-1), value => value[1].includes(expected), 'native or script startup error');
+          await page.waitForTimeout(500);
+          assert.equal((await log()).split('BRS_UI_ERROR|').length - 1, 1, 'Exactly one error popup');
+          assert.doesNotMatch(await log(), /BRS_WORLD\|/);
+          await page.locator('#canvas').screenshot({path: `${artifacts}/${name}-popup.png`});
+          await page.keyboard.press('Enter');
+          await page.waitForFunction(() => document.body.dataset.state === 'exited');
+          assert.deepEqual(errors, []);
+          assert.doesNotMatch(await log(), /Unable to achieve desired land amount/);
+          return;
+        }
         await wait(text => text, text => text.includes('BRS_MENU_REST'), 'initial menu');
+        if (menuRetry) {
+          if (!scriptRetry) {
+            const removed = await page.evaluate(() => {
+              const removed = [];
+              const walk = directory => {
+                for (const name of Module.FS.readdir(directory)) {
+                  if (name === '.' || name === '..') continue;
+                  const path = directory + '/' + name;
+                  if (Module.FS.isDir(Module.FS.stat(path).mode)) walk(path);
+                  else if (/^(x?planetx?)\.mp$/i.test(name)) { Module.FS.unlink(path); removed.push(path); }
+                }
+              };
+              walk('/smac'); return removed;
+            });
+            assert.ok(removed.length > 0, 'Actual mounted Planet terrain files removed only in this disposable session');
+            console.log('Declared missing-file fault input: ' + JSON.stringify(removed));
+          }
+          await choose('START GAME');
+          if (scriptRetry) { await choose('MAKE RANDOM MAP'); await choose('TINY PLANET'); }
+          else { await choose('THE MAP OF PLANET'); }
+          await choose('CITIZEN');
+          await choose('PLAY WITH STANDARD RULES', false);
+          await wait(text => text, text => /BRS_POPUP\|Choose Your Factions/i.test(text), 'faction selector before native failure');
+          const prompts = (await log()).split('BRS_POPUP|').length; await page.keyboard.press('Enter');
+          await wait(text => text, text => text.split('BRS_POPUP|').length > prompts, 'name before native failure');
+          await page.keyboard.press('Enter');
+          const error = await wait(text => [...text.matchAll(/BRS_UI_ERROR\|([^\r\n]+)/g)].at(-1), value => scriptRetry ? value[1].includes('Declared script initialization failure') : /not found/i.test(value[1]), 'actual initialization failure');
+          assert.doesNotMatch(await log(), /BRS_WORLD\|/, 'Failed native startup did not create a world');
+          await page.locator('#canvas').screenshot({path: `${artifacts}/${name}-popup.png`});
+          const previousMenu = (await log()).lastIndexOf('BRS_MENU|');
+          if (scriptRetry) { await page.keyboard.press('Enter'); } else { await click(512, 426); }
+          await wait(text => text, text => text.lastIndexOf('BRS_MENU|') > previousMenu && text.slice(text.lastIndexOf('BRS_MENU|')).includes('BRS_MENU_REST'), 'acknowledgment returns to actual main menu');
+          assert.equal((await log()).split('BRS_UI_ERROR|').length - 1, 1, 'Exactly one native error delivery');
+          console.log('PROVEN initialization error acknowledged; actual main menu restored: ' + error[1]);
+        }
         for (const label of ['START GAME', 'MAKE RANDOM MAP']) { await choose(label); }
         if (customMinimum) {
           const oldPopup = (await log()).split('BRS_POPUP|').length;
@@ -197,6 +260,7 @@ test('real setup, Shift+R, pointer research commands and persistent native state
           await wait(text => text, text => text.lastIndexOf('BRS_MENU|') > oldMenu && text.slice(text.lastIndexOf('BRS_MENU|')).includes('BRS_MENU_REST'), 'custom dimensions accepted');
         } else { await choose('TINY PLANET'); }
         await choose('CITIZEN');
+        const setupPopups = (await log()).split('BRS_POPUP|').length;
         await choose(directed ? 'CUSTOMIZE RULES' : 'PLAY WITH STANDARD RULES', false);
         if (directed) {
           await wait(rule, value => value === 'true', 'custom rule checkbox');
@@ -215,7 +279,7 @@ test('real setup, Shift+R, pointer research commands and persistent native state
           await click(left + 28, top + 31); await wait(rule, value => value === 'false', 'Blind Research off');
           await click(left + 25 + 100, top + 151 - 15 - 13);
         }
-        await wait(text => text, text => /BRS_POPUP\|Choose Your Factions/i.test(text), 'faction selector');
+        await wait(text => text, text => text.split('BRS_POPUP|').length > setupPopups && /BRS_POPUP\|Choose Your Factions/i.test(text.slice(text.lastIndexOf('BRS_POPUP|'))), 'faction selector');
         if (randomSelection) {
           // Actual source mode button: 800x340 popup, native header/body
           // offsets, left10/top94/width240/height28 from select_faction.
@@ -250,6 +314,11 @@ test('real setup, Shift+R, pointer research commands and persistent native state
         if (customMinimum) {
           const grid = [...(await log()).matchAll(/BRS_GRID\|(\d+)\|(\d+)/g)].at(-1);
           assert.deepEqual(grid.slice(1).map(Number), [32, 16], 'Entered 2x2 custom dimensions use the observed original minimum at world creation');
+        }
+        if (menuRetry) {
+          assert.equal((await log()).split('BRS_UI_ERROR|').length - 1, 1, 'Valid retry produced no second error');
+          assert.deepEqual(errors, []);
+          return;
         }
         await page.keyboard.press('F2');
         const labs = await wait(laboratories, value => value.settled, 'Laboratories F2');
