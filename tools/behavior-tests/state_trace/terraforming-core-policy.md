@@ -201,3 +201,44 @@ its failure is preserved and the corrected expression was rerun successfully.
 No original expected observations were edited. General height amount, fee,
 cascades, remaining primitive effects, sea action completion, all ten plan engines,
 resource/traversal consequences and visual timing remain separate pending work.
+
+## Documented primitive functionality checkpoint
+
+The installed player-facing `Manual.pdf` (SHA256
+`21d2e5f602ecce969456b0281c017686772002d219d1648ba1b66ffcda640ec8`,
+pp46–54) supplies qualitative player rules. No manual pages or game assets are
+redistributed. Installed TERRAIN/RULES/RESOURCEINFO numbers and accepted original
+observations take precedence over conflicting manual examples. These inputs
+justify functional application implementations; they are not new black-box
+comparison passes.
+
+Seventeen land primitives and five sea variants now execute through ordinary
+work commands, native terrain transactions, movement exhaustion and reusable
+rollback receipts. This includes source-backed improvement replacement consent,
+sea shelf guards, fungus changes and one-step rockiness reduction. Condensers
+apply the documented bounded moisture increase. Aquifers use an explicitly
+declared deterministic application route to actual water through nonascending
+neighbors; absent drainage rejects before work. Original river routing, condenser
+footprint details and all unrecorded validity/replacement contexts remain outside
+original-match totals. Land/sea Raise and Lower remain pending numeric policies.
+
+Resource queries now consume actual Ocean, Improved Sea and Borehole source
+coefficients, solar elevation bands, enrichment and adjacent mirrors. Resource
+caps still require actual owned technologies; the worker availability waiver
+never grants a resource-cap technology. Live native technology ownership is used
+when research is initialized, otherwise declared faction technologies apply.
+Imported unknown improvement owners remain unknown. Newly constructed named
+improvements receive only their builder's owner; overlapping roads cannot silently
+transfer a sensor. Explicit authoritative transfer and local support consequences
+are being integrated separately.
+
+The v4 engine source is `1da3296b` (C++ tree
+`a196dd03780a448d4f21f35d92ef2d3f96f29edd`), JS SHA256
+`3c65fa5ba297b9dd3e5712dca625cba26606f0014305628302c72ffa78746a15`, WASM
+`2e84cad638fed7c02649b53df7dec2fa66a9131999859b4b2222f801dcac63d7`.
+Native ownership/transfer/canonical/treasury checks pass 40 scenarios/187
+assertions; native plan-phase/home codec and undo checks pass 30/75. The primitive
+application suite passes 24/136, resource-source checks 17/48. These are bounded
+controlled-world checks. Independent seven-owner whole-world observation passed
+ten stages using exact native JSON, resolving the earlier GSE encoding OOM; that
+observer proof does not itself establish the new actions' all-owner parity.

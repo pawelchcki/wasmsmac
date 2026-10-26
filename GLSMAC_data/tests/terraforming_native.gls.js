@@ -391,7 +391,7 @@ behavior.scenario('malformed absent or nonlive enhancement owners reject the ent
 	reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,terraforming_owners:empty}],[]); }); });
 });
 behavior.scenario('equal-state terrain ABA fences old receipts while proper LIFO undo restores the predecessor revision', () => {
-	const f = fixture(); const tm = f.game.get_tm(); let a = 0; let b = 0; let c = 0;
+	const f = fixture(); const tm = f.game.get_tm(); const initial = f.terrain_snapshot(); let a = 0; let b = 0; let c = 0;
 	f.with_write(() => {
 		a = tm.apply_terrain([{x:2,y:2,moisture:2}],[]);
 		b = tm.apply_terrain([{x:2,y:2,moisture:3}],[]);
@@ -399,5 +399,5 @@ behavior.scenario('equal-state terrain ABA fences old receipts while proper LIFO
 	});
 	reject(f, () => { f.with_write(() => { tm.rollback_terrain(a); }); });
 	f.with_write(() => { tm.rollback_terrain(c); tm.rollback_terrain(b); tm.validate_terrain_rollback(a); tm.rollback_terrain(a); });
-	test.assert(tm.get_terrain_state(2,2).moisture == 3);
+	test.assert(f.terrain_snapshot() == initial);
 });

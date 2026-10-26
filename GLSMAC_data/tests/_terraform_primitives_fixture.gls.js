@@ -19,6 +19,7 @@ return (action,water) => {
 		if (action == 'mag_tube') { state.terraforming.road = true; patch.terraforming = state.terraforming; }
 		if (action == 'remove_fungus') { state.features.xenofungus = true; patch.features = state.features; }
 		if (action == 'level') { patch.rockiness = 3; }
+		if (action == 'aquifer') { f.game.get_tm().apply_terrain([{x:0,y:2,canonical:{elevation:(0-500),is_water:true}}],[]); }
 		if (action == 'soil_enricher' || action == 'mag_tube' || action == 'remove_fungus' || action == 'level') { f.game.get_tm().apply_terrain([patch],[]); }
 	});
 	return f;
