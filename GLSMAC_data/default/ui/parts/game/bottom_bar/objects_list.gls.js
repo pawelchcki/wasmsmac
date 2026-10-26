@@ -68,7 +68,10 @@ return {
 	},
 
 	schedule_base_selection: (id, continuation) => {
-		if (this.management_pending != null && this.management_pending.base_id == id && this.management_pending.turn_id == this.p.game.get_turn()) { return; }
+		// Ordinary repeated selection shares its pending command. A report
+		// continuation belongs to its own UI session and needs a fresh token;
+		// an older session's response must not consume the new opening intent.
+		if (!#is_defined(continuation) && this.management_pending != null && this.management_pending.base_id == id && this.management_pending.turn_id == this.p.game.get_turn()) { return; }
 		this.selection_epoch = this.selection_epoch + 1;
 		this.management_pending = null;
 		const epoch = this.selection_epoch;

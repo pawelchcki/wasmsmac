@@ -78,3 +78,12 @@ isolated processes. These checks do not cover player-wide balances/diplomacy/
 visibility, unit internal work-progress flags, facility internals or arbitrary
 script-owned fields beyond the enumerated detached snapshots. Such fields,
 media transitions and broader world equality remain observation gaps.
+
+The delayed-acknowledgment regression also reopens MENU → HQ slot 7 while an
+older city preparation is pending, then double-clicks the same city. A new report
+session sends a fresh request token and selection epoch; the older response
+cannot consume its continuation. Its own successful native response opens the
+city and Escape returns to the selected report, preserving all captured owners.
+Ordinary repeated base-selection events still share their existing pending
+request. Native preparation remains authoritative and idempotent when no idle
+citizen needs reconciliation; a repeated no-op returns receipt zero.
