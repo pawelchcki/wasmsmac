@@ -3,6 +3,8 @@
   "kinds": {
     "regression": {
       "hot": [
+        "base-operations",
+        "base-operations-lifecycle",
         "duplicate-faction-identity",
         "computer-production",
         "state-trace-snapshot",

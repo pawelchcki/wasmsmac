@@ -48,6 +48,7 @@
     "test:colony-join": "node --test --test-concurrency=1 colony-join.test.mjs",
     "test:starvation-dialog": "node --test --test-concurrency=1 starvation-dialog.test.mjs",
     "test:base-open": "node --test --test-concurrency=1 base-open.test.mjs",
+    "test:base-operations": "node --test --test-concurrency=1 base-operations.test.mjs",
     "test:base-resource-hud": "node --test --test-concurrency=1 base-resource-hud.test.mjs",
     "test:starvation-mineral": "node --test --test-concurrency=1 starvation-mineral.test.mjs",
     "test:starvation-notice-controls": "node --test --test-concurrency=1 starvation-notice-controls.test.mjs",

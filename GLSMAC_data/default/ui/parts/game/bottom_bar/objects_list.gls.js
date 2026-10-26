@@ -67,7 +67,7 @@ return {
 		};
 	},
 
-	schedule_base_selection: (id) => {
+	schedule_base_selection: (id, continuation) => {
 		if (this.management_pending != null && this.management_pending.base_id == id && this.management_pending.turn_id == this.p.game.get_turn()) { return; }
 		this.selection_epoch = this.selection_epoch + 1;
 		this.management_pending = null;
@@ -83,7 +83,10 @@ return {
 			if (epoch != this.selection_epoch) { return false; }
 			this.management_scheduled_epoch = null;
 			const base = this.resolve_object('Base', id);
-			if (base == null) { return false; }
+			if (base == null || (#is_defined(continuation) && !continuation.can_open(base))) {
+				if (#is_defined(continuation)) { continuation.rejected(); }
+				return false;
+			}
 			if (base.get_owner().id != this.p.game.get_player().id) {
 				this.open_base_selection(base, previous_unit_id);
 				return false;
@@ -93,33 +96,40 @@ return {
 			const request = {base_id: id, turn_id: turn, request_token: next_management_request};
 			const pending = {base_id: id, turn_id: request.turn_id, request_token: request.request_token, epoch: epoch, previous_unit_id: previous_unit_id};
 			pending.base = base; this.management_pending = pending;
+			if (#is_defined(continuation)) { pending.continuation = continuation; }
 			this.p.game.event('reconcile_base_citizens', request);
 			return false;
 		});
 	},
 
-	open_base_selection: (base, previous_unit_id) => {
+	open_base_selection: (base, previous_unit_id, continuation) => {
 		this.refresh_tile(base.get_tile());
 		const key = #to_string(base.id);
 		if (#is_defined(this.bases[key])) { this.set_active_item(this.bases[key].item); }
 		this.selected_type = 'Base'; this.selected_id = base.id;
 		const data = {}; data.base = base;
 		this.p.modules.popup.set('base_screen', data);
-		this.p.modules.popup.show('base_screen', this.base_close_callback(previous_unit_id, base.id));
+		const restore = this.base_close_callback(previous_unit_id, base.id);
+		if (#is_defined(continuation)) {
+			this.p.modules.popup.show('base_screen', (result) => { restore(result); continuation.closed(); });
+		} else { this.p.modules.popup.show('base_screen', restore); }
 	},
 
 	finish_base_management: (e) => {
 		const pending = this.management_pending;
 		if (pending == null || e.name != 'reconcile_base_citizens' || e.caller != this.p.game.get_player().id || e.data.base_id != pending.base_id || e.data.turn_id != pending.turn_id || e.data.request_token != pending.request_token) { return; }
 		this.management_pending = null;
-		if (!e.success || pending.epoch != this.selection_epoch || pending.turn_id != this.p.game.get_turn()) { return; }
+		const rejected = () => { if (#is_defined(pending.continuation)) { pending.continuation.rejected(); } };
+		if (!e.success || pending.epoch != this.selection_epoch || pending.turn_id != this.p.game.get_turn()) { rejected(); return; }
 		// A new modal owns input while this command was in flight. Existing
 		// base management may remain shown during deliberate base navigation.
 		const popup = this.p.modules.popup;
-		if (popup.is_shown() && (!#is_defined(popup.popup) || popup.popup == null || popup.popup.id != 'base_screen')) { return; }
+		if (popup.is_shown() && (!#is_defined(popup.popup) || popup.popup == null || popup.popup.id != 'base_screen')) { rejected(); return; }
 		const base = this.resolve_object('Base', pending.base_id);
-		if (base == null || base != pending.base || base.get_owner().id != this.p.game.get_player().id) { return; }
-		this.open_base_selection(base, pending.previous_unit_id);
+		if (base == null || base != pending.base || base.get_owner().id != this.p.game.get_player().id ||
+			(#is_defined(pending.continuation) && !pending.continuation.can_open(base))) { rejected(); return; }
+		if (#is_defined(pending.continuation)) { this.open_base_selection(base, pending.previous_unit_id, pending.continuation); }
+		else { this.open_base_selection(base, pending.previous_unit_id); }
 	},
 
 	set_active_item: (item) => {
