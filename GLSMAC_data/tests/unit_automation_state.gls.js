@@ -61,3 +61,14 @@ behavior.scenario('native automation rejects extra fields and incomplete input',
  reject(f, () => { unit.set_automation(value); }); reject(f, () => { unit.set_automation({version:1}); });
  reject(f, () => { unit.get_automation(1); });
 });
+behavior.scenario('terraforming home is a durable owned-base identity independent of plan cancellation', () => {
+ const f = test.founding_fixture(); const unit = f.game.um.get_unit(f.unit_id); const base = f.base;
+ test.assert(unit.get_terraform_home() == 0);
+ f.with_write(() => { unit.set_terraform_home(base.id + 0); unit.set_automation(plan(unit,'auto_home_base')); });
+ test.assert(unit.get_terraform_home() == base.id && f.unit_order_codec_probe(unit.id).roundtrip);
+ const cleared = unit.get_automation(); cleared.command = ''; cleared.epoch = 2; cleared.owner = 0; cleared.issued_turn = 0;
+ cleared.last_turn = 0; cleared.target_x = 0; cleared.target_y = 0; cleared.origin_x = 0; cleared.origin_y = 0; cleared.cursor = 0;
+ f.with_write(() => { unit.set_automation(cleared); });
+ test.assert(unit.get_terraform_home() == base.id && f.unit_order_codec_probe(unit.id).roundtrip);
+ reject(f, () => { unit.set_terraform_home(9999); }); reject(f, () => { unit.set_terraform_home((0 - 1)); });
+});

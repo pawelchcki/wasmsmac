@@ -99,6 +99,7 @@ private:
 	order_t m_order = order_t::NO_ORDERS;
 	work_state_t m_work;
 	automation_state_t m_automation;
+	int64_t m_terraform_home = 0;
 	static bool ValidAutomation( const automation_state_t& plan, const map::Map* map, const size_t owner );
 	static bool ValidWork( const work_state_t& work, const map::Map* map );
 	// Native callables can outlive their wrapper and even their manager.

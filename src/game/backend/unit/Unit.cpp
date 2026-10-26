@@ -11,6 +11,8 @@
 #include "gse/value/Ptr.h"
 #include "gse/callable/Native.h"
 #include "game/backend/Game.h"
+#include "game/backend/base/Base.h"
+#include "game/backend/base/BaseManager.h"
 #include "game/backend/State.h"
 #include "game/backend/slot/Slot.h"
 #include "game/backend/slot/Slots.h"
@@ -162,6 +164,7 @@ const types::Buffer Unit::Serialize( const Unit* unit ) {
 		buf.WriteInt( plan.epoch ); buf.WriteInt( plan.owner ); buf.WriteInt( plan.issued_turn ); buf.WriteInt( plan.last_turn );
 		buf.WriteInt( plan.target_x ); buf.WriteInt( plan.target_y ); buf.WriteInt( plan.origin_x ); buf.WriteInt( plan.origin_y ); buf.WriteInt( plan.cursor );
 	}
+	if ( unit->m_terraform_home != 0 ) { buf.WriteString( "unit-terraform-home-v1" ); buf.WriteInt( unit->m_terraform_home ); }
 	return buf;
 }
 
@@ -184,11 +187,12 @@ Unit* Unit::Deserialize( GSE_CALLABLE, types::Buffer& buf, UnitManager* um ) {
 	auto order = order_t::NO_ORDERS;
 	work_state_t work;
 	automation_state_t plan;
+	int64_t terraform_home = 0;
 	if ( buf.lenr != buf.lenw ) {
 		const auto encoded = buf.ReadInt();
 		if ( encoded < static_cast< int64_t >( order_t::NO_ORDERS ) || encoded > static_cast< int64_t >( order_t::AUTOMATE ) ) { THROW( "Invalid serialized unit order" ); }
 		order = static_cast< order_t >( encoded );
-		bool seen_work = false, seen_plan = false;
+		bool seen_work = false, seen_plan = false, seen_home = false;
 		while ( buf.lenr != buf.lenw ) {
 			const auto tag = buf.ReadString();
 			if ( tag == "unit-work-v1" && !seen_work ) {
@@ -203,6 +207,9 @@ Unit* Unit::Deserialize( GSE_CALLABLE, types::Buffer& buf, UnitManager* um ) {
 				plan.issued_turn = buf.ReadInt(); plan.last_turn = buf.ReadInt(); plan.target_x = buf.ReadInt(); plan.target_y = buf.ReadInt();
 				plan.origin_x = buf.ReadInt(); plan.origin_y = buf.ReadInt(); plan.cursor = buf.ReadInt();
 				if ( plan.epoch == 0 || !ValidAutomation( plan, um->GetMap(), slot->GetIndex() ) ) { THROW( "Invalid serialized automation plan" ); }
+			} else if ( tag == "unit-terraform-home-v1" && !seen_home ) {
+				seen_home = true; terraform_home = buf.ReadInt();
+				if ( terraform_home <= 0 ) { THROW( "Invalid serialized terraforming home" ); }
 			} else { THROW( "Unknown or repeated serialized unit extension" ); }
 		}
 	}
@@ -214,6 +221,7 @@ Unit* Unit::Deserialize( GSE_CALLABLE, types::Buffer& buf, UnitManager* um ) {
 	def.release();
 	unit->m_work = work;
 	unit->m_automation = plan;
+	unit->m_terraform_home = terraform_home;
 	unit->SetOrder( order );
 	return unit;
 }
@@ -325,6 +333,30 @@ WRAPIMPL_DYNAMIC_GETTERS( Unit )
 			return VALUE( gse::value::Undefined );
 		} )
 	},
+	{
+		"get_terraform_home", NATIVE_CALL( handle = m_order_handle ) {
+			N_EXPECT_ARGS( 0 ); auto* unit = *handle;
+			if ( !unit ) { GSE_ERROR( gse::EC.INVALID_CALL, "Unit no longer exists" ); }
+			unit->CheckLive( GSE_CALL ); return VALUE( gse::value::Int,, unit->m_terraform_home );
+		} )
+	},
+	{
+		"set_terraform_home", NATIVE_CALL( handle = m_order_handle ) {
+			auto* unit = *handle;
+			if ( !unit ) { GSE_ERROR( gse::EC.INVALID_CALL, "Unit no longer exists" ); }
+			unit->CheckLive( GSE_CALL ); unit->m_um->m_game->CheckRW( GSE_CALL ); unit->CheckCustomMutation( GSE_CALL );
+			N_EXPECT_ARGS( 1 ); N_GETVALUE( id, 0, Int );
+			if ( id < 0 ) { GSE_ERROR( gse::EC.INVALID_CALL, "Invalid terraforming home identity" ); }
+			if ( id > 0 ) {
+				auto* bm = unit->m_um->m_game->GetBM();
+				auto* base = bm ? bm->GetBase( id ) : nullptr;
+				if ( !base || base->m_owner != unit->m_owner ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terraforming home must be a live owned base" ); }
+			}
+			unit->m_terraform_home = id;
+			return VALUE( gse::value::Undefined );
+		} )
+	},
+
 	{
 		"get_automation", NATIVE_CALL( handle = m_order_handle ) {
 			N_EXPECT_ARGS( 0 ); auto* unit = *handle;
