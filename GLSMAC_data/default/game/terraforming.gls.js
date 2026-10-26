@@ -1,6 +1,7 @@
 // Authoritative worker policy. Installed TERRAIN declarations supply land/sea
 // work rates, prerequisites and labels.
 const source_rules = #include('./terraforming_rules');
+const effects = #include('./terraforming_effects');
 const describe = (game, unit, action) => { return source_rules.for_tile(game.get('terraforming_rules'), unit.get_tile(), action); };
 const empty = () => { return {action: '', work_units: 0, required_work: 0, last_turn: 0,
 	previous_work_units: 0, previous_movement: 0.0, previous_moved: false, tile_x: 0, tile_y: 0, active: false}; };
@@ -29,30 +30,22 @@ const prerequisite_error = (game, owner, prerequisite) => {
 	}
 };
 const eligible = (game, unit, action) => {
-	if (action != 'farm' && action != 'mine' && action != 'forest' && action != 'road' && action != 'level') { return 'Unknown terraforming action'; }
+	const rule = describe(game,unit,action);
+	if (rule == null) { return 'Terraforming source declaration is missing'; }
+	if (!rule.enabled) { return 'Terraforming action is disabled'; }
+	const reason = prerequisite_error(game,unit.owner,rule.prerequisite); if (#is_defined(reason)) { return reason; }
 	const def = unit.get_def(); const tile = unit.get_tile();
-	if (!def.can_terraform || !unit.is_land || unit.health != def.health_max) { return 'Requires a healthy ordinary Former'; }
-	if (!tile.is_land || tile.features.xenofungus || tile.get_base() != null) { return 'Work requires non-fungal non-base land'; }
-	if (action == 'level') {
-		if (tile.rockiness <= 1) { return 'Terrain is already level'; }
-	} else if (tile.moisture != 1 || tile.rockiness != 1) { return 'Work currently supports flat arid land'; }
-	if (describe(game,unit,action) == null) { return 'Terraforming source declaration is missing'; }
+	if (!def.can_terraform || (!unit.is_land && !unit.is_water) || unit.health != def.health_max) { return 'Requires a healthy surface Terraforming module'; }
 	if (tile.is_locked()) { return 'Terraforming tile is locked'; }
 	for (other of tile.get_units()) {
 		if (other.id != unit.id && other.get_terraforming().active) { return 'Multiple Former work is not supported yet'; }
 	}
-	const data = game.get_tm().get_terraforming(tile.x, tile.y);
-	if (action != 'level' && data[action]) { return 'Improvement already exists'; }
-	if (action != 'level' && (data.forest && action != 'road' || action == 'forest' && (data.mine || data.solar))) { return 'This improvement replacement is not supported yet'; }
-	const rules = game.get('terraforming_rules'); const rule = rules[action];
-	return prerequisite_error(game, unit.owner, rule.prerequisite);
+	return effects.validate(game,unit,action);
 };
-const needs_confirmation = (game, unit, action) => {
-	return action == 'forest' && game.get_tm().get_terraforming(unit.get_tile().x, unit.get_tile().y).farm;
-};
+const needs_confirmation = (game, unit, action) => { return #sizeof(effects.replacements(game,unit,action)) > 0; };
 const can_resume_exhausted = (game, unit, action) => {
 	const state = unit.get_terraforming(); const tile = unit.get_tile();
-	const rules = game.get('terraforming_rules'); const rule = rules[action];
+	const rule = describe(game,unit,action);
 	return unit.movement == 0.0 && unit.moved_this_turn && !state.active && state.action == action && state.work_units > 0 &&
 		state.tile_x == tile.x && state.tile_y == tile.y && state.required_work == rule.turns * 2 &&
 		state.previous_movement > 0.0 && state.previous_movement <= unit.get_def().movement_per_turn;
@@ -72,7 +65,7 @@ const validate_selection = (e) => {
 	}
 };
 const tick = (game, unit, action) => {
-	const tile = unit.get_tile(); const rules = game.get('terraforming_rules'); const rule = rules[action]; const required = rule.turns * 2;
+	const tile = unit.get_tile(); const rule = describe(game,unit,action); const required = rule.turns * 2;
 	const previous = unit.get_terraforming();
 	let completed = 0;
 	if (previous.tile_x == tile.x && previous.tile_y == tile.y) { completed = previous.work_units; }
@@ -85,15 +78,7 @@ const tick = (game, unit, action) => {
 	}
 	let terrain_receipt = 0;
 	if (completed + 2 >= required) {
-		if (action == 'level') {
-			// Accepted original rockiness_raw2→1→0 maps through the existing
-			// importer to native ROCKY3→ROLLING2→FLAT1 in genuine successive turns.
-			terrain_receipt = game.get_tm().apply_terrain([{x:tile.x + 0,y:tile.y + 0,rockiness:tile.rockiness - 1}],[unit.id + 0]);
-		} else {
-		const data = flags(game, tile); data[action] = true;
-		if (action == 'forest') { data.farm = false; }
-		game.get_tm().set_terraforming(tile.x, tile.y, data);
-		}
+		terrain_receipt = game.get_tm().apply_terrain(effects.plan(game,unit,action),[unit.id + 0]);
 		unit.set_terraforming(empty());
 	} else {
 		unit.set_terraforming({action: action, work_units: completed + 2, required_work: required, last_turn: game.get_turn(),

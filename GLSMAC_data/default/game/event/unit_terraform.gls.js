@@ -24,7 +24,6 @@ const undo = (game,unit,prior,restore_order) => {
 	validate_undo(game,unit,prior);
 	const tm = game.get_tm();
 	if (prior.terrain_receipt > 0) { tm.rollback_terrain(prior.terrain_receipt); }
-	else { tm.set_terraforming(prior.tile_x,prior.tile_y,prior.terrain); }
 	unit.set_terraforming(prior.original_work);
 	if (restore_order && prior.original_order != 'TERRAFORM') { unit.set_order(prior.original_order); }
 	unit.movement = prior.movement; unit.moved_this_turn = prior.moved;
