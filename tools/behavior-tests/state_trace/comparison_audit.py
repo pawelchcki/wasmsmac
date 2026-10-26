@@ -35,18 +35,22 @@ def state_groups(expected, actual):
             else:
                 status, changes = 'shared', iter_differences(left, right, path=location)
             yield domain, identity, owners, status, changes
+    roster = {row['id'] for row in expected['players'] + actual['players']}
+
+    def domain_owners(value):
+        return tuple(sorted(value)) if isinstance(value, dict) and value and set(value) <= roster else ()
+
     for domain in sorted((set(expected) | set(actual)) - {'turn', 'map', *ENTITY_DOMAINS}):
         location = f'$.state.{domain}'
         if domain not in expected:
-            yield domain, None, (), 'extra', iter([{
+            yield domain, None, domain_owners(actual[domain]), 'extra', iter([{
                 'path': location, 'expected_missing': True, 'actual': actual[domain]}])
         elif domain not in actual:
-            yield domain, None, (), 'missing', iter([{
+            yield domain, None, domain_owners(expected[domain]), 'missing', iter([{
                 'path': location, 'expected': expected[domain], 'actual_missing': True}])
         else:
             # Extensible domains retain their ordinary structural semantics.
             # Only an explicitly player-keyed domain can be attributed to owners.
-            roster = {row['id'] for row in expected['players'] + actual['players']}
             left, right = expected[domain], actual[domain]
             if isinstance(left, dict) and isinstance(right, dict) and set(left) | set(right) and (set(left) | set(right)) <= roster:
                 for identity in sorted(set(left) | set(right)):
@@ -100,7 +104,8 @@ def audit_outputs(expected, actual, case_input, detail_limit=0):
         point['compared'] = True
         point['after_action'] = left['after_action']
         roster = sorted({row['id'] for entry in (left, right) for row in entry['state']['players']})
-        point['players'] = {identity: dict(difference_count=0, domains={}) for identity in roster}
+        point['players'] = {identity: dict(difference_count=0,
+            domains={domain: _counter() for domain in ENTITY_DOMAINS}) for identity in roster}
         for domain, identity, owners, status, changes in state_groups(left['state'], right['state']):
             counter = point['domains'].setdefault(domain, _counter())
             counters = [counter]

@@ -159,6 +159,27 @@ class ComparisonAccountingTests(unittest.TestCase):
             self.assertEqual(set(point['players']), {'human', 'ai'})
             self.assertEqual(set(point['domains']), {'turn', 'map', 'players', 'units', 'bases'})
             self.assertEqual(point['domains']['units']['shared_entities'], 0)
+            for player in point['players'].values():
+                self.assertEqual(set(player['domains']), {'units', 'bases', 'players'})
+                self.assertEqual(player['domains']['units']['shared_entities'], 0)
+                self.assertEqual(player['domains']['bases']['shared_entities'], 0)
+
+    def test_entire_missing_or_extra_player_domain_attributes_its_structural_difference(self):
+        for side in ('reference', 'candidate'):
+            expected = good_outputs()
+            actual = deepcopy(expected)
+            target = expected if side == 'reference' else actual
+            target['trace-a']['checkpoints'][1]['state']['research'] = {
+                'human': {'science': 1}, 'ai': {'science': 2}}
+            details = []
+            result = compare_suite(suite(), record(expected), candidate(actual), audit_details=details)['results'][0]
+            self.assertEqual(result['comparison_audit']['difference_count'], 1)
+            point = result['comparison_audit']['checkpoints'][1]
+            self.assertEqual(point['players']['human']['difference_count'], 1)
+            self.assertEqual(point['players']['ai']['difference_count'], 1)
+            self.assertEqual(len(details[0]['details']), 1)
+            self.assertEqual(details[0]['details'][0]['path'], '$.state.research')
+            self.assertEqual(details[0]['details'][0]['players'], ['ai', 'human'])
 
     def test_detail_truncation_does_not_truncate_counts_or_mutate_evidence(self):
         expected = good_outputs()['trace-a']
