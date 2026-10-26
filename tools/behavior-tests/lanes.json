@@ -3,6 +3,7 @@
   "kinds": {
     "regression": {
       "hot": [
+        "trace-float-transport",
         "base-operations",
         "base-operations-lifecycle",
         "duplicate-faction-identity",

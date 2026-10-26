@@ -10,6 +10,13 @@
 #include "gse/value/String.h"
 
 #include "types/Color.h"
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <iomanip>
+#include <limits>
+#include <locale>
+#include <sstream>
 
 namespace gse {
 namespace builtins {
@@ -37,6 +44,27 @@ void Conversions::AddToContext( gc::Space* const gc_space, context::Context* ctx
 		N_EXPECT_ARGS( 1 );
 		N_GET_ANY( v, 0 );
 		return VALUE( value::String,, v->ToString() );
+	} ), ep );
+
+	// Trace transport preserves the actual binary32 value after promotion to
+	// the binary64 number used by strict JSON readers. Nine digits only round
+	// trip back to float; they do not preserve the promoted JSON/Python value.
+	ctx->CreateBuiltin( "float_text_exact", NATIVE_CALL() {
+		N_EXPECT_ARGS( 1 ); N_GETVALUE( number, 0, Float );
+		if ( !std::isfinite( number ) ) { GSE_ERROR( EC.CONVERSION_ERROR, "Exact float transport requires a finite Float" ); }
+		std::ostringstream stream;
+		stream.imbue( std::locale::classic() );
+		stream << std::setprecision( std::numeric_limits< double >::max_digits10 ) << static_cast< double >( number );
+		auto text = stream.str();
+		if ( text.find_first_of( ".eE" ) == std::string::npos ) { text += ".0"; }
+		return VALUE( value::String,, text );
+	} ), ep );
+	ctx->CreateBuiltin( "float_bits", NATIVE_CALL() {
+		N_EXPECT_ARGS( 1 ); N_GETVALUE( number, 0, Float );
+		static_assert( sizeof( float ) == sizeof( uint32_t ) && std::numeric_limits< float >::is_iec559 );
+		uint32_t bits;
+		std::memcpy( &bits, &number, sizeof( bits ) );
+		return VALUE( value::Int,, static_cast< int64_t >( bits ) );
 	} ), ep );
 
 	ctx->CreateBuiltin( "to_dump", NATIVE_CALL() {
