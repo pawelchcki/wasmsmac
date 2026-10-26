@@ -65,6 +65,7 @@ private:
 			bool previous_water, expected_water, imported, imported_water;
 			elevation_t imported_elevation;
 			std::array< elevation_t, 4 > imported_corners;
+			bool canonical, canonical_water; elevation_t canonical_elevation;
 		};
 		std::weak_ptr< const uint8_t > world;
 		std::vector< Entry > entries;

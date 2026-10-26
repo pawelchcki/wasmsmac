@@ -64,6 +64,9 @@ Tile* Tile::GetNeighbour( const direction_t direction ) {
 }
 
 void Tile::Update() {
+	if ( m_has_canonical_elevation ) {
+		*elevation.center = m_canonical_elevation; is_water_tile = m_canonical_water; return;
+	}
 	if ( m_has_imported_elevation ) {
 		for ( size_t i = 0 ; i < m_imported_corners.size() ; ++i ) {
 			if ( *elevation.corners[ i ] != m_imported_corners[ i ] ) {
@@ -93,6 +96,7 @@ void Tile::Update() {
 }
 
 void Tile::SetImportedElevation( const elevation_t value, const bool water ) {
+	m_has_canonical_elevation = false;
 	m_has_imported_elevation = true;
 	m_imported_elevation = value;
 	m_imported_water = water;
@@ -102,7 +106,15 @@ void Tile::SetImportedElevation( const elevation_t value, const bool water ) {
 	Update();
 }
 
+void Tile::SetCanonicalElevation( const elevation_t value, const bool water, const bool edited ) {
+	if ( value < ELEVATION_MIN || value > ELEVATION_MAX ) { THROW( "Invalid canonical terrain elevation" ); }
+	m_has_canonical_elevation = true; m_canonical_elevation = value; m_canonical_water = water;
+	if ( edited ) { m_has_imported_elevation = false; }
+	Update();
+}
+
 void Tile::Clear() {
+	m_has_canonical_elevation = false;
 	m_has_imported_elevation = false;
 	for ( auto& c : elevation.corners ) {
 		*c = 0;
@@ -137,22 +149,25 @@ const types::Buffer Tile::Serialize() const {
 
 	buf.WriteInt( features );
 	buf.WriteInt( terraforming );
-	if ( m_has_imported_elevation ) {
-		buf.WriteBool( true );
-		buf.WriteInt( m_imported_elevation );
-		buf.WriteBool( m_imported_water );
+	if ( m_has_imported_elevation || m_has_canonical_elevation ) {
+		buf.WriteBool( m_has_imported_elevation );
+		if ( m_has_imported_elevation ) { buf.WriteInt( m_imported_elevation ); buf.WriteBool( m_imported_water ); }
+	}
+	if ( m_has_canonical_elevation ) {
+		buf.WriteString( "canonical-height-v1" ); buf.WriteInt( m_canonical_elevation ); buf.WriteBool( m_canonical_water );
+		if ( m_has_imported_elevation ) { for ( const auto corner : m_imported_corners ) { buf.WriteInt( corner ); } }
 	}
 
 	return buf;
 }
 
 void Tile::Deserialize( types::Buffer buf ) {
-	m_has_imported_elevation = false;
+	m_has_imported_elevation = false; m_has_canonical_elevation = false;
 
 	coord.x = buf.ReadInt();
 	coord.y = buf.ReadInt();
 
-	*elevation.center = buf.ReadInt();
+	const auto encoded_center = buf.ReadInt(); *elevation.center = encoded_center;
 	*elevation.left = buf.ReadInt();
 	*elevation.top = buf.ReadInt();
 	*elevation.right = buf.ReadInt();
@@ -172,6 +187,15 @@ void Tile::Deserialize( types::Buffer buf ) {
 			THROW( "invalid imported tile elevation" );
 		}
 		SetImportedElevation( source_elevation, source_water );
+	}
+	if ( buf.lenr < buf.lenw ) {
+		if ( buf.ReadString() != "canonical-height-v1" ) { THROW( "Unknown canonical height extension" ); }
+		const auto center = buf.ReadInt(); const auto water = buf.ReadBool();
+		if ( center != encoded_center ) { THROW( "Canonical terrain center differs from serialized height" ); }
+		SetCanonicalElevation( center, water, false );
+		if ( m_has_imported_elevation ) {
+			for ( auto& corner : m_imported_corners ) { corner = buf.ReadInt(); if ( corner < ELEVATION_MIN || corner > ELEVATION_MAX ) { THROW( "Invalid imported corner provenance" ); } }
+		}
 	}
 	if ( buf.lenr != buf.lenw ) {
 		THROW( "unexpected trailing tile data" );

@@ -26,6 +26,7 @@
 #include "gse/value/Undefined.h"
 #include "gse/callable/Native.h"
 #include "game/backend/Game.h"
+#include "game/backend/TileTarget.h"
 #include "game/backend/State.h"
 #include "game/backend/Player.h"
 #include "game/backend/base/Base.h"
@@ -763,7 +764,9 @@ struct ProductionFixture : gc::Object {
 		backend::faction::Faction receiving;
 		receiving.Deserialize( types::Buffer( wire ) );
 		const bool roundtrip = receiving.Serialize().ToString() == wire;
-		const bool received = receiving.GetStartingTechnologies() == source->GetStartingTechnologies() && receiving.GetIdentity() == source->GetIdentity() && receiving.m_name == source->m_name &&
+		const bool received = receiving.GetEconomyBonuses().starting_energy == source->GetEconomyBonuses().starting_energy &&
+			receiving.GetEconomyBonuses().terraform_cost_halved == source->GetEconomyBonuses().terraform_cost_halved &&
+			receiving.GetStartingTechnologies() == source->GetStartingTechnologies() && receiving.GetIdentity() == source->GetIdentity() && receiving.m_name == source->m_name &&
 			receiving.m_growth == source->m_growth && receiving.m_industry == source->m_industry;
 		auto changed = receiving.GetIdentity(); changed[ 0 ] = "Changed receiver"; receiving.SetIdentity( changed );
 		const bool independent = source->Serialize().ToString() == wire;
@@ -796,14 +799,41 @@ struct ProductionFixture : gc::Object {
 			{ "independent", VALUE( value::Bool,, independent ) }, { "lifetime", VALUE( value::Bool,, rejected ) },
 		} );
 	}
+	Value* CanonicalTerrainCodecProbe( GSE_CALLABLE ) {
+		auto* original = game.GetMap();
+		const auto before = original->GetTilesPtr()->Serialize().ToString();
+		auto receiving = std::unique_ptr< backend::map::Map >( new backend::map::Map( &game, false ) );
+		types::Buffer wire( before );
+		if ( receiving->LoadFromBuffer( wire ) != backend::map::Map::EC_NONE ) { THROW( "Canonical terrain receiving map rejected a valid snapshot" ); }
+		const bool roundtrip = receiving->GetTilesPtr()->Serialize().ToString() == before;
+		for ( size_t y = 0; y < receiving->GetHeight(); ++y ) {
+			for ( size_t x = y % 2; x < receiving->GetWidth(); x += 2 ) { receiving->GetTile( x, y )->Update(); }
+		}
+		const bool stable = receiving->GetTilesPtr()->Serialize().ToString() == before;
+		types::Buffer malformed; malformed.WriteInt( original->GetWidth() ); malformed.WriteInt( original->GetHeight() );
+		for ( size_t y = 0; y < original->GetHeight(); ++y ) {
+			for ( size_t x = y % 2; x < original->GetWidth(); x += 2 ) {
+				const auto tile = original->GetTile( x, y )->Serialize().ToString();
+				malformed.WriteString( x == 2 && y == 2 ? tile.substr( 0, tile.size() - 1 ) : tile );
+			}
+		}
+		malformed.WriteBool( false );
+		const bool rejected = receiving->LoadFromBuffer( malformed ) == backend::map::Map::EC_MAPFILE_FORMAT_ERROR && receiving->GetTilesPtr()->Serialize().ToString() == before;
+		*receiving->GetTile( 2, 2 )->elevation.left += 17; receiving->GetTile( 2, 2 )->Update();
+		return VALUEEXT( value::Object, GSE_CALL, {
+			{ "roundtrip", VALUE( value::Bool,, roundtrip ) }, { "stable", VALUE( value::Bool,, stable ) },
+			{ "malformed_rejected", VALUE( value::Bool,, rejected ) },
+			{ "independent", VALUE( value::Bool,, original->GetTilesPtr()->Serialize().ToString() == before ) },
+		} );
+	}
 	Value* EnergyCodecProbe( GSE_CALLABLE ) {
 		const auto before = owner->Serialize().ToString();
 		auto copy = std::make_unique< backend::Player >( owner.get() );
 		auto receiving = std::make_unique< backend::Player >( types::Buffer( before ) );
 		const bool copied = copy->Serialize().ToString() == before && copy->GetEnergyCredits() == owner->GetEnergyCredits() &&
-			copy->GetEnergyIncomeTurn() == owner->GetEnergyIncomeTurn();
+			copy->GetEnergyIncomeTurn() == owner->GetEnergyIncomeTurn() && copy->IsEnergyInitialized() == owner->IsEnergyInitialized();
 		const bool roundtrip = receiving->Serialize().ToString() == before && receiving->GetEnergyCredits() == owner->GetEnergyCredits() &&
-			receiving->GetEnergyIncomeTurn() == owner->GetEnergyIncomeTurn();
+			receiving->GetEnergyIncomeTurn() == owner->GetEnergyIncomeTurn() && receiving->IsEnergyInitialized() == owner->IsEnergyInitialized();
 		auto* wrapper = static_cast< value::Object* >( copy->Wrap( GSE_CALL ) );
 		auto* read = static_cast< value::Callable* >( wrapper->Get( "get_energy_state" ) );
 		copy.reset(); bool lifetime = false;
@@ -1296,6 +1326,18 @@ struct ProductionFixture : gc::Object {
 		for ( const auto& name : names ) { bytes.WriteString( name ); }
 		return bytes.ToString();
 	}
+	bool DispatchTileTarget( GSE_CALLABLE, const int64_t x, const int64_t y, const std::string& purpose ) {
+		if ( !game.IsRunning() || !game.GetMap() ) { GSE_ERROR( EC.INVALID_CALL, "Target input requires a running native world" ); }
+		if ( x < 0 || y < 0 || uint64_t( x ) >= game.GetMap()->GetWidth() || uint64_t( y ) >= game.GetMap()->GetHeight() || x % 2 != y % 2 ) {
+			GSE_ERROR( EC.INVALID_CALL, "Target input requires a native staggered tile coordinate" );
+		}
+		backend::tile_query_purpose_t type;
+		if ( purpose == "object" ) { type = backend::TQP_OBJECT_SELECT; }
+		else if ( purpose == "unit" ) { type = backend::TQP_UNIT_SELECT; }
+		else if ( purpose == "tile" ) { type = backend::TQP_TILE_SELECT; }
+		else { GSE_ERROR( EC.INVALID_CALL, "Unknown declared target input purpose" ); }
+		return backend::ConsumeTileTarget( &game, game.GetMap()->GetTile( x, y ), type );
+	}
 	Value* AuditInspect( GSE_CALLABLE ) {
 		if ( !game.IsRunning() || !game.m_bm || !game.m_um ) { GSE_ERROR( EC.INVALID_CALL, "Audit requires a running native world" ); }
 		return InspectFounding( GSE_CALL );
@@ -1345,7 +1387,7 @@ struct ProductionFixture : gc::Object {
 			for ( auto* corner : tile->elevation.corners ) { *corner = 64; }
 			tile->Update();
 		}
-		else if ( kind == "flat_arid_world" ) {
+		else if ( kind == "flat_arid_world" || kind == "imported_flat_arid_world" ) {
 			for ( size_t y = 0; y < game.GetMap()->GetHeight(); ++y ) {
 				for ( size_t x = y % 2; x < game.GetMap()->GetWidth(); x += 2 ) {
 					auto* tile = game.GetMap()->GetTile( x, y );
@@ -1353,6 +1395,7 @@ struct ProductionFixture : gc::Object {
 					tile->rockiness = backend::map::tile::ROCKINESS_FLAT;
 					for ( auto* corner : tile->elevation.corners ) { *corner = 64; }
 					tile->features = 0; tile->terraforming = 0; tile->Update();
+					if ( kind == "imported_flat_arid_world" ) { tile->SetImportedElevation( 212, false ); }
 				}
 			}
 		}
@@ -1736,6 +1779,10 @@ Value* MakeNaturalStartupFixture( GSE_CALLABLE, size_t width, size_t height, con
 	object->Set( "audit_inspect", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->AuditInspect( GSE_CALL );
 	} ), GSE_CALL );
+	object->Set( "dispatch_tile_target", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 3 ); N_GETVALUE( x, 0, Int ); N_GETVALUE( y, 1, Int ); N_GETVALUE( purpose, 2, String );
+		return VALUE( value::Bool,, session->current->DispatchTileTarget( GSE_CALL, x, y, purpose ) );
+	} ), GSE_CALL );
 	object->Set( "reset_world", NATIVE_CALL( session, object ) {
 		N_EXPECT_ARGS( 1 ); N_GETVALUE( declared_terrain, 0, String );
 		session->current->RestartNaturalStartup( GSE_CALL, declared_terrain );
@@ -1944,6 +1991,9 @@ Value* MakeProductionFixture( GSE_CALLABLE, bool founding, bool selection, const
 		try { session->current->RestoreRulesSettings( bytes ); }
 		catch ( const std::exception& error ) { GSE_ERROR( EC.INVALID_CALL, error.what() ); }
 		return VALUE( value::Undefined );
+	} ), GSE_CALL );
+	object->Set( "canonical_terrain_codec_probe", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return session->current->CanonicalTerrainCodecProbe( GSE_CALL );
 	} ), GSE_CALL );
 	object->Set( "energy_codec_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->EnergyCodecProbe( GSE_CALL );

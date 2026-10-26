@@ -81,6 +81,11 @@ gse::Value* TileManager::GetTerrainState( GSE_CALLABLE, const int64_t x, const i
 		{ "bonus", VALUE( gse::value::Int,, tile->bonus ) },
 		{ "features_raw", VALUE( gse::value::Int,, tile->features ) }, { "features", tile->GetFeatures( GSE_CALL ) },
 		{ "terraforming_raw", VALUE( gse::value::Int,, tile->terraforming ) }, { "terraforming", tile->GetTerraforming( GSE_CALL ) },
+		{ "canonical", VALUEEXT( gse::value::Object, GSE_CALL, {
+			{ "active", VALUE( gse::value::Bool,, tile->m_has_canonical_elevation ) },
+			{ "elevation", tile->m_has_canonical_elevation ? static_cast< gse::Value* >( VALUE( gse::value::Int,, tile->m_canonical_elevation ) ) : VALUE( gse::value::Null ) },
+			{ "is_water", tile->m_has_canonical_elevation ? static_cast< gse::Value* >( VALUE( gse::value::Bool,, tile->m_canonical_water ) ) : VALUE( gse::value::Null ) },
+		} ) },
 		{ "imported", VALUEEXT( gse::value::Object, GSE_CALL, {
 			{ "active", VALUE( gse::value::Bool,, tile->m_has_imported_elevation ) },
 			{ "source_elevation", source_elevation }, { "source_water", source_water }, { "source_corners", source_corners },

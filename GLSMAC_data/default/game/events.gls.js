@@ -7,6 +7,7 @@ return (game) => {
 		'define_moraleset',
 		'define_unit',
 		'initialize_technologies',
+		'initialize_energy',
 		'set_research_target',
 		'set_research_priority',
 		'credit_research_income',

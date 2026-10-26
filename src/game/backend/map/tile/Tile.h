@@ -102,6 +102,8 @@ public:
 	// Original SMAC maps store center heights and a separate land/sea class.
 	// Preserve them until an actual edit changes one of the shared corners.
 	void SetImportedElevation( const elevation_t value, const bool water );
+	// A gameplay center/class is independent of shared render vertices.
+	void SetCanonicalElevation( elevation_t value, bool water, bool edited = true );
 
 	// reset to empty state
 	void Clear();
@@ -127,6 +129,9 @@ public:
 
 private:
 	friend class TileManager;
+	bool m_has_canonical_elevation = false;
+	elevation_t m_canonical_elevation = 0;
+	bool m_canonical_water = false;
 	bool m_has_imported_elevation = false;
 	elevation_t m_imported_elevation = 0;
 	bool m_imported_water = false;

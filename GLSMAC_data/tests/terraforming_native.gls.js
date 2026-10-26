@@ -187,7 +187,7 @@ behavior.scenario('terrain class changes cannot strand unrelated units or change
 // income timing are not manufactured by this native ledger regression.
 behavior.scenario('native treasury conserves credits with authoritative affordable revision-fenced debit and undo', () => {
 	const f = fixture(); const player = f.owner; const before = f.snapshot();
-	test.assert(player.get_energy_state() == {credits:0,last_income_turn:0});
+	test.assert(player.get_energy_state() == {credits:0,last_income_turn:0,initialized:false});
 	let grant = 0; let debit = 0;
 	f.with_write(() => { grant = player.change_energy(25,0,f.game.get_turn()); debit = player.change_energy((0-4),25,f.game.get_turn()); });
 	test.assert(player.get_energy_state().credits == 21);
@@ -207,14 +207,14 @@ behavior.scenario('native treasury conserves credits with authoritative affordab
 behavior.scenario('income credits once per turn and equal-balance later transactions fence stale undo', () => {
 	const f = fixture(); const player = f.owner; let income = 0; let zero = 0;
 	f.with_write(() => { income = player.credit_energy_income(9,f.game.get_turn()); zero = player.change_energy(0,9,f.game.get_turn()); });
-	test.assert(player.get_energy_state() == {credits:9,last_income_turn:f.game.get_turn()});
+	test.assert(player.get_energy_state() == {credits:9,last_income_turn:f.game.get_turn(),initialized:false});
 	const before = f.snapshot();
 	for (choice of [0,1]) {
 		let failed = false; try { f.with_write(() => { if (choice == 0) { player.credit_energy_income(9,f.game.get_turn()); } else { player.rollback_energy(income); } }); } catch { : (e) => { failed = true; } }
 		test.assert(failed && f.snapshot() == before);
 	}
 	f.with_write(() => { player.rollback_energy(zero); player.rollback_energy(income); });
-	test.assert(player.get_energy_state() == {credits:0,last_income_turn:0});
+	test.assert(player.get_energy_state() == {credits:0,last_income_turn:0,initialized:false});
 });
 
 behavior.scenario('completed real seven-player turn collects finite native economy once without granting opening funds', () => {
@@ -231,7 +231,7 @@ behavior.scenario('completed real seven-player turn collects finite native econo
 	f.game.on('event_result', (e) => { if (!e.success) { failed = true; } });
 	f.initialize_single_player('GAIANS','Citizen'); f.start_world();
 	test.assert(!failed && #sizeof(f.game.get_players()) == 7 && #sizeof(f.game.get_bm().get_bases()) == 7);
-	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:0,last_income_turn:0}); }
+	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:0,last_income_turn:0,initialized:true}); }
 	for (base of f.game.get_bm().get_bases()) { test.assert(base.get_intake().ENERGY == 14 && base.get_consumption().ENERGY == 0); }
 	const before = f.audit_snapshot(); const queues = f.audit_inspect();
 	let rejected = false;
@@ -240,9 +240,9 @@ behavior.scenario('completed real seven-player turn collects finite native econo
 	test.assert(rejected && f.audit_snapshot() == before && f.audit_inspect() == queues, 'Pending turn and pure terrain preflight cannot collect or mutate the native graph');
 	f.game.event('complete_turn', {}); f.process_events();
 	test.assert(!failed && f.game.get_turn() == 2);
-	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:7,last_income_turn:1}); }
+	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:7,last_income_turn:1,initialized:true}); }
 	f.process_events();
-	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:7,last_income_turn:1}, 'Draining the same completed phase cannot credit twice'); }
+	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:7,last_income_turn:1,initialized:true}, 'Draining the same completed phase cannot credit twice'); }
 });
 
 behavior.scenario('explicit native worker survives its own class change with retreat validation and reversible terrain', () => {
@@ -279,4 +279,55 @@ behavior.scenario('named terrain edits preserve unknown raw source flags outside
 	test.assert(changed.features_raw == 32773 && changed.terraforming_raw > 32768 && changed.terraforming.sensor && changed.terraforming.road);
 	f.with_write(() => { tm.rollback_terrain(token); });
 	test.assert(f.terrain_snapshot() == before);
+});
+
+behavior.scenario('compound treasury preflight simulates every LIFO prestate before any credit is restored', () => {
+	const f = fixture(); const player = f.owner; const turn = f.game.get_turn(); const initial = player.get_energy_state();
+	let a = 0; let b = 0; let c = 0; let d = 0;
+	f.with_write(() => {
+		a = player.change_energy(5,0,turn); b = player.change_energy(7,5,turn);
+		c = player.change_energy((0-2),12,turn); d = player.change_energy((0-3),10,turn);
+	});
+	test.assert(player.get_energy_state().credits == 7);
+	const before = f.snapshot(); const paid = player.get_energy_state();
+	for (tokens of [[c,d],[d,c,a],[d,d],[d,'invalid'],[]]) {
+		let failed = false;
+		try { f.with_write(() => { player.rollback_energy_sequence(tokens); }); } catch { : (e) => { failed = true; } }
+		test.assert(failed && player.get_energy_state() == paid && f.snapshot() == before, 'A bad later token must not undo an earlier valid debit');
+	}
+	player.validate_energy_rollback_sequence([d,c,b,a]);
+	test.assert(player.get_energy_state() == paid && f.snapshot() == before, 'Whole-chain preflight is pure');
+	let zero = 0; f.with_write(() => { zero = player.change_energy(0,7,turn); });
+	let stale = false;
+	try { player.validate_energy_rollback_sequence([d,c,b,a]); } catch { : (e) => { stale = true; } }
+	test.assert(stale && player.get_energy_state() == paid, 'Equal-balance ABA still fences the older compound plan');
+	f.with_write(() => { player.rollback_energy_sequence([zero,d,c,b,a]); });
+	test.assert(player.get_energy_state() == initial && f.snapshot() == before, 'Legitimate credits and debits unwind in one atomic native operation');
+	let reused = false;
+	try { player.validate_energy_rollback_sequence([d,c,b,a]); } catch { : (e) => { reused = true; } }
+	test.assert(reused && player.get_energy_state() == initial);
+});
+
+behavior.scenario('canonical center edits preserve neighboring gameplay heights through later updates codecs and undo', () => {
+	const f = fixture(); f.configure('imported_flat_arid_world'); const tm = f.game.get_tm();
+	const before = f.terrain_snapshot(); const target = tm.get_terrain_state(2,2); const west = tm.get_terrain_state(0,2);
+	let token = 0;
+	f.with_write(() => { token = tm.apply_terrain([{x:2,y:2,canonical:{elevation:1362,is_water:false}}],[]); });
+	const changed = tm.get_terrain_state(2,2); const neighbor = tm.get_terrain_state(0,2);
+	test.assert(changed.canonical == {active:true,elevation:1362,is_water:false} && changed.elevation.center == 1362);
+	test.assert(!changed.imported.active && neighbor.elevation.center == west.elevation.center && neighbor.is_water == west.is_water);
+	test.assert(neighbor.elevation.right != west.elevation.right, 'Shared render geometry refreshes without a pseudo-neighbor gameplay height change');
+	const codec = f.canonical_terrain_codec_probe();
+	test.assert(codec.roundtrip && codec.stable && codec.malformed_rejected && codec.independent);
+	f.with_write(() => { tm.rollback_terrain(token); });
+	test.assert(f.terrain_snapshot() == before && tm.get_terrain_state(2,2) == target);
+});
+
+behavior.scenario('canonical terrain batches retain unrelated fields and reject mixed coordinate models atomically', () => {
+	const f = fixture(); const tm = f.game.get_tm();
+	reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,canonical:{elevation:700,is_water:false}},
+		{x:0,y:2,elevation:{left:1,top:1,right:1,bottom:1}}],[]); }); });
+	for (bad of [{elevation:99999,is_water:false},{elevation:500,is_water:1},{elevation:500,is_water:false,extra:true}]) {
+		reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,canonical:bad}],[]); }); });
+	}
 });

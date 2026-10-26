@@ -76,6 +76,7 @@ Base::ProductionResult Base::CompleteUnitProduction( GSE_CALLABLE, const Product
 		}
 		m_production = next;
 		created = std::make_unique< unit::Unit >( GSE_CALL, um, record->unit_id, def, m_owner, destination, def->m_movement_per_turn, 1, 1.0f, false );
+		if ( def->CanTerraform() ) { created->SetTerraformHomeFromProduction( this ); }
 		record->identity = static_cast< gse::value::Object* >( created->Wrap( GSE_CALL ) );
 		// Lifecycle listeners may observe the completed state and consume random
 		// draws. Native field/custom setters and event queueing are guarded;

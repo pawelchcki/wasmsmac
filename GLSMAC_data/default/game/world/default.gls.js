@@ -80,6 +80,15 @@ return (game) => {
 		const tile = tiles_with_bases[player_index];
 		player_index++;
 
+		const energy_rules = game.get('energy_rules');
+		if (!#is_defined(energy_rules)) { throw Error('Installed initial energy rules are required for startup'); }
+		const initial_credits = energy_rules.starting_credits + faction.economy_bonuses.starting_energy;
+		// Explicit current-version new-world eligibility is distinct from an
+		// unfunded legacy/received player. Never turn a load or retry into a grant.
+		if (!#is_defined(player.validate_initial_energy(initial_credits))) {
+			game.event('initialize_energy', {player_id:player.id + 0,credits:initial_credits});
+		}
+
 		// initial production choices (TODO: technologies)
 		game.event('add_production_choice', {
 			player: player,

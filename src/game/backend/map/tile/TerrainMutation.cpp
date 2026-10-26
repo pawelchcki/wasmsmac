@@ -21,6 +21,7 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 	std::vector< Patch > prepared;
 	std::set< std::pair< size_t, size_t > > targets, region;
 	std::map< elevation_t*, elevation_t > vertices;
+	std::map< Tile*, std::pair< elevation_t, bool > > canonical;
 	const auto integer = [ & ]( const gse::value::object_properties_t& object, const char* key, const int64_t minimum, const int64_t maximum ) {
 		const auto it = object.find( key );
 		if ( it == object.end() || it->second->Deref()->type != gse::VT_INT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch needs integer " + std::string( key ) ); }
@@ -34,7 +35,7 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 		const auto& object = static_cast< const gse::value::Object* >( value )->value;
 		for ( const auto& entry : object ) {
 			if ( entry.first != "x" && entry.first != "y" && entry.first != "moisture" && entry.first != "rockiness" &&
-				entry.first != "features" && entry.first != "terraforming" && entry.first != "elevation" ) {
+				entry.first != "features" && entry.first != "terraforming" && entry.first != "elevation" && entry.first != "canonical" ) {
 				GSE_ERROR( gse::EC.INVALID_CALL, "Unknown terrain patch field: " + entry.first );
 			}
 		}
@@ -76,6 +77,14 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 				{ "borehole", TERRAFORMING_BOREHOLE }, { "sensor", TERRAFORMING_SENSOR }, { "bunker", TERRAFORMING_BUNKER }, { "airbase", TERRAFORMING_AIRBASE },
 			} );
 		}
+		if ( object.count( "canonical" ) ) {
+			auto* value = object.at( "canonical" )->Deref();
+			if ( value->type != gse::VT_OBJECT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Canonical terrain requires elevation and is_water" ); }
+			const auto& fields = static_cast< const gse::value::Object* >( value )->value;
+			const auto water = fields.find( "is_water" );
+			if ( fields.size() != 2 || water == fields.end() || water->second->Deref()->type != gse::VT_BOOL ) { GSE_ERROR( gse::EC.INVALID_CALL, "Canonical terrain requires a Boolean class" ); }
+			canonical.emplace( tile, std::make_pair( integer( fields, "elevation", ELEVATION_MIN, ELEVATION_MAX ), static_cast< const gse::value::Bool* >( water->second->Deref() )->value ) );
+		}
 		if ( object.count( "elevation" ) ) {
 			auto* value = object.at( "elevation" )->Deref();
 			if ( value->type != gse::VT_OBJECT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain elevation requires four corner integers" ); }
@@ -91,6 +100,23 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 			}
 		}
 		prepared.push_back( patch );
+	}
+	if ( !canonical.empty() && !vertices.empty() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Canonical center edits and direct corner edits need separate transactions" ); }
+	// Reuse the importer's geometry policy: each shared render vertex is the
+	// mean of all incident gameplay centers. It never becomes a neighbor's new
+	// gameplay center. A complete canonical batch participates in every mean.
+	for ( const auto& center : canonical ) {
+		for ( auto* vertex : center.first->elevation.corners ) {
+			std::set< Tile* > incident { center.first };
+			for ( auto* neighbor : center.first->neighbours ) {
+				for ( auto* corner : neighbor->elevation.corners ) { if ( corner == vertex ) { incident.emplace( neighbor ); break; } }
+			}
+			elevation_t sum = 0;
+			for ( auto* tile : incident ) {
+				const auto changed = canonical.find( tile ); sum += changed == canonical.end() ? *tile->elevation.center : changed->second.first;
+			}
+			vertices[vertex] = sum / int64_t( incident.size() );
+		}
 	}
 	TerrainRecord record; record.world = map->m_terrain_identity;
 	for ( auto* value : workers ) {
@@ -115,16 +141,19 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 	for ( const auto& position : region ) {
 		auto* tile = map->GetTile( position.second, position.first );
 		if ( tile->IsLocked() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Affected terrain tile is locked" ); }
-		std::array< elevation_t, 4 > corners; bool retains_import = tile->m_has_imported_elevation;
+		std::array< elevation_t, 4 > corners; bool retains_import = tile->m_has_imported_elevation; bool geometry_changed = false;
 		elevation_t sum = 0; size_t water = 0;
 		for ( size_t i = 0; i < corners.size(); ++i ) {
 			const auto found = vertices.find( tile->elevation.corners[i] );
 			corners[i] = found == vertices.end() ? *tile->elevation.corners[i] : found->second;
 			retains_import = retains_import && corners[i] == tile->m_imported_corners[i];
+			geometry_changed = geometry_changed || corners[i] != *tile->elevation.corners[i];
 			sum += corners[i]; if ( corners[i] < ELEVATION_LEVEL_COAST ) { ++water; }
 		}
 		if ( sum / 4 < ELEVATION_LEVEL_COAST ) { ++water; }
-		const bool next_water = retains_import ? tile->m_imported_water : water > 2;
+		const auto primary = canonical.find( tile );
+		const bool next_water = !canonical.empty() ? ( primary == canonical.end() ? tile->is_water_tile : primary->second.second ) :
+			( tile->m_has_canonical_elevation && !geometry_changed ? tile->m_canonical_water : ( retains_import ? tile->m_imported_water : water > 2 ) );
 		if ( next_water != tile->is_water_tile ) {
 			if ( tile->base ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain class change would alter a city's ground" ); }
 			for ( const auto& entry : tile->units ) {
@@ -136,13 +165,30 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 		}
 		record.entries.push_back( { tile, "", { *tile->elevation.center, *tile->elevation.left, *tile->elevation.top, *tile->elevation.right, *tile->elevation.bottom },
 			tile->moisture, tile->rockiness, tile->features, tile->terraforming, tile->is_water_tile, next_water,
-			tile->m_has_imported_elevation, tile->m_imported_water, tile->m_imported_elevation, tile->m_imported_corners } );
+			tile->m_has_imported_elevation, tile->m_imported_water, tile->m_imported_elevation, tile->m_imported_corners,
+			tile->m_has_canonical_elevation, tile->m_canonical_water, tile->m_canonical_elevation } );
 	}
 	if ( !apply ) { return 0; }
 	const auto token = m_next_terrain_receipt + 1;
 	auto dirty_before = map->m_dirty_tiles;
 	auto inserted = m_terrain_records.emplace( token, std::move( record ) ).first;
 	try {
+		const auto changed_geometry = [ & ]( const Tile* tile ) {
+			for ( auto* corner : tile->elevation.corners ) { const auto found = vertices.find( corner ); if ( found != vertices.end() && found->second != *corner ) { return true; } }
+			return false;
+		};
+		if ( !canonical.empty() ) {
+			for ( const auto& entry : inserted->second.entries ) {
+				const auto changed = canonical.find( entry.tile );
+				if ( changed == canonical.end() ) {
+					if ( changed_geometry( entry.tile ) ) { entry.tile->SetCanonicalElevation( entry.elevation[0], entry.previous_water, false ); }
+				} else { entry.tile->SetCanonicalElevation( changed->second.first, changed->second.second ); }
+			}
+		} else if ( !vertices.empty() ) {
+			// The original explicit-corner API intentionally recalculates gameplay
+			// centers/classes; canonical operations above are a separate model.
+			for ( const auto& entry : inserted->second.entries ) { if ( changed_geometry( entry.tile ) ) { entry.tile->m_has_canonical_elevation = false; } }
+		}
 		for ( const auto& vertex : vertices ) { *vertex.first = vertex.second; }
 		for ( const auto& patch : prepared ) {
 			patch.tile->moisture = patch.moisture; patch.tile->rockiness = patch.rockiness;
@@ -169,6 +215,7 @@ void TileManager::RestoreTerrain( const TerrainRecord& record ) {
 		tile->moisture = entry.moisture; tile->rockiness = entry.rockiness; tile->features = entry.features; tile->terraforming = entry.terraforming;
 		tile->m_has_imported_elevation = entry.imported; tile->m_imported_elevation = entry.imported_elevation;
 		tile->m_imported_water = entry.imported_water; tile->m_imported_corners = entry.imported_corners;
+		tile->m_has_canonical_elevation = entry.canonical; tile->m_canonical_elevation = entry.canonical_elevation; tile->m_canonical_water = entry.canonical_water;
 		*tile->elevation.center = entry.elevation[0]; tile->is_water_tile = entry.previous_water;
 	}
 }
