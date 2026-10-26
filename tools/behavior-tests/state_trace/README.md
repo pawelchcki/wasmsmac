@@ -139,9 +139,10 @@ python3 tools/behavior-tests/state_trace/run.py compare \
 
 Actual candidate execution matches the human move and Hold scenarios while
 observing every player, unit, base and declared economy/research field. The
-end-turn scenario remains a strict mismatch: all six opponent projects retain
-Colony Pod instead of the observed Formers, and University technology ownership
-is `[6]` instead of `[3, 6]`. The total is **2 matched, 1 mismatched, 0 unsupported,
+bounded [offline opening production controller](computer-production-contract.md)
+now makes all six opponent Formers projects agree while retaining current-turn
+mineral income. The end-turn scenario remains a strict mismatch: University
+technology ownership is `[6]` instead of `[3, 6]`. The total is **2 matched, 1 mismatched, 0 unsupported,
 0 errors**. No expected post-action state is supplied to the candidate, and no
 AI algorithm is inferred from this single declared world. Natural placement,
 starting stocks, faction inventory and full AI remain separate gaps.
