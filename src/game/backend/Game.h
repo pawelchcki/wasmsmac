@@ -542,6 +542,7 @@ private:
 private:
 	friend struct gse::tests::mocks::ProductionFixture;
 	friend class map::tile::TileManager;
+	friend class Player;
 	friend class map::Map;
 	friend class resource::ResourceManager;
 	friend class unit::UnitManager;

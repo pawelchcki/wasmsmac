@@ -1296,6 +1296,10 @@ struct ProductionFixture : gc::Object {
 		for ( const auto& name : names ) { bytes.WriteString( name ); }
 		return bytes.ToString();
 	}
+	Value* AuditInspect( GSE_CALLABLE ) {
+		if ( !game.IsRunning() || !game.m_bm || !game.m_um ) { GSE_ERROR( EC.INVALID_CALL, "Audit requires a running native world" ); }
+		return InspectFounding( GSE_CALL );
+	}
 	std::string AuditSnapshot() {
 		if ( !game.IsRunning() || !game.m_bm || !game.m_um ) { THROW( "Audit requires a running native world" ); }
 		types::Buffer bytes;
@@ -1726,11 +1730,7 @@ Value* MakeNaturalStartupFixture( GSE_CALLABLE, size_t width, size_t height, con
 		N_EXPECT_ARGS( 0 ); return VALUE( value::String,, session->current->AuditSnapshot() );
 	} ), GSE_CALL );
 	object->Set( "audit_inspect", NATIVE_CALL( session ) {
-		N_EXPECT_ARGS( 0 );
-		if ( !session->current->game.IsRunning() || !session->current->game.GetBM() || !session->current->game.GetUM() ) {
-			GSE_ERROR( EC.INVALID_CALL, "Audit requires a running native world" );
-		}
-		return session->current->InspectFounding( GSE_CALL );
+		N_EXPECT_ARGS( 0 ); return session->current->AuditInspect( GSE_CALL );
 	} ), GSE_CALL );
 	object->Set( "reset_world", NATIVE_CALL( session, object ) {
 		N_EXPECT_ARGS( 1 ); N_GETVALUE( declared_terrain, 0, String );
