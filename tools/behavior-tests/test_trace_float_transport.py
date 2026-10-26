@@ -15,8 +15,11 @@ def wire():
     values = [repr(codec.from_bits(bits)) + '|' + str(bits) for bits in codec.BITS]
     payload = dict(text='Gaia\'s "Landing"\\road\nline\ttab', value=codec.from_bits(codec.BITS[3]),
                    signed_zero=-0.0, integer=1, boolean=True, empty=None)
+    native = dict(controls=''.join(chr(value) for value in range(32)), unicode='Gaïa α 🌱', empty='',
+                  maximum=2**63-1, minimum=-(2**63), nested=[True, None, codec.from_bits(codec.BITS[3])])
     return '\n'.join(['FLOAT_CODEC|' + value for value in values] +
-                     ['TRACE_CODEC_JSON|' + json.dumps(payload), 'BEHAVIOR_SUMMARY 2 16', 'All tests passed.'])
+                     ['TRACE_CODEC_JSON|' + json.dumps(payload), 'JSON_NATIVE_CODEC_V2|' + json.dumps(native),
+                      'BEHAVIOR_SUMMARY 3 31', 'All tests passed.'])
 
 
 class PrecisionTests(unittest.TestCase):
@@ -51,6 +54,22 @@ class PrecisionTests(unittest.TestCase):
                  original.replace('"integer": 1', '"integer": 1.0')]
         for value in cases:
             with self.subTest(value=value[:80]), self.assertRaises(ProtocolError): codec.audit(value)
+
+    def test_native_string_and_integer_boundary_corruption_is_not_normalized(self):
+        original = wire()
+        row = next(line for line in original.splitlines() if line.startswith('JSON_NATIVE_CODEC_V2|'))
+        native = json.loads(row.split('|', 1)[1])
+        mutations = []
+        for change in ('controls', 'unicode', 'integer', 'missing'):
+            value = dict(native)
+            if change == 'controls': value['controls'] = value['controls'].replace('\r', '')
+            elif change == 'unicode': value['unicode'] = 'Gaia α 🌱'
+            elif change == 'integer': value['maximum'] = float(value['maximum'])
+            else: del value['empty']
+            mutations.append(original.replace(row, 'JSON_NATIVE_CODEC_V2|' + json.dumps(value)))
+        mutations += [original.replace(row, ''), original + '\n' + row]
+        for log in mutations:
+            with self.subTest(log=log[-100:]), self.assertRaises(ProtocolError): codec.audit(log)
 
     def test_native_timeout_and_spawn_failure_have_distinct_execution_receipts(self):
         with tempfile.TemporaryDirectory() as temporary:

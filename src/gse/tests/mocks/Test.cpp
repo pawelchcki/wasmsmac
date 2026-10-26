@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <chrono>
 #include <memory>
+#include <limits>
 
 #include "gse/context/GlobalContext.h"
 #include "gse/callable/Native.h"
@@ -94,6 +95,25 @@ void Test::AddMocks( gc::Space* const gc_space, context::GlobalContext* ctx, con
 	const auto rules_fixtures = std::make_shared< std::vector< std::shared_ptr< RulesFixture > > >();
 	auto* production_roots = VALUE( value::Array,, value::array_elements_t{} );
 	value::object_properties_t mocks = {
+		{ "json_codec_inputs", NATIVE_CALL() {
+			N_EXPECT_ARGS( 0 );
+			std::string controls; for ( int index = 0; index < 32; ++index ) { controls.push_back( char( index ) ); }
+			value::array_elements_t invalid_utf8;
+			for ( const std::string& text : { std::string( "\xc0\x80" ), std::string( "\xed\xa0\x80" ), std::string( "\xf4\x90\x80\x80" ),
+				std::string( "\xe2\x82" ), std::string( "\x80" ), std::string( "\xc2\x20" ) } ) {
+				invalid_utf8.push_back( VALUE( value::String,, text ) );
+			}
+			auto* cyclic = VALUEEXT( value::Object, GSE_CALL, value::object_properties_t{} ); cyclic->Assign( "self", cyclic );
+			return VALUEEXT( value::Object, GSE_CALL, {
+				{ "controls", VALUE( value::String,, controls ) },
+				{ "unicode", VALUE( value::String,, std::string( "Ga\xc3\xaf" ) + "a \xce\xb1 \xf0\x9f\x8c\xb1" ) },
+				{ "invalid_utf8", VALUE( value::Array,, invalid_utf8 ) }, { "cyclic", cyclic },
+				{ "nonfinite", VALUE( value::Array,, value::array_elements_t{
+					VALUE( value::Float,, std::numeric_limits< float >::infinity() ),
+					VALUE( value::Float,, -std::numeric_limits< float >::infinity() ),
+					VALUE( value::Float,, std::numeric_limits< float >::quiet_NaN() ) } ) },
+			} );
+		} ) },
 		{ "parse_smac_text", NATIVE_CALL() {
 			N_EXPECT_ARGS( 2 ); N_GETVALUE( source, 0, String ); N_GETVALUE( format, 1, String );
 			return ::loader::txt::ParseSmacText( GSE_CALL, source, format );

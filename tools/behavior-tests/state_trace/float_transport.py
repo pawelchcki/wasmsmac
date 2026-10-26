@@ -30,13 +30,15 @@ def exact(value, native):
 
 def audit(log):
     parse_output(log)
-    samples, payloads = [], []
+    samples, payloads, native_payloads = [], [], []
     for line in log.splitlines():
-        match = re.search(r'(?:^|\] )(FLOAT_CODEC|TRACE_CODEC_JSON)\|(.*)$', line)
+        match = re.search(r'(?:^|\] )(FLOAT_CODEC|TRACE_CODEC_JSON|JSON_NATIVE_CODEC_V2)\|(.*)$', line)
         if not match:
             continue
         kind, body = match.groups()
-        if kind == 'TRACE_CODEC_JSON':
+        if kind == 'JSON_NATIVE_CODEC_V2':
+            native_payloads.append(decode_json(body))
+        elif kind == 'TRACE_CODEC_JSON':
             payloads.append(decode_json(body))
         else:
             fields = body.split('|')
@@ -52,7 +54,7 @@ def audit(log):
             if not exact(value, from_bits(bits)):
                 raise ProtocolError('JSON number differs from the actual promoted native binary32 value')
             samples.append(bits)
-    if tuple(samples) != BITS or len(payloads) != 1:
+    if tuple(samples) != BITS or len(payloads) != 1 or len(native_payloads) != 1:
         raise ProtocolError('Missing/duplicate/reordered native float samples or JSON payload')
     payload = payloads[0]
     expected = {'text': 'Gaia\'s "Landing"\\road\nline\ttab', 'integer': 1, 'boolean': True, 'empty': None}
@@ -62,8 +64,14 @@ def audit(log):
         raise ProtocolError('Native JSON text/integer/boolean/null transport changed')
     if not exact(payload['value'], from_bits(BITS[3])) or not exact(payload['signed_zero'], -0.0):
         raise ProtocolError('Native JSON float precision or signed zero changed')
-    return dict(sample_count=len(samples), strict_json_native_value_equal=True,
-                signed_zero_preserved=True, payload=payload)
+    native = native_payloads[0]
+    expected_native = dict(controls=''.join(chr(value) for value in range(32)), unicode='Gaïa α 🌱', empty='',
+                           maximum=2**63-1, minimum=-(2**63), nested=[True, None, from_bits(BITS[3])])
+    if canonical(native) != canonical(expected_native):
+        raise ProtocolError('Native exact JSON changed control bytes/Unicode/integer bounds/nested scalar types')
+    return dict(schema='game.native_json_transport.v2', sample_count=len(samples), strict_json_native_value_equal=True,
+                signed_zero_preserved=True, native_strings_and_integer_bounds_equal=True,
+                payload=payload, native_payload=native)
 
 
 def main(argv=None):

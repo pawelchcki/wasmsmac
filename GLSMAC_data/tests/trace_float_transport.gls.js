@@ -26,3 +26,20 @@ behavior.scenario('nonfinite and non-Float exact text requests fail explicitly',
   test.assert(rejected);
  }
 });
+behavior.scenario('native exact JSON preserves control bytes UTF8 and integer bounds while rejecting invalid data', () => {
+ const inputs = test.json_codec_inputs();
+ #print('JSON_NATIVE_CODEC_V2|' + encode({controls: inputs.controls, unicode: inputs.unicode, empty: '',
+  maximum: 9223372036854775807, minimum: (0 - 9223372036854775807 - 1), nested: [true, null, 1.0 / 3.0]}));
+ for (value of inputs.invalid_utf8) {
+  let rejected = false; try { encode(value); } catch { : (error) => { rejected = true; } }
+  test.assert(rejected, 'Malformed UTF8 cannot become a JSON string');
+ }
+ for (value of inputs.nonfinite) {
+  let rejected = false; try { encode(value); } catch { : (error) => { rejected = true; } }
+  test.assert(rejected, 'Nonfinite numbers cannot become JSON numbers');
+ }
+ let rejected = false; try { encode(inputs.cyclic); } catch { : (error) => { rejected = true; } }
+ test.assert(rejected, 'A cyclic object cannot be serialized');
+ rejected = false; try { encode(test.input_state('')); } catch { : (error) => { rejected = true; } }
+ test.assert(rejected, 'Native input wrappers/functions cannot be serialized');
+});
