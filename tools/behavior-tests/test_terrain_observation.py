@@ -25,7 +25,7 @@ def packet():
         terrain_trace=dict(schema=t.SCHEMA, elevation_units='native-engine-elevation', terrain_units=deepcopy(t.TERRAIN_UNITS), tiles=tiles,
             unit_details={}, base_details={}, player_details={owner: dict(raw_id=i, role='declared', name='Declared',
                 identity=['Declared'] * 6, energy=dict(credits=0, last_income_turn=0)) for i, owner in enumerate(owners)},
-            ui=None, coverage={name: name not in {'ui', 'animation_timing', 'audio', 'original_height_byte', 'canonical_height', 'energy_initialization'} for name in t.COVERAGE},
+            ui=None, coverage={name: name not in {'ui', 'animation_timing', 'audio', 'original_height_byte', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase', 'home_identity', 'improvement_owners'} for name in t.COVERAGE},
             policy=dict(version=1, ignore_technologies=True)))
 
 
@@ -85,6 +85,21 @@ class TerrainSchemaTests(unittest.TestCase):
             else: broken['terrain_trace']['tiles']['0,0']['rockiness'] = 4
             with self.subTest(change=change), self.assertRaises(ProtocolError): t.validate_snapshot(broken)
 
+    def test_native_construction_owners_do_not_invent_original_territory(self):
+        value = packet(); data = value['terrain_trace']; data['coverage']['improvement_owners'] = True
+        for tile in data['tiles'].values(): tile['terraforming_owners'] = {flag: -1 for flag in t.IMPROVEMENTS}
+        self.assertIs(t.validate_snapshot(value), value)
+        tile = data['tiles']['0,0']; tile['terraforming_raw'] = 1; tile['terraforming']['road'] = True; tile['terraforming_owners']['road'] = 0
+        self.assertIs(t.validate_snapshot(value), value)
+        for change in ('missing', 'type', 'slot', 'absent-flag', 'hidden-capability'):
+            broken = deepcopy(value); tile = broken['terrain_trace']['tiles']['0,0']
+            if change == 'missing': del tile['terraforming_owners']['airbase']
+            elif change == 'type': tile['terraforming_owners']['road'] = False
+            elif change == 'slot': tile['terraforming_owners']['road'] = 8
+            elif change == 'absent-flag': tile['terraforming_owners']['airbase'] = 1
+            else: broken['terrain_trace']['coverage']['improvement_owners'] = False
+            with self.subTest(change=change), self.assertRaises(ProtocolError): t.validate_snapshot(broken)
+
     def test_policy_balances_and_ui_coverage_are_explicit(self):
         for change in ('policy-type', 'policy-missing', 'balance', 'ui', 'coverage'):
             value = packet(); data = value['terrain_trace']
@@ -125,6 +140,7 @@ class TerrainSchemaTests(unittest.TestCase):
 
     def test_zero_cost_quote_has_finite_typed_fields_and_no_fake_infinite_speed(self):
         original = dict(source=dict(x=0, y=0), destination=dict(x=1, y=1), movement_kind='land', nominal_mp_per_turn=1.0,
+            policy_quote_version=1,
             allowed_now=True, reason=None, quoted_step_cost_mp=0.0, zero_cost_quote=True, quoted_tiles_per_turn=None,
             policy_quote=dict(road_rate=0, base_cost=0.0, after_cost=0.0, total_cost=0.0))
         self.assertIs(t.validate_quote(original, 2, 2, 'quote'), original)

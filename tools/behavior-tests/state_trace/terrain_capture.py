@@ -36,24 +36,49 @@ def _rows(log):
 
 def audit(log):
     summary = parse_output(log)
-    snapshots, native, movements, initial, completed = {}, {}, [], [], 0
+    snapshots, native, movements, completed = {}, {}, [], 0
+    opened = None; domains = ('tiles', 'unit_details', 'base_details', 'player_details')
     for kind, body in _rows(log):
-        if kind in ('TERRAIN_STEP_JSON', 'TERRAIN_NATIVE'):
+        require(completed == 0, 'Terrain data appeared after the completion fence')
+        if kind in ('TERRAIN_STAGE_BEGIN', 'TERRAIN_STAGE_ROW', 'TERRAIN_STAGE_END', 'TERRAIN_NATIVE'):
             require(body is not None and '|' in body, 'Native stage record is malformed')
-            stage, value = body.split('|', 1)
-            target = snapshots if kind == 'TERRAIN_STEP_JSON' else native
-            require(stage in STAGES and stage not in target, 'Missing/duplicate/unknown native stage')
-            target[stage] = decode_json(value)
-        elif kind == 'TERRAIN_JSON': initial.append(decode_json(body))
-        elif kind == 'TERRAIN_MOVEMENT': movements.append(decode_json(body))
+            stage, value = body.split('|', 1); value = decode_json(value)
+            require(stage in STAGES, 'Unknown native stage')
+            if kind == 'TERRAIN_NATIVE':
+                require(opened is None and stage not in native, 'Duplicate/interleaved native inventory')
+                native[stage] = value
+            elif kind == 'TERRAIN_STAGE_BEGIN':
+                require(opened is None and stage not in snapshots, 'Duplicate/interleaved native stage')
+                require(type(value) is dict and type(value.get('terrain_trace')) is dict and
+                        not any(domain in value['terrain_trace'] for domain in domains), 'Malformed native stage header')
+                for domain in domains: value['terrain_trace'][domain] = {}
+                snapshots[stage] = value; opened = stage
+            elif kind == 'TERRAIN_STAGE_ROW':
+                require(opened == stage, 'Native row outside its open stage')
+                fields(value, ('domain', 'key', 'value'), 'native row')
+                require(value['domain'] in domains and type(value['key']) is str, 'Unknown native row domain/key')
+                target = snapshots[stage]['terrain_trace'][value['domain']]
+                require(value['key'] not in target, 'Duplicate native terrain/entity row')
+                target[value['key']] = value['value']
+            else:
+                require(opened == stage, 'Native end outside its open stage')
+                fields(value, domains, 'native stage manifest')
+                for domain in domains:
+                    integer(value[domain], 'manifest.' + domain, 0)
+                    require(value[domain] == len(snapshots[stage]['terrain_trace'][domain]), 'Native row count differs from manifest')
+                opened = None
+        elif kind == 'TERRAIN_MOVEMENT':
+            require(opened is None and len(movements) < len(ACTORS), 'Movement record inside an incomplete stage')
+            actor = tuple(ACTORS)[len(movements)]
+            require(actor + '-after' in snapshots, 'Movement result appeared before its actual checkpoints')
+            movements.append(decode_json(body))
         elif kind == 'TERRAIN_OBSERVATION_COMPLETE':
-            require(body is None, 'Completion marker has unexpected payload')
+            require(body is None and opened is None and len(snapshots) == len(STAGES) and len(movements) == len(ACTORS),
+                    'Completion marker has unexpected payload or incomplete observations')
             completed += 1
         else: raise ProtocolError('Unknown terrain transport record ' + kind)
-    require(tuple(snapshots) == STAGES and tuple(native) == STAGES and completed == 1,
+    require(tuple(snapshots) == STAGES and tuple(native) == STAGES and completed == 1 and opened is None,
             'All ordered before/during/after native checkpoints are required exactly once')
-    require(len(initial) == 1 and canonical(initial[0]) == canonical(snapshots['initial']),
-            'Initial transport snapshot is absent/duplicated/different')
     require(len(movements) == len(ACTORS), 'Every declared movement kind must execute exactly once')
     inventories = None
     for stage, snapshot in snapshots.items():
@@ -125,9 +150,9 @@ def audit(log):
                              before_sha256=fingerprint(before), after_sha256=fingerprint(after), changes=changes))
     coverage = baseline['terrain_trace']['coverage']
     unsupported = list(UNSUPPORTED)
-    for capability in ('canonical_height', 'energy_initialization'):
+    for capability in ('canonical_height', 'energy_initialization', 'automation_context', 'automation_phase', 'home_identity', 'improvement_owners'):
         if not coverage[capability]: unsupported.append('runtime lacks native ' + capability + ' capability')
-    return dict(schema='game.terrain_capture.v1', status='passed',
+    return dict(schema='game.terrain_capture.v2', status='passed',
                 verified_scope='native-observer-purity-and-actual-three-actor-traversal', native_summary=summary,
                 original_comparison_executed=False, original_matches=0,
                 full_action_inventory_complete=False, checkpoint_count=len(snapshots),

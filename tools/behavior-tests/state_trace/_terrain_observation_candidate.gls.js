@@ -30,10 +30,25 @@ behavior.scenario('complete seven-owner terrain observations and actual movement
   test.assert(snapshot.terrain_trace.policy == {version: 1, ignore_technologies: true});
   test.assert(f.audit_snapshot() == native && f.audit_inspect() == bookkeeping, 'All-map/player/resource/cost observations preserve RNG, actual graph and pending bookkeeping');
   #print('TERRAIN_NATIVE|' + stage + '|' + encode(bookkeeping));
-  #print('TERRAIN_STEP_JSON|' + stage + '|' + encode(snapshot));
+  // Keep each encoded value bounded. A growing monolithic GSE JSON string
+  // exhausted the 2GB WASM heap on the first complete-map capture.
+  const trace = snapshot.terrain_trace;
+  const header = {turn: snapshot.turn, width: snapshot.width, height: snapshot.height,
+   players: snapshot.players, units: snapshot.units, bases: snapshot.bases, research: snapshot.research,
+   terrain_trace: {schema: trace.schema, elevation_units: trace.elevation_units, terrain_units: trace.terrain_units,
+    ui: trace.ui, coverage: trace.coverage, policy: trace.policy}};
+  #print('TERRAIN_STAGE_BEGIN|' + stage + '|' + encode(header));
+  const counts = {tiles: 0, unit_details: 0, base_details: 0, player_details: 0};
+  for (domain of ['tiles', 'unit_details', 'base_details', 'player_details']) {
+   for (key in trace[domain]) {
+    const row = {domain: domain + '', key: key + ''}; row.value = trace[domain][key];
+    #print('TERRAIN_STAGE_ROW|' + stage + '|' + encode(row)); counts[domain] = counts[domain] + 1;
+   }
+  }
+  #print('TERRAIN_STAGE_END|' + stage + '|' + encode(counts));
   return snapshot;
  };
- const initial = capture('initial'); #print('TERRAIN_JSON|' + encode(initial));
+ capture('initial');
  for (actor of actors) {
   let destination = null; const terrain = game.get_tm().get_terrain_state(actor.unit.get_tile().x, actor.unit.get_tile().y);
   for (direction in terrain.neighbors) {

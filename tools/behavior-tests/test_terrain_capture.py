@@ -32,7 +32,7 @@ def declared_transport():
             can_terraform=identity == 'former', moved_this_turn=False,
             work=dict(action='', work_units=0, required_work=0, last_turn=0, previous_work_units=0,
                       previous_movement=0.0, previous_moved=False, active=False, tile_x=0, tile_y=0),
-            combat={}, quotes={})
+            combat={}, automation=None, home_base_id=None, quotes={})
     for raw_id, owner in enumerate(owners):
         identity = 'base:' + str(raw_id)
         state['bases'].append(dict(id=identity, raw_id=raw_id, owner=owner, x=0, y=0, population=1))
@@ -46,6 +46,7 @@ def declared_transport():
             detail = snapshot['terrain_trace']['unit_details'][unit['id']]
             detail['quotes'] = {direction: dict(source=deepcopy(source), destination=deepcopy(destination),
                 movement_kind='land', nominal_mp_per_turn=1.0, allowed_now=unit['movement'] > 0.0,
+                policy_quote_version=1,
                 reason=None if unit['movement'] > 0.0 else 'Out of moves',
                 quoted_step_cost_mp=1.0, zero_cost_quote=False, quoted_tiles_per_turn=1.0,
                 policy_quote=dict(road_rate=0, base_cost=1.0, after_cost=0.0, total_cost=1.0)) for direction in terrain.DIRECTIONS}
@@ -73,10 +74,18 @@ def wire(stages, movements, *, omit=(), duplicate=None, native_missing=False):
         bookkeeping = dict(unit_ids=[row['raw_id'] for row in state['units']],
                            base_ids=[row['raw_id'] for row in state['bases']], dangling_unit_updates=0)
         if native_missing: bookkeeping['unit_ids'].pop()
+        header = deepcopy(state); domains = ('tiles', 'unit_details', 'base_details', 'player_details')
+        chunks = {domain: header['terrain_trace'].pop(domain) for domain in domains}
         lines += ['TERRAIN_NATIVE|' + stage + '|' + json.dumps(bookkeeping),
-                  'TERRAIN_STEP_JSON|' + stage + '|' + json.dumps(state)]
-    if duplicate: lines.append('TERRAIN_STEP_JSON|' + duplicate + '|' + json.dumps(stages[duplicate]))
-    lines += ['TERRAIN_JSON|' + json.dumps(stages['initial'])]
+                  'TERRAIN_STAGE_BEGIN|' + stage + '|' + json.dumps(header)]
+        for domain, rows in chunks.items():
+            for key, value in rows.items():
+                lines.append('TERRAIN_STAGE_ROW|' + stage + '|' + json.dumps(dict(domain=domain, key=key, value=value)))
+        lines.append('TERRAIN_STAGE_END|' + stage + '|' + json.dumps({domain: len(rows) for domain, rows in chunks.items()}))
+    if duplicate: lines.append('TERRAIN_STAGE_BEGIN|' + duplicate + '|' + json.dumps(header))
+    # Real commands emit their movement receipt immediately after each actor's
+    # after stage. This packet builder appends them only after all captures;
+    # both retain complete actual before/after records before each receipt.
     lines += ['TERRAIN_MOVEMENT|' + json.dumps(row) for row in movements]
     lines += ['TERRAIN_OBSERVATION_COMPLETE', 'BEHAVIOR_SUMMARY 1 50', 'All tests passed.']
     return '\n'.join(lines)
@@ -111,6 +120,37 @@ class TerrainCaptureTests(unittest.TestCase):
             elif change == 'ability': stages['native-before']['terrain_trace']['unit_details']['native']['can_terraform'] = True
             else: moves[-1]['quote']['policy_quote']['total_cost'] = 2.0
             with self.subTest(change=change), self.assertRaises(ProtocolError): capture.audit(wire(stages, moves))
+
+    def test_chunk_identity_counts_and_complete_fence_are_not_optional(self):
+        original = wire(*declared_transport()); lines = original.splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith('TERRAIN_STAGE_ROW|initial|'))
+        row = lines[index]
+        corrupt = ['\n'.join(lines[:index] + lines[index + 1:]),
+                   '\n'.join(lines[:index] + [row] + lines[index:]),
+                   original + '\n' + row,
+                   'TERRAIN_OBSERVATION_COMPLETE\n' + original]
+        for log in corrupt:
+            with self.subTest(log=log[-120:]), self.assertRaises(ProtocolError): capture.audit(log)
+
+    def test_native_plan_version_and_phase_are_observed_without_v3_default_invention(self):
+        snapshot = declared_transport()[0]['initial']; trace = snapshot['terrain_trace']
+        trace['coverage']['automation_context'] = True; trace['coverage']['home_identity'] = True
+        for detail in trace['unit_details'].values():
+            detail['home_base_id'] = 0
+            detail['automation'] = dict(version=1, command='', epoch=0, owner=0, issued_turn=0, last_turn=0,
+                target_x=0, target_y=0, origin_x=0, origin_y=0, cursor=0)
+        terrain.validate_snapshot(snapshot)
+        trace['coverage']['automation_phase'] = True
+        for detail in trace['unit_details'].values(): detail['automation'].update(version=2, phase=0)
+        terrain.validate_snapshot(snapshot)
+        for change in ('missing-phase', 'wrong-version', 'phase-type', 'hidden-phase', 'missing-home'):
+            broken = deepcopy(snapshot); data = broken['terrain_trace']
+            if change == 'missing-phase': del data['unit_details']['native']['automation']['phase']
+            elif change == 'wrong-version': data['unit_details']['native']['automation']['version'] = 1
+            elif change == 'phase-type': data['unit_details']['native']['automation']['phase'] = False
+            elif change == 'hidden-phase': data['coverage']['automation_phase'] = False
+            else: data['unit_details']['native']['home_base_id'] = None
+            with self.subTest(change=change), self.assertRaises(ProtocolError): terrain.validate_snapshot(broken)
 
 
 if __name__ == '__main__': unittest.main()

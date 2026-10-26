@@ -91,6 +91,17 @@ asserts equality of native full-state and RNG/bookkeeping snapshots around each
 observer read. It finishes actual pending native moves through their existing
 animation acknowledgement boundary; animation timing remains unsupported.
 
+The public candidate observation is version 2. Transport uses per-tile and
+per-entity chunks with unique IDs, exact begin/end count manifests and strict
+complete reassembly. The native exact JSON serializer is required: actual v2
+monolithic encoding exhausted the 2 GB heap during the first checkpoint; v3
+bounded GSE encoding completed the first checkpoint and exhausted the heap in
+the second. Both incomplete executions remain failures, outside passing totals.
+Native serialization avoids an interpreted allocation for each scalar. Its
+independent reader checks raw f32 bits, signed zero, all ASCII control bytes,
+UTF-8 scalar values and full signed 64-bit integer bounds; malformed inputs,
+cycles, unsupported native wrappers and nonfinite values fail explicitly.
+
 ```sh
 python3 tools/behavior-tests/state_trace/terrain_capture.py \
   --runtime /path/to/GLSMAC.js --report /tmp/native-terrain.json
@@ -111,6 +122,15 @@ four corner fields remain actual render geometry. Rockiness is the native enum
 representation: the accepted original Level raw 2→1 corresponds to the importer
 mapping native 3→2. No direct raw-byte alias, general height conversion or
 general Level outcome is asserted by the observation schema.
+
+Optional improvement construction owners retain every actual native slot or
+unknown marker; they are application metadata, not original territory claims.
+Automation getter version 1 records eleven fields. Version 2 adds the actual
+home-rendezvous/scan phase as a twelfth field. A v3 runtime cannot establish that
+phase capability: the observer reports it absent instead of supplying a zero.
+Movement quote policy version 2 adds the actual free-step flag. Its zero-cost
+quotes retain a finite/null speed representation and remain separate from
+actual command debit and remaining credits.
 
 The repeated rate1 Raise contract establishes one quoted fee and one original
 outcome under its declared input. It does not establish a universal fee or

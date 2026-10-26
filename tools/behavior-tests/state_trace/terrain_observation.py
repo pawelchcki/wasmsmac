@@ -1,4 +1,4 @@
-"""Strict native terrain observation v1; no terrain or movement rules live here.
+"""Strict native terrain observation v2; no terrain or movement rules live here.
 
 This validates captured native data, not agreement with an original executable.
 The frozen state-trace comparator can compare a separately bound projection;
@@ -11,7 +11,7 @@ from fast import parse_output
 from protocol import ProtocolError, canonical, decode_json
 from state_trace.schema import validate_state
 
-SCHEMA = 'game.terrain_observation.v1'
+SCHEMA = 'game.terrain_observation.v2'
 DIRECTIONS = ('W', 'NW', 'N', 'NE', 'E', 'SE', 'S', 'SW')
 FEATURES = ('river', 'monolith', 'xenofungus', 'jungle', 'uranium', 'geothermal',
             'unity_pod', 'volcano', 'sunny_mesa', 'garland_crater', 'fossil_field_ridge',
@@ -19,7 +19,7 @@ FEATURES = ('river', 'monolith', 'xenofungus', 'jungle', 'uranium', 'geothermal'
 IMPROVEMENTS = ('road', 'mag_tube', 'forest', 'farm', 'soil_enricher', 'solar', 'mine',
                 'condenser', 'mirror', 'borehole', 'sensor', 'bunker', 'airbase')
 COVERAGE = ('all_players', 'terrain_height', 'terrain_type', 'terrain_resources',
-            'traverse_quotes', 'canonical_height', 'energy_initialization',
+            'traverse_quotes', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase', 'home_identity', 'improvement_owners',
             'ui', 'animation_timing', 'audio', 'original_height_byte')
 TERRAIN_UNITS = dict(rockiness='native-enum-0-none-1-flat-2-rolling-3-rocky',
                      moisture='native-enum-0-none-1-arid-2-moist-3-rainy',
@@ -63,7 +63,7 @@ def flags(values, raw, names, path):
 def validate_quote(quote, width, height, path):
     fields(quote, ('source', 'destination', 'movement_kind', 'nominal_mp_per_turn',
                   'allowed_now', 'reason', 'quoted_step_cost_mp', 'zero_cost_quote',
-                  'quoted_tiles_per_turn', 'policy_quote'), path)
+                  'quoted_tiles_per_turn', 'policy_quote', 'policy_quote_version'), path)
     coordinate(quote['source'], width, height, path + '.source')
     coordinate(quote['destination'], width, height, path + '.destination')
     require(quote['movement_kind'] in ('land', 'sea', 'air', 'immovable'), path + ' movement kind invalid')
@@ -80,7 +80,15 @@ def validate_quote(quote, width, height, path):
     else:
         number(quote['quoted_tiles_per_turn'], path + '.quoted_tiles_per_turn', 0)
     costs = quote['policy_quote']
-    fields(costs, ('road_rate', 'base_cost', 'after_cost', 'total_cost'), path + '.policy_quote')
+    require(type(quote['policy_quote_version']) is int and quote['policy_quote_version'] in (1, 2), 'Unknown movement quote policy schema')
+    fields(costs, ('road_rate', 'base_cost', 'after_cost', 'total_cost') +
+           (('free',) if quote['policy_quote_version'] == 2 else ()), path + '.policy_quote')
+    if quote['policy_quote_version'] == 2:
+        require(type(costs['free']) is bool, 'Movement free quote must be a Bool')
+        if costs['free']:
+            require(quote['zero_cost_quote'] and costs['road_rate'] == 0 and
+                    all(costs[name] == 0.0 for name in ('base_cost', 'after_cost', 'total_cost')),
+                    'Free movement quote must retain actual zero-cost native policy values')
     integer(costs['road_rate'], path + '.road_rate', 0)
     for key in ('base_cost', 'after_cost', 'total_cost'):
         number(costs[key], path + '.' + key, 0)
@@ -140,7 +148,8 @@ def validate_snapshot(snapshot):
         tile_fields = ('version', 'x', 'y', 'width', 'height', 'neighbors', 'elevation', 'is_land', 'is_water',
                       'moisture', 'rockiness', 'bonus', 'features_raw', 'features', 'terraforming_raw',
                       'terraforming', 'imported', 'resources', 'native_height_band', 'native_type', 'locked')
-        fields(tile, tile_fields + (('canonical',) if trace['coverage']['canonical_height'] else ()), 'tile:' + key)
+        fields(tile, tile_fields + (('canonical',) if trace['coverage']['canonical_height'] else ()) +
+               (('terraforming_owners',) if trace['coverage']['improvement_owners'] else ()), 'tile:' + key)
         require(type(tile['version']) is int and tile['version'] == 1 and tile['width'] == width and tile['height'] == height,
                 'Native terrain API version/dimensions differ')
         coordinate(dict(x=tile['x'], y=tile['y']), width, height, 'tile:' + key)
@@ -171,6 +180,11 @@ def validate_snapshot(snapshot):
                     rockiness=('none', 'flat', 'rolling', 'rocky')[tile['rockiness']]), 'Native terrain type enum/name differ')
         flags(tile['features'], tile['features_raw'], FEATURES, 'features:' + key)
         flags(tile['terraforming'], tile['terraforming_raw'], IMPROVEMENTS, 'improvements:' + key)
+        if trace['coverage']['improvement_owners']:
+            fields(tile['terraforming_owners'], IMPROVEMENTS, 'improvement_owners:' + key)
+            for flag, owner in tile['terraforming_owners'].items():
+                require(type(owner) is int and -1 <= owner <= 7, 'Improvement construction owner is not a native slot/unknown marker')
+                require(owner == -1 or tile['terraforming'][flag], 'Removed improvement retained an active construction owner')
         fields(tile['native_height_band'], ('below_coast', 'below_ocean', 'below_trench'), 'height-band:' + key)
         for name, limit in (('below_coast', 0), ('below_ocean', -1000), ('below_trench', -2000)):
             require(type(tile['native_height_band'][name]) is bool and tile['native_height_band'][name] == (tile['elevation']['center'] < limit), 'Native height band/raw value differ')
@@ -191,7 +205,32 @@ def validate_snapshot(snapshot):
     require(type(trace['unit_details']) is dict and set(trace['unit_details']) == set(units), 'Every native unit requires detail/quotes')
     for unit_id, detail in trace['unit_details'].items():
         unit = units[unit_id]
-        fields(detail, ('definition_id', 'morale_set', 'movement_kind', 'nominal_mp_per_turn', 'can_terraform', 'moved_this_turn', 'work', 'quotes', 'combat'), 'unit:' + unit_id)
+        fields(detail, ('definition_id', 'morale_set', 'movement_kind', 'nominal_mp_per_turn', 'can_terraform', 'moved_this_turn', 'work', 'automation', 'home_base_id', 'quotes', 'combat'), 'unit:' + unit_id)
+        if trace['coverage']['home_identity']: integer(detail['home_base_id'], 'unit.home_base_id', 0)
+        else: require(detail['home_base_id'] is None, 'Missing home capability must not invent an identity')
+        if trace['coverage']['automation_context']:
+            plan = detail['automation']
+            fields(plan, ('version', 'command', 'epoch', 'owner', 'issued_turn', 'last_turn', 'target_x',
+                          'target_y', 'origin_x', 'origin_y', 'cursor') +
+                   (('phase',) if trace['coverage']['automation_phase'] else ()), 'automation:' + unit_id)
+            require(type(plan['version']) is int and plan['version'] == (2 if trace['coverage']['automation_phase'] else 1) and type(plan['command']) is str,
+                    'Unknown native automation schema/command type')
+            if trace['coverage']['automation_phase']:
+                require(type(plan['phase']) is int and plan['phase'] in (0, 1), 'Native automation phase is malformed')
+            for field in ('epoch', 'owner', 'issued_turn', 'last_turn', 'target_x', 'target_y', 'origin_x', 'origin_y', 'cursor'):
+                integer(plan[field], 'automation.' + field, 0)
+            if plan['command']:
+                owner = next(row['raw_id'] for row in snapshot['players'] if row['id'] == unit['owner'])
+                require(plan['owner'] == owner and plan['epoch'] > 0 and plan['issued_turn'] > 0 and
+                        unit['order'] in ('AUTOMATE', 'TERRAFORM'), 'Active native plan has a different owner/order/identity')
+                coordinate(dict(x=plan['target_x'], y=plan['target_y']), width, height, 'automation.target')
+                coordinate(dict(x=plan['origin_x'], y=plan['origin_y']), width, height, 'automation.origin')
+            else:
+                require(all(plan[field] == 0 for field in ('owner', 'issued_turn', 'last_turn', 'target_x', 'target_y', 'origin_x', 'origin_y', 'cursor')) and
+                        (not trace['coverage']['automation_phase'] or plan['phase'] == 0), 'Empty native plan retained active payload')
+        else:
+            require(not trace['coverage']['automation_phase'], 'Missing automation API cannot expose a phase')
+            require(detail['automation'] is None, 'Missing automation capability must not invent a native plan')
         require(type(detail['definition_id']) is str and bool(detail['definition_id']) and
                 type(detail['morale_set']) is str and bool(detail['morale_set']), 'Native unit definition/morale identity missing')
         number(unit['movement'], unit_id + '.movement', 0); number(unit['health'], unit_id + '.health', 0)
