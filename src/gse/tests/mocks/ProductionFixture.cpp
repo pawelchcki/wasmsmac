@@ -711,7 +711,7 @@ struct ProductionFixture : gc::Object {
 		const bool mineral_received = to.rules.GetMineralCostFactor() == 19;
 		const bool worlds_received = to.rules.GetWorldSizes() == worlds_before && to.rules.HasWorldSizes() == from.rules.HasWorldSizes();
 		const bool worlds_aliases = backend::rules::Rules::DecodeWorldSizes( GSE_CALL, worlds_read->Run( GSE_CALL, {} ) ) == worlds_before;
-		const auto* policy = static_cast< value::Object* >( policy_read->Run( GSE_CALL, {} ) );
+		auto* policy = static_cast< value::Object* >( policy_read->Run( GSE_CALL, {} ) );
 		const bool policy_received = !to.rules.IgnoreTerraformingTechnologies() && !static_cast< value::Bool* >( policy->Get( "ignore_technologies" ) )->value;
 		const bool received = policy_received && to.map.size_x == 68 && to.map.size_y == 34 && to.map.preset_level == 0 &&
 			to.rules.GetNutrientCostFactor() == 17 && to.game_name == "Source wire";
@@ -1942,11 +1942,11 @@ Value* MakeProductionFixture( GSE_CALLABLE, bool founding, bool selection, const
 		return VALUE( value::Undefined );
 	} ), GSE_CALL );
 	object->Set( "energy_codec_probe", NATIVE_CALL( session ) {
-		N_EXPECT_ARGS( 0 ); return session->EnergyCodecProbe( GSE_CALL );
-	} ) );
+		N_EXPECT_ARGS( 0 ); return session->current->EnergyCodecProbe( GSE_CALL );
+	} ), GSE_CALL );
 	object->Set( "terraforming_policy_probe", NATIVE_CALL( session ) {
-		N_EXPECT_ARGS( 0 ); return session->TerraformingPolicyProbe( GSE_CALL );
-	} ) );
+		N_EXPECT_ARGS( 0 ); return session->current->TerraformingPolicyProbe( GSE_CALL );
+	} ), GSE_CALL );
 	object->Set( "rules_copy_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->RulesCopyProbe( GSE_CALL );
 	} ), GSE_CALL );
