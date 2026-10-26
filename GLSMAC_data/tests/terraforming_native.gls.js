@@ -207,8 +207,8 @@ behavior.scenario('income credits once per turn and equal-balance later transact
 	f.with_write(() => { income = player.credit_energy_income(9,f.game.get_turn()); zero = player.change_energy(0,9,f.game.get_turn()); });
 	test.assert(player.get_energy_state() == {credits:9,last_income_turn:f.game.get_turn()});
 	const before = f.snapshot();
-	for (action of [() => { player.credit_energy_income(9,f.game.get_turn()); }, () => { player.rollback_energy(income); }]) {
-		let failed = false; try { f.with_write(action); } catch { : (e) => { failed = true; } }
+	for (choice of [0,1]) {
+		let failed = false; try { f.with_write(() => { if (choice == 0) { player.credit_energy_income(9,f.game.get_turn()); } else { player.rollback_energy(income); } }); } catch { : (e) => { failed = true; } }
 		test.assert(failed && f.snapshot() == before);
 	}
 	f.with_write(() => { player.rollback_energy(zero); player.rollback_energy(income); });

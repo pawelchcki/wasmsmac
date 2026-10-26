@@ -59,7 +59,7 @@ const complete_source = '#TERRAIN\n' +
 	'Monolith,Disable,Monolith,Disable,8,Place Monolith,?,?\n#END\n';
 
 behavior.scenario('complete installed terrain vocabulary has nineteen land and seven sea declarations', () => {
-	const rules = consumer.parse(test.parse_smac_text(complete_source, 'complete terrain'));
+	const rules = consumer.parse(test.parse_smac_text(complete_source, 'rules'));
 	let land = 0; let sea = 0;
 	for (entry of consumer.entries) {
 		const ordinary = consumer.for_tile(rules, {is_water: false}, entry.id);
@@ -75,7 +75,7 @@ behavior.scenario('complete installed terrain vocabulary has nineteen land and s
 });
 
 behavior.scenario('sea variant consumes its independent names and prerequisites without changing work identity', () => {
-	const doc = test.parse_smac_text(complete_source, 'edited terrain'); const rows = doc.rows('TERRAIN');
+	const doc = test.parse_smac_text(complete_source, 'rules'); const rows = doc.rows('TERRAIN');
 	const row = rows[0]; row[2] = 'Authored sea field'; row[3] = 'AuthoredSeaTech'; row[4] = '11';
 	const rules = consumer.parse({rows: (block) => { return rows; }});
 	test.assert(rules.farm.name == 'Farm' && rules.farm.prerequisite == 'None');

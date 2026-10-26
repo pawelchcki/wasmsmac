@@ -108,7 +108,6 @@ for (movement of ['water', 'air', 'immovable']) {
 // availability, naval construction or camera evidence.
 const sea_worker = (profile) => {
 	const f = fixture(); f.configure('flat_arid_world');
-	if (#is_defined(profile)) { f.configure(profile); }
 	f.with_write(() => {
 		f.game.um.define_unit('SeaFormers', {name: 'Foil Formers', morale: 'SYNTHETIC', type: 'static',
 			movement_type: 'water', movement_per_turn: 4, can_terraform: true,
@@ -116,6 +115,7 @@ const sea_worker = (profile) => {
 			render: {type: 'sprite', file: 'synthetic.pcx', x: 0, y: 0, w: 1, h: 1, cx: 0, cy: 0}});
 		f.owner.add_production_choice('SEA_FORMERS', {type: 'unit', id: 'SeaFormers', cost: 40, cost_rows: 4, population_cost: 0});
 	});
+	if (#is_defined(profile)) { f.configure(profile); }
 	return f;
 };
 
