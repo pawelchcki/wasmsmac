@@ -81,3 +81,5 @@ behavior.scenario('optional native field maximum applies to assignment typing an
  test.assert(state.set_value('') && state.get_value() == '');
  const unlimited = test.input_state('ABCDEFGHIJK'); test.assert(unlimited.get_value() == 'ABCDEFGHIJK');
 });
+
+#include('./_tile_target_native')(behavior);
