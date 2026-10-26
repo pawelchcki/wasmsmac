@@ -31,7 +31,7 @@ const prerequisite_error = (game, owner, prerequisite) => {
 const eligible = (game, unit, action) => {
 	if (action != 'farm' && action != 'mine' && action != 'forest' && action != 'road') { return 'Unknown terraforming action'; }
 	const def = unit.get_def(); const tile = unit.get_tile();
-	if (def.id != 'Formers' || !unit.is_land || def.movement_per_turn != 1.0 || unit.health != def.health_max) { return 'Requires a healthy ordinary Former'; }
+	if (!def.can_terraform || !unit.is_land || unit.health != def.health_max) { return 'Requires a healthy ordinary Former'; }
 	if (!tile.is_land || tile.moisture != 1 || tile.rockiness != 1 || tile.features.xenofungus || tile.get_base() != null) { return 'Work currently supports flat arid non-base land'; }
 	if (tile.is_locked()) { return 'Terraforming tile is locked'; }
 	for (other of tile.get_units()) {
@@ -51,7 +51,21 @@ const can_resume_exhausted = (game, unit, action) => {
 	const rules = game.get('terraforming_rules'); const rule = rules[action];
 	return unit.movement == 0.0 && unit.moved_this_turn && !state.active && state.action == action && state.work_units > 0 &&
 		state.tile_x == tile.x && state.tile_y == tile.y && state.required_work == rule.turns * 2 &&
-		state.previous_movement > 0.0 && state.previous_movement <= 1.0;
+		state.previous_movement > 0.0 && state.previous_movement <= unit.get_def().movement_per_turn;
+};
+// Read-only selection preflight. Actual replacement/fee/target consent remains
+// a separate commit validation step, never synthesized by menu availability.
+const validate_selection = (e) => {
+	const orders = #include('./unit_orders'); const error = orders.validate(e, false);
+	if (#is_defined(error)) { return error; }
+	const unit = orders.resolve(e.game, e.data);
+	if (unit.movement > unit.get_def().movement_per_turn) { return 'Work exceeds its actual movement budget'; }
+	const reason = eligible(e.game, unit, e.data.action); if (#is_defined(reason)) { return reason; }
+	if (unit.movement <= 0.0) {
+		if (!can_resume_exhausted(e.game, unit, e.data.action)) { return 'Unit has no pending moves'; }
+	} else {
+		const readiness = orders.validate(e, true); if (#is_defined(readiness)) { return readiness; }
+	}
 };
 const tick = (game, unit, action) => {
 	const tile = unit.get_tile(); const rules = game.get('terraforming_rules'); const rule = rules[action]; const required = rule.turns * 2;
@@ -81,18 +95,11 @@ return {
 	describe: describe,
 	prerequisite_error: prerequisite_error,
 	needs_confirmation: needs_confirmation,
+	validate_selection: (e) => { return validate_selection(e); },
 	validate: (e) => {
-		const orders = #include('./unit_orders'); const error = orders.validate(e, false);
-		if (#is_defined(error)) { return error; }
-		const unit = orders.resolve(e.game, e.data);
-		if (unit.movement > 1.0) { return 'Work requires at most one movement point'; }
+		const reason = validate_selection(e); if (#is_defined(reason)) { return reason; }
+		const unit = #include('./unit_orders').resolve(e.game, e.data);
 		if (#is_defined(e.data.replace_existing) && #typeof(e.data.replace_existing) != 'Bool') { return 'Replacement confirmation must be boolean'; }
-		const reason = eligible(e.game, unit, e.data.action); if (#is_defined(reason)) { return reason; }
-		if (unit.movement <= 0.0) {
-			if (!can_resume_exhausted(e.game, unit, e.data.action)) { return 'Unit has no pending moves'; }
-		} else {
-			const readiness = orders.validate(e, true); if (#is_defined(readiness)) { return readiness; }
-		}
 		if (needs_confirmation(e.game, unit, e.data.action) && (!#is_defined(e.data.replace_existing) || !e.data.replace_existing)) { return 'Improvement replacement requires confirmation'; }
 	},
 	start: tick,
@@ -112,7 +119,7 @@ return {
 			const state = e.unit.get_terraforming();
 			if (!state.active || state.last_turn >= game.get_turn()) { return; }
 			const tile = e.unit.get_tile();
-			if (tile.x != state.tile_x || tile.y != state.tile_y || e.unit.movement != 1.0 || #is_defined(eligible(game, e.unit, state.action))) {
+			if (tile.x != state.tile_x || tile.y != state.tile_y || e.unit.movement != e.unit.get_def().movement_per_turn || #is_defined(eligible(game, e.unit, state.action))) {
 				e.unit.set_terraforming(empty()); return;
 			}
 			tick(game, e.unit, state.action);
