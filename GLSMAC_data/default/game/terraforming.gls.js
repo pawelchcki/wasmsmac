@@ -29,17 +29,21 @@ const prerequisite_error = (game, owner, prerequisite) => {
 	}
 };
 const eligible = (game, unit, action) => {
-	if (action != 'farm' && action != 'mine' && action != 'forest' && action != 'road') { return 'Unknown terraforming action'; }
+	if (action != 'farm' && action != 'mine' && action != 'forest' && action != 'road' && action != 'level') { return 'Unknown terraforming action'; }
 	const def = unit.get_def(); const tile = unit.get_tile();
 	if (!def.can_terraform || !unit.is_land || unit.health != def.health_max) { return 'Requires a healthy ordinary Former'; }
-	if (!tile.is_land || tile.moisture != 1 || tile.rockiness != 1 || tile.features.xenofungus || tile.get_base() != null) { return 'Work currently supports flat arid non-base land'; }
+	if (!tile.is_land || tile.features.xenofungus || tile.get_base() != null) { return 'Work requires non-fungal non-base land'; }
+	if (action == 'level') {
+		if (tile.rockiness <= 1) { return 'Terrain is already level'; }
+	} else if (tile.moisture != 1 || tile.rockiness != 1) { return 'Work currently supports flat arid land'; }
+	if (describe(game,unit,action) == null) { return 'Terraforming source declaration is missing'; }
 	if (tile.is_locked()) { return 'Terraforming tile is locked'; }
 	for (other of tile.get_units()) {
 		if (other.id != unit.id && other.get_terraforming().active) { return 'Multiple Former work is not supported yet'; }
 	}
 	const data = game.get_tm().get_terraforming(tile.x, tile.y);
-	if (data[action]) { return 'Improvement already exists'; }
-	if (data.forest && action != 'road' || action == 'forest' && (data.mine || data.solar)) { return 'This improvement replacement is not supported yet'; }
+	if (action != 'level' && data[action]) { return 'Improvement already exists'; }
+	if (action != 'level' && (data.forest && action != 'road' || action == 'forest' && (data.mine || data.solar))) { return 'This improvement replacement is not supported yet'; }
 	const rules = game.get('terraforming_rules'); const rule = rules[action];
 	return prerequisite_error(game, unit.owner, rule.prerequisite);
 };
@@ -77,18 +81,27 @@ const tick = (game, unit, action) => {
 		// A cancelled first work tick can be ordered again while exhausted.
 		// It resumes next turn; issuing this order earns no extra work.
 		previous.active = true; previous.last_turn = game.get_turn();
-		unit.set_terraforming(previous); return;
+		unit.set_terraforming(previous); return 0;
 	}
+	let terrain_receipt = 0;
 	if (completed + 2 >= required) {
+		if (action == 'level') {
+			// Accepted original rockiness_raw2→1 maps through the existing
+			// importer to native ROCKY3→ROLLING2. The next category is an
+			// explicit application step until independently recorded.
+			terrain_receipt = game.get_tm().apply_terrain([{x:tile.x + 0,y:tile.y + 0,rockiness:tile.rockiness - 1}],[unit.id + 0]);
+		} else {
 		const data = flags(game, tile); data[action] = true;
 		if (action == 'forest') { data.farm = false; }
 		game.get_tm().set_terraforming(tile.x, tile.y, data);
+		}
 		unit.set_terraforming(empty());
 	} else {
 		unit.set_terraforming({action: action, work_units: completed + 2, required_work: required, last_turn: game.get_turn(),
 			previous_work_units: completed, previous_movement: movement, previous_moved: moved, tile_x: tile.x, tile_y: tile.y, active: true});
 	}
 	unit.movement = 0.0; unit.moved_this_turn = true;
+	return terrain_receipt;
 };
 return {
 	flags: flags,
@@ -101,6 +114,17 @@ return {
 		const unit = #include('./unit_orders').resolve(e.game, e.data);
 		if (#is_defined(e.data.replace_existing) && #typeof(e.data.replace_existing) != 'Bool') { return 'Replacement confirmation must be boolean'; }
 		if (needs_confirmation(e.game, unit, e.data.action) && (!#is_defined(e.data.replace_existing) || !e.data.replace_existing)) { return 'Improvement replacement requires confirmation'; }
+	},
+	validate_plan_step:(game,unit,action) => {
+		const plan = unit.get_automation();
+		if (plan.command == '' || plan.owner != unit.owner || plan.issued_turn > game.get_turn()) { return 'Worker plan is not current'; }
+		const event = {caller:unit.owner + 0,data:{unit_id:unit.id + 0}}; event.game = game;
+		const error = #include('./unit_orders').validate(event,false); if (#is_defined(error)) { return error; }
+		if (unit.movement <= 0.0 || unit.movement > unit.get_def().movement_per_turn) { return 'Worker plan has no valid movement budget'; }
+		const reason = eligible(game,unit,action); if (#is_defined(reason)) { return reason; }
+		const state = unit.get_terraforming();
+		if (state.active && state.last_turn >= game.get_turn()) { return 'Worker already received its turn credit'; }
+		if (needs_confirmation(game,unit,action)) { return 'Worker plan cannot invent replacement consent'; }
 	},
 	start: tick,
 	cancel: (game, unit) => {
