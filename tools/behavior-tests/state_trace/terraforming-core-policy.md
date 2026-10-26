@@ -100,3 +100,45 @@ Normal-play income will reuse the existing actual base energy allocation's
 economy share once per completed turn as declared application policy. Original
 opening treasury, income timing and height fee formulas remain unsupported until
 recorded separately. The technology waiver never waives fees.
+
+## First foundation checkpoint: verified, incomplete action coverage
+
+The first native runtime is bound to source `ffa9d296` (C++ tree
+`ea493cd3c36650d14c12246596da5c22cb0d3201`), FastDebug/Emscripten 4.0.22.
+Its JS SHA256 is
+`c062e77ab4bb735e8184ea1588b51947d8740e5b7851a13e0a3546b955d5e1de`;
+WASM SHA256 is
+`7cbedfef7c7a73c400bc922af02e0d91fa7849e8fb29e01f10ce7781302252c5`.
+Current host scripts override embedded scripts in the strict isolated workers.
+
+Focused native checks passed 68 scenarios / 213 assertions across terrain,
+source-component and land/naval production suites. The terrain suite includes
+all-seven-owner completed-turn income from declared resource inputs, pure
+preflight, unknown raw flag preservation, an actual capable worker's controlled
+land/water transition, ordinary retreat validation, reverse edit and LIFO undo.
+These synthetic engine edits are application invariants. They are not original
+height-operation, fee or animation observations.
+
+The exact main `048596fe` CI engine (`40396556071`, artifact `12688085153`)
+rejects the new native naval recipe and lacks the full terrain observer. A
+separate actual mounted-control probe records visible Raise and Lower rows
+submitting zero commands while preserving its complete native fixture graph.
+That control baseline contains two owners, three units and one base; it is not
+seven-owner original agreement. Preliminary reports with invalid test syntax are
+retained separately and are not valid feature evidence.
+
+The existing four work effects remain the only action completion implementation
+at this checkpoint. The full parser inventory, worker metadata and native edit
+API do not count the other actions, sea work variants, height commands or ten
+automation/composite orders as implemented. Original height effects, duration,
+fees, refunds, cascades, victim handling and energy timing remain unaccepted or
+unsupported. Subsequent batches must complete the full requested matrix.
+
+The same immutable runtime also passed 14 compatibility suites: 203 scenarios /
+880 assertions, including existing Former controls/work/first ticks/movement,
+Rules and unit production codecs, research, turn playability, punctuation input
+and exact Float transport. An independent Python raw-bits audit confirmed all
+eight numeric samples, including `1/3` and signed zero, using actual native
+execution. The strict JSON value equals the exported native binary32 value;
+reconstructing merely the same rounded binary32 from a shorter JSON decimal is
+not accepted. These checks add no original terraforming agreement totals.
