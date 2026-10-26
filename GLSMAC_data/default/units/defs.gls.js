@@ -72,7 +72,7 @@ const result = {
 		}
 		if (#is_defined(rules)) {
 			const declared = #clone(rules.definitions);
-			if (#is_defined(rules.sea_former) && rules.sea_former != null) { declared :+ rules.sea_former; }
+			if (#is_defined(rules.sea_former) && rules.sea_former != null) { declared :+ #clone(rules.sea_former); }
 			for (entry of declared) {
 				// Static portrait until the game's conventional vehicle renderer
 				// supports installed CVR models. Combat/morale remain real data.

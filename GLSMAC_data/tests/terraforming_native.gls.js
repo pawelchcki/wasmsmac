@@ -1,6 +1,7 @@
 // Native tile mutation prerequisites. No original work policy is simulated.
 const behavior = #include('./_behavior');
 const empty = () => { return {road: false, farm: false, mine: false, forest: false}; };
+const fields = (object) => { let count = 0; for (key in object) { count++; } return count; };
 const fixture = () => { const f = test.founding_fixture(); f.enable_economy(); return f; };
 const reject = (f, action) => {
 	const terrain = f.terrain_snapshot(); const before = f.snapshot(); const inspected = f.inspect();
@@ -16,7 +17,7 @@ behavior.scenario('complete native terrain reads expose detached raw state witho
 	test.assert(state.version == 1 && state.x == 2 && state.y == 2 && state.width == 4 && state.height == 4);
 	test.assert(state.elevation == {center: 64, left: 64, top: 64, right: 64, bottom: 64});
 	test.assert(state.is_land && !state.is_water && state.moisture == 1 && state.rockiness == 1);
-	test.assert(#sizeof(state.features) == 15 && #sizeof(state.terraforming) == 13);
+	test.assert(fields(state.features) == 15 && fields(state.terraforming) == 13);
 	test.assert(state.terraforming == tm.get_terraforming(2, 2) && state.terraforming_raw == 0);
 	test.assert(state.imported == {active: false, source_elevation: null, source_water: null, source_corners: null});
 	test.assert(state.neighbors.W == {x: 0, y: 2} && state.neighbors.E == {x: 0, y: 2});
@@ -198,7 +199,8 @@ behavior.scenario('native treasury conserves credits with authoritative affordab
 	let failed = false; try { player.change_energy(1,21,f.game.get_turn()); } catch { : (e) => { failed = true; } }
 	test.assert(failed && f.snapshot() == paid);
 	const codec = f.energy_codec_probe(); test.assert(codec.copy && codec.roundtrip && codec.lifetime && codec.unchanged);
-	f.with_write(() => { player.rollback_energy(debit); player.rollback_energy(grant); });
+	player.validate_energy_rollback(debit);
+	f.with_write(() => { player.rollback_energy(debit); player.validate_energy_rollback(grant); player.rollback_energy(grant); });
 	test.assert(f.snapshot() == before && player.get_energy_state().credits == 0);
 });
 
@@ -213,4 +215,68 @@ behavior.scenario('income credits once per turn and equal-balance later transact
 	}
 	f.with_write(() => { player.rollback_energy(zero); player.rollback_energy(income); });
 	test.assert(player.get_energy_state() == {credits:0,last_income_turn:0});
+});
+
+behavior.scenario('completed real seven-player turn collects finite native economy once without granting opening funds', () => {
+	const f = test.natural_startup_fixture(16,16,'flat-arid');
+	test.assert(f.game.get_settings().global.rules.get_terraforming_policy().ignore_technologies, 'Normal native default waives worker technologies');
+	#include('./_natural_startup_mechanics')(f);
+	f.game.get_settings().global.rules.set_terraforming_ignore_technologies(true);
+	// Authored resource inputs: each city center and its one Worker generate
+	// seven energy. The existing 50% labs allocation leaves seven economy.
+	f.game.on('configure', (e) => {
+		f.game.get_tm().on('get_tile_resources', (tile) => { return {NUTRIENTS:2,MINERALS:1,ENERGY:7}; });
+	});
+	let failed = false;
+	f.game.on('event_result', (e) => { if (!e.success) { failed = true; } });
+	f.initialize_single_player('GAIANS','Citizen'); f.start_world();
+	test.assert(!failed && #sizeof(f.game.get_players()) == 7 && #sizeof(f.game.get_bm().get_bases()) == 7);
+	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:0,last_income_turn:0}); }
+	for (base of f.game.get_bm().get_bases()) { test.assert(base.get_intake().ENERGY == 14 && base.get_consumption().ENERGY == 0); }
+	const before = f.audit_snapshot(); const queues = f.audit_inspect();
+	let rejected = false;
+	try { #include('../default/game/energy_income').plan(f.game); } catch { : (e) => { rejected = true; } }
+	f.game.get_tm().validate_terrain([{x:0,y:0,rockiness:2}], []);
+	test.assert(rejected && f.audit_snapshot() == before && f.audit_inspect() == queues, 'Pending turn and pure terrain preflight cannot collect or mutate the native graph');
+	f.game.event('complete_turn', {}); f.process_events();
+	test.assert(!failed && f.game.get_turn() == 2);
+	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:7,last_income_turn:1}); }
+	f.process_events();
+	for (player of f.game.get_players()) { test.assert(player.get_energy_state() == {credits:7,last_income_turn:1}, 'Draining the same completed phase cannot credit twice'); }
+});
+
+behavior.scenario('explicit native worker survives its own class change with retreat validation and reversible terrain', () => {
+	const f = fixture(); f.configure('arid'); const tm = f.game.get_tm(); let worker = null;
+	f.with_write(() => {
+		f.game.get_um().despawn_unit(f.unit_id);
+		f.game.get_um().define_unit('AUTHORED_ENGINE_WORKER', {name:'Engine Worker',morale:'SYNTHETIC',type:'static',movement_type:'land',movement_per_turn:1,
+			can_terraform:true,combat:{kind:'civilian',offense:0,defense:1,reactor:1},
+			render:{type:'sprite',file:'synthetic.pcx',x:0,y:0,w:1,h:1,cx:0,cy:0}});
+		const data = {def:'AUTHORED_ENGINE_WORKER',morale:1,health:1.0}; data.owner = f.owner; data.tile = tm.get_tile(2,2);
+		worker = f.game.get_um().spawn_unit(data);
+	});
+	const terrain = f.terrain_snapshot(); const graph = f.snapshot(); let down = 0; let reverse = 0;
+	const sink = [{x:2,y:2,elevation:{left:(0-1000),top:(0-1000),right:(0-1000),bottom:(0-1000)}}];
+	tm.validate_terrain(sink,[worker.id]);
+	test.assert(f.terrain_snapshot() == terrain && f.snapshot() == graph, 'Preflight is pure');
+	f.with_write(() => { down = tm.apply_terrain(sink,[worker.id]); });
+	test.assert(worker.get_tile().is_water && worker.needs_orders() && worker.get_def().can_terraform);
+	const retreat = {caller:f.owner.id}; retreat.game = f.game; retreat.data = {}; retreat.data.unit = worker; retreat.data.tile = tm.get_tile(2,0);
+	test.assert(!#is_defined(#include('../default/game/event/move_unit').validate(retreat)), 'Ordinary compatible retreat remains valid after self-transition');
+	f.with_write(() => { reverse = tm.apply_terrain([{x:2,y:2,elevation:{left:64,top:64,right:64,bottom:64}}],[worker.id]); });
+	test.assert(worker.get_tile().is_land && worker.needs_orders());
+	tm.validate_terrain_rollback(reverse);
+	f.with_write(() => { tm.rollback_terrain(reverse); tm.validate_terrain_rollback(down); tm.rollback_terrain(down); });
+	test.assert(f.terrain_snapshot() == terrain && f.snapshot() == graph, 'LIFO terrain undo restores the complete controlled world without moving or losing its worker');
+});
+
+behavior.scenario('named terrain edits preserve unknown raw source flags outside the supported dictionaries', () => {
+	const f = fixture(); f.configure('terrain_extra_flags'); const tm = f.game.get_tm(); const before = f.terrain_snapshot();
+	const state = tm.get_terrain_state(2,2); const improvements = state.terraforming; const features = state.features;
+	improvements.road = true; features.xenofungus = true; let token = 0;
+	f.with_write(() => { token = tm.apply_terrain([{x:2,y:2,terraforming:improvements,features:features}], []); });
+	const changed = tm.get_terrain_state(2,2);
+	test.assert(changed.features_raw == 32773 && changed.terraforming_raw > 32768 && changed.terraforming.sensor && changed.terraforming.road);
+	f.with_write(() => { tm.rollback_terrain(token); });
+	test.assert(f.terrain_snapshot() == before);
 });

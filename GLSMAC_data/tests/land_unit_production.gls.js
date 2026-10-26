@@ -124,8 +124,10 @@ behavior.scenario('source-capable naval worker completes at a real adjacent wate
 	const before = f.snapshot(); const state = f.inspect(); const terrain = f.terrain_snapshot();
 	const receipt = process(f, 2, 43); const unit = f.game.um.get_unit(state.next_unit_id);
 	test.assert(unit.get_def().can_terraform && unit.is_water && unit.movement == 4.0);
-	test.assert(unit.owner == f.owner.id && unit.get_tile().is_water && unit.get_tile() == f.base.get_tile().W);
-	test.assert(f.base.get_size() == 1 && f.base.get_production().minerals == 3 && f.terrain_snapshot() == terrain);
+	test.assert(unit.owner == f.owner.id && unit.get_tile().is_water && unit.get_tile() == f.base.get_tile().get_W());
+	test.assert(f.base.get_size() == 1, 'Naval worker must not consume a citizen');
+	test.assert(f.base.get_production().minerals == 3, 'Actual naval project: ' + #to_string(f.base.get_production()));
+	test.assert(f.terrain_snapshot() == terrain, 'Naval launch must not rewrite terrain');
 	f.with_write(() => { f.base.rollback_unit_production(receipt.unit_receipt); });
 	test.assert(f.snapshot() == before && f.inspect().next_unit_id == state.next_unit_id && f.terrain_snapshot() == terrain);
 });

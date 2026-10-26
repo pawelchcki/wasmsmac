@@ -1327,6 +1327,10 @@ struct ProductionFixture : gc::Object {
 		else if ( kind == "wrong_def" ) { unit->m_def = game.m_um->GetUnitDef( "Scout" ); }
 		else if ( kind == "water" ) { unit->GetTile()->is_water_tile = true; }
 		else if ( kind == "locked" ) { unit->GetTile()->Lock( 1 ); }
+		else if ( kind == "terrain_extra_flags" ) {
+			unit->GetTile()->features = uint16_t( 0x8000 ) | backend::map::tile::FEATURE_RIVER;
+			unit->GetTile()->terraforming = uint16_t( 0x8000 ) | backend::map::tile::TERRAFORMING_SENSOR;
+		}
 		else if ( kind == "sensor" ) { unit->GetTile()->terraforming |= backend::map::tile::TERRAFORMING_SENSOR; }
 		else if ( kind == "imported_arid" ) {
 			// Declared resource input for read-only provenance coverage, not an

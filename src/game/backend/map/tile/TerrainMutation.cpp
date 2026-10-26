@@ -23,12 +23,13 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 	std::map< elevation_t*, elevation_t > vertices;
 	const auto integer = [ & ]( const gse::value::object_properties_t& object, const char* key, const int64_t minimum, const int64_t maximum ) {
 		const auto it = object.find( key );
-		if ( it == object.end() || it->second->type != gse::VT_INT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch needs integer " + std::string( key ) ); }
-		const auto number = static_cast< const gse::value::Int* >( it->second )->value;
+		if ( it == object.end() || it->second->Deref()->type != gse::VT_INT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch needs integer " + std::string( key ) ); }
+		const auto number = static_cast< const gse::value::Int* >( it->second->Deref() )->value;
 		if ( number < minimum || number > maximum ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch value outside bounds: " + std::string( key ) ); }
 		return number;
 	};
 	for ( auto* value : patches ) {
+		value = value->Deref();
 		if ( value->type != gse::VT_OBJECT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch must be an object" ); }
 		const auto& object = static_cast< const gse::value::Object* >( value )->value;
 		for ( const auto& entry : object ) {
@@ -45,20 +46,20 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 		if ( object.count( "moisture" ) ) { patch.moisture = integer( object, "moisture", MOISTURE_NONE, MOISTURE_RAINY ); }
 		if ( object.count( "rockiness" ) ) { patch.rockiness = integer( object, "rockiness", ROCKINESS_NONE, ROCKINESS_ROCKY ); }
 		const auto flags = [ & ]( const char* key, const std::vector< std::pair< std::string, uint16_t > >& names ) {
-			auto* data = object.at( key );
+			auto* data = object.at( key )->Deref();
 			if ( data->type != gse::VT_OBJECT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain flags must be an object" ); }
 			const auto& values = static_cast< const gse::value::Object* >( data )->value;
 			if ( values.size() != names.size() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain flags require every named boolean" ); }
 			uint16_t result = 0;
 			for ( const auto& name : names ) {
 				const auto found = values.find( name.first );
-				if ( found == values.end() || found->second->type != gse::VT_BOOL ) { GSE_ERROR( gse::EC.INVALID_CALL, "Invalid terrain boolean: " + name.first ); }
-				if ( static_cast< const gse::value::Bool* >( found->second )->value ) { result |= name.second; }
+				if ( found == values.end() || found->second->Deref()->type != gse::VT_BOOL ) { GSE_ERROR( gse::EC.INVALID_CALL, "Invalid terrain boolean: " + name.first ); }
+				if ( static_cast< const gse::value::Bool* >( found->second->Deref() )->value ) { result |= name.second; }
 			}
 			return result;
 		};
 		if ( object.count( "features" ) ) {
-			patch.features = flags( "features", {
+			patch.features = ( tile->features & ~uint16_t( 0x7fff ) ) | flags( "features", {
 				{ "river", FEATURE_RIVER }, { "monolith", FEATURE_MONOLITH }, { "xenofungus", FEATURE_XENOFUNGUS },
 				{ "jungle", FEATURE_JUNGLE }, { "uranium", FEATURE_URANIUM }, { "geothermal", FEATURE_GEOTHERMAL },
 				{ "unity_pod", FEATURE_UNITY_POD }, { "volcano", FEATURE_VOLCANO }, { "sunny_mesa", FEATURE_SUNNY_MESA },
@@ -68,7 +69,7 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 			} );
 		}
 		if ( object.count( "terraforming" ) ) {
-			patch.terraforming = flags( "terraforming", {
+			patch.terraforming = ( tile->terraforming & ~uint16_t( 0x1fff ) ) | flags( "terraforming", {
 				{ "road", TERRAFORMING_ROAD }, { "mag_tube", TERRAFORMING_MAG_TUBE }, { "forest", TERRAFORMING_FOREST },
 				{ "farm", TERRAFORMING_FARM }, { "soil_enricher", TERRAFORMING_SOIL_ENRICHER }, { "solar", TERRAFORMING_SOLAR },
 				{ "mine", TERRAFORMING_MINE }, { "condenser", TERRAFORMING_CONDENSER }, { "mirror", TERRAFORMING_MIRROR },
@@ -76,7 +77,7 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 			} );
 		}
 		if ( object.count( "elevation" ) ) {
-			auto* value = object.at( "elevation" );
+			auto* value = object.at( "elevation" )->Deref();
 			if ( value->type != gse::VT_OBJECT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain elevation requires four corner integers" ); }
 			const auto& corners = static_cast< const gse::value::Object* >( value )->value;
 			if ( corners.size() != 4 ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain elevation requires four corner integers" ); }
@@ -93,6 +94,7 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 	}
 	TerrainRecord record; record.world = map->m_terrain_identity;
 	for ( auto* value : workers ) {
+		value = value->Deref();
 		if ( value->type != gse::VT_INT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain participant must be a live worker ID" ); }
 		const auto id = static_cast< const gse::value::Int* >( value )->value;
 		auto* worker = id > 0 && m_game->GetUM() ? m_game->GetUM()->GetUnit( id ) : nullptr;
