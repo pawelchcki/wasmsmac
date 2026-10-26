@@ -34,6 +34,16 @@ behavior.scenario('native input Enter submits unchanged state and unsupported ke
  }
  test.assert(state.get_value() == 'Ready');
 });
+behavior.scenario('punctuation scan codes preserve native text input and modifier delivery', () => {
+ const state = test.input_state('');
+ test.assert(key(state, 'LEFTBRACKET', '[', 0, '').value == '[');
+ test.assert(key(state, 'RIGHTBRACKET', ']', 0, '').value == '[]');
+ test.assert(key(state, 'PERIOD', '.', 0, '').value == '[].');
+ test.assert(key(state, 'MINUS', '_', 1, '').value == '[]._');
+ for (code of ['LEFTBRACKET', 'RIGHTBRACKET', 'PERIOD', 'MINUS']) {
+  test.assert(key(state, code, '', 0, '') == {handled: false, changed: false, submitted: false, value: '[]._'});
+ }
+});
 behavior.scenario('native editor consumes printable map zoom letters as text with their exact case', () => {
  const state = test.input_state('');
  test.assert(key(state, 'X', 'x', 0, '') == {handled: true, changed: true, submitted: false, value: 'x'});
