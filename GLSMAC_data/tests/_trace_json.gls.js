@@ -5,12 +5,16 @@ const replace = (text, separator, replacement) => {
  for (part of #split(text, separator)) { if (!first) { result += replacement; } result += part; first = false; }
  return result;
 };
+// GSE's lexer treats a quote after ANY backslash as escaped, including an
+// even backslash pair. Build the slash from a literal that ends in x instead.
+const slash_parts = #split('\\x', 'x'); const slash = slash_parts[0] + '';
 const quoted = (text) => {
- let value = replace(text, '\\', '\\\\');
- value = replace(value, '"', '\\"');
- value = replace(value, '\n', '\\n');
- value = replace(value, '\r', '\\r');
- value = replace(value, '\t', '\\t');
+ let value = replace(text, slash, slash + slash);
+ value = replace(value, '"', slash + '"');
+ value = replace(value, '\n', slash + 'n');
+ value = replace(value, '\t', slash + 't');
+ // Other control bytes remain raw and strict JSON decoding rejects them;
+ // never reinterpret GSE's unsupported \r escape as the ordinary letter r.
  return '"' + value + '"';
 };
 const encode = (value) => {
