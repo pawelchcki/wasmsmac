@@ -8,9 +8,6 @@ const unchanged = (f, before) => {
 behavior.scenario('delayed management acknowledgement rejection retries without inventing city mutations', () => {
  const f = fixture(); const before = f.snapshot(); f.defer = true; f.open_menu(); f.double_click();
  test.assert(!f.popup.is_shown() && #sizeof(f.requests) == 1 && f.list.management_pending != null);
- const initial_token = f.requests[0].data.request_token;
- f.events.select_base(f.base); f.flush();
- test.assert(#sizeof(f.requests) == 1 && f.list.management_pending.request_token == initial_token, 'Ordinary repeated base selection retains its existing command');
  const pending = f.requests[0]; const wrong = {name: pending.name, caller: f.game.get_player().id, success: true};
  wrong.data = {} + pending.data; wrong.data.request_token = wrong.data.request_token + 1;
  f.events.emit('event_result', wrong); test.assert(f.list.management_pending != null && !f.popup.is_shown());
@@ -31,7 +28,36 @@ behavior.scenario('delayed management acknowledgement rejection retries without 
  f.delivered = 4; f.deliver(3, true);
  test.assert(f.popup.popup.id == 'base_screen' && f.management.base == f.base, 'Current receipt opens the city for the reopened report'); unchanged(f, before);
  f.escape(); test.assert(f.popup.popup.id == 'base_operations' && f.row().el.border == 'rgb(0,235,0),1');
- f.escape(); unchanged(f, before); f.view.root.remove();
+ f.escape(); unchanged(f, before);
+ // Report B owns/consumes Escape. The old preparation still exists when the
+ // actual mounted base icon delivers ordinary frontend selection notifications.
+ f.open_menu(); f.double_click(); test.assert(#sizeof(f.requests) == 5);
+ const report_token = f.requests[4].data.request_token;
+ f.open_menu(); f.escape();
+ test.assert(!f.popup.is_shown() && f.controller.session == null && f.list.management_pending.request_token == report_token);
+ const base_key = #to_string(f.base.id);
+ test.assert(#is_defined(f.list.bases[base_key]), 'The actual owned-city icon is mounted');
+ f.list.bases[base_key].item.emit('mousedown', {}); f.flush();
+ test.assert(#sizeof(f.requests) == 6, 'Ordinary base-icon intent must supersede an obsolete report continuation');
+ const ordinary_token = f.requests[5].data.request_token;
+ test.assert(ordinary_token != report_token);
+ // A second genuine ordinary icon selection still deduplicates its command.
+ f.list.bases[base_key].item.emit('mousedown', {}); f.flush();
+ test.assert(#sizeof(f.requests) == 6 && f.list.management_pending.request_token == ordinary_token);
+ f.delivered = 5; f.deliver(4, true);
+ test.assert(!f.popup.is_shown() && f.list.management_pending.request_token == ordinary_token); unchanged(f, before);
+ f.delivered = 6; f.deliver(5, true);
+ test.assert(f.popup.popup.id == 'base_screen' && f.management.base == f.base); unchanged(f, before);
+ f.escape(); test.assert(!f.popup.is_shown() && f.controller.session == null, 'Ordinary city close returns to the map without resurrecting a report');
+ // Conversely a report intent supersedes an ordinary pending command and
+ // returns to its own selected report after the authoritative city closes.
+ f.list.bases[base_key].item.emit('mousedown', {}); f.flush(); test.assert(#sizeof(f.requests) == 7);
+ const old_ordinary_token = f.requests[6].data.request_token;
+ f.open_menu(); f.double_click(); test.assert(#sizeof(f.requests) == 8 && f.requests[7].data.request_token != old_ordinary_token);
+ f.delivered = 7; f.deliver(6, true); test.assert(!f.popup.is_shown() && f.list.management_pending != null); unchanged(f, before);
+ f.delivered = 8; f.deliver(7, true); test.assert(f.popup.popup.id == 'base_screen' && f.management.base == f.base); unchanged(f, before);
+ f.escape(); test.assert(f.popup.popup.id == 'base_operations' && f.row().el.border == 'rgb(0,235,0),1'); f.escape();
+ unchanged(f, before); f.view.root.remove();
 });
 behavior.scenario('removed and replaced report callbacks cannot operate a successor or bypass another modal', () => {
  const f = fixture(); f.open_menu(); const old = f.row().el.get_handlers();

@@ -84,6 +84,8 @@ older city preparation is pending, then double-clicks the same city. A new repor
 session sends a fresh request token and selection epoch; the older response
 cannot consume its continuation. Its own successful native response opens the
 city and Escape returns to the selected report, preserving all captured owners.
-Ordinary repeated base-selection events still share their existing pending
-request. Native preparation remains authoritative and idempotent when no idle
+Only ordinary-to-ordinary base-selection repeats share a pending request.
+Transitions into or out of a report continuation use the current intent with a
+fresh token, including actual base-icon selection after a reopened report
+closes. An ordinary city close returns to the map without resurrecting a report. Native preparation remains authoritative and idempotent when no idle
 citizen needs reconciliation; a repeated no-op returns receipt zero.

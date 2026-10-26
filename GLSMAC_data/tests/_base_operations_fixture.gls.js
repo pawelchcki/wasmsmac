@@ -70,7 +70,14 @@ return (edited) => {
  p.modules.bottom_bar.pp = p;
  f.events.select_tile = (tile) => { const e = {}; e.tile = tile; f.events.emit('tile_select', e); f.map.emit('tile_preview', e); };
  f.events.select_unit = (unit) => { const e = {}; e.unit = unit; f.events.emit('unit_select', e); f.map.emit('unit_preview', e); };
- f.events.select_base = (base) => { const e = {}; e.base = base; f.events.emit('base_select', e); };
+ // Declared frontend notification transport: FR_BASE_SELECT calls
+ // BaseManager::SelectBase, which runs UpdateTilePreview, then emits
+ // base_preview/base_select.
+ // These notifications carry native wrappers; they perform no native writes.
+ f.events.select_base = (base) => {
+  const tile = {}; tile.tile = base.get_tile(); f.map.emit('tile_preview', tile);
+  const e = {}; e.base = base; f.map.emit('base_preview', e); f.events.emit('base_select', e);
+ };
  f.requests = []; f.delivered = 0; f.defer = false;
  f.events.event = (name, data) => { const request = {name: name}; request.data = data; f.requests :+ request; };
  f.deliver = (index, accepted) => {
