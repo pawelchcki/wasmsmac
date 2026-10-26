@@ -81,6 +81,12 @@ void Unit::SetOrder( const order_t order ) {
 	m_order = order;
 }
 
+void Unit::SetTerraformHomeFromProduction( const base::Base* base ) {
+	ASSERT( base && base->m_owner == m_owner && m_def->CanTerraform(), "Invalid worker production home" );
+	ASSERT( m_um->GetUnit( m_id ) == nullptr && m_terraform_home == 0, "Production home must precede unit publication" );
+	m_terraform_home = base->m_id;
+}
+
 bool Unit::ValidWork( const work_state_t& work, const map::Map* map ) {
 	if ( work.action.empty() ) {
 		return work.work_units == 0 && work.required_work == 0 && work.last_turn == 0 && work.previous_work_units == 0 &&

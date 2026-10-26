@@ -13,6 +13,8 @@
 namespace game {
 namespace backend {
 
+namespace base { class Base; }
+
 namespace slot {
 class Slot;
 }
@@ -63,6 +65,7 @@ public:
 	const bool NeedsOrders() const;
 	order_t GetOrder() const;
 	void SetOrder( order_t order );
+	void SetTerraformHomeFromProduction( const base::Base* base );
 	// Script-owned work policy, stored with the native unit so progress survives
 	// wrapper recreation, synchronization and manager serialization.
 	struct work_state_t {
