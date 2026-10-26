@@ -1,8 +1,14 @@
 // Strict detached-data transport only. Native wrappers/functions/undefined are
 // rejected instead of silently omitted. Python validates the resulting JSON.
 const replace = (text, separator, replacement) => {
- let result = ''; let first = true;
- for (part of #split(text, separator)) { if (!first) { result += replacement; } result += part; first = false; }
+ // Native split omits a terminal empty segment. Append one separator to
+ // preserve it, and reject split's CRLF normalization instead of losing data.
+ let result = ''; let restored = ''; let first = true;
+ for (part of #split(text + separator, separator)) {
+  if (!first) { result += replacement; restored += separator; }
+  result += part; restored += part; first = false;
+ }
+ if (restored != text) { throw Error('Trace string contains unsupported normalized control bytes'); }
  return result;
 };
 // GSE's lexer treats a quote after ANY backslash as escaped, including an

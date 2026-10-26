@@ -9,6 +9,11 @@ behavior.scenario('finite Float transport preserves its raw native binary32 valu
   #print('FLOAT_CODEC|' + text + '|' + #to_string(bits));
  }
  test.assert(#float_text_exact(1.0) == '1.0' && #float_text_exact(#to_float('-0')) == '-0.0');
+ const pieces = #split('\\x', 'x'); const slash = pieces[0] + '';
+ test.assert(encode(slash) == '"' + slash + slash + '"');
+ test.assert(encode('"') == '"' + slash + '""');
+ test.assert(encode('\n') == '"' + slash + 'n"');
+ test.assert(encode('\t') == '"' + slash + 't"');
  #print('TRACE_CODEC_JSON|' + encode({text: 'Gaia\'s "Landing"\\road\nline\ttab', value: 1.0 / 3.0, signed_zero: #to_float('-0'), integer: 1, boolean: true, empty: null}));
 });
 behavior.scenario('nonfinite and non-Float exact text requests fail explicitly', () => {
