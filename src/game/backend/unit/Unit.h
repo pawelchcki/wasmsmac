@@ -82,7 +82,7 @@ public:
 	struct automation_state_t {
 		std::string command;
 		int64_t epoch = 0, owner = 0, issued_turn = 0, last_turn = 0;
-		int64_t target_x = 0, target_y = 0, origin_x = 0, origin_y = 0, cursor = 0;
+		int64_t target_x = 0, target_y = 0, origin_x = 0, origin_y = 0, cursor = 0, phase = 0;
 	};
 
 	const std::string& GetMoraleString() const;
@@ -103,6 +103,8 @@ private:
 	work_state_t m_work;
 	automation_state_t m_automation;
 	int64_t m_terraform_home = 0;
+	int64_t m_home_revision = 0;
+	struct { int64_t token = 0, previous = 0, expected = 0; } m_home_undo;
 	static bool ValidAutomation( const automation_state_t& plan, const map::Map* map, const size_t owner );
 	static bool ValidWork( const work_state_t& work, const map::Map* map );
 	// Native callables can outlive their wrapper and even their manager.

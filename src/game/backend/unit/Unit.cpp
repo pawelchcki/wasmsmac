@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <cmath>
+#include <limits>
 
 #include "gse/context/Context.h"
 #include "gse/value/Object.h"
@@ -108,7 +109,7 @@ bool Unit::ValidAutomation( const automation_state_t& plan, const map::Map* map,
 	if ( plan.epoch < 0 ) { return false; }
 	if ( plan.command.empty() ) {
 		return plan.owner == 0 && plan.issued_turn == 0 && plan.last_turn == 0 && plan.target_x == 0 && plan.target_y == 0 &&
-			plan.origin_x == 0 && plan.origin_y == 0 && plan.cursor == 0;
+			plan.origin_x == 0 && plan.origin_y == 0 && plan.cursor == 0 && plan.phase == 0;
 	}
 	static const std::unordered_set< std::string > commands = {
 		"farm_solar_road", "farm_mine_road", "road_to", "tube_to", "auto_roads", "auto_tubes",
@@ -120,7 +121,7 @@ bool Unit::ValidAutomation( const automation_state_t& plan, const map::Map* map,
 	};
 	return commands.count( plan.command ) && plan.epoch > 0 && plan.owner == static_cast< int64_t >( owner ) &&
 		plan.issued_turn > 0 && plan.last_turn >= 0 &&
-		plan.cursor >= 0 && plan.cursor <= 1000000 && valid_tile( plan.target_x, plan.target_y ) && valid_tile( plan.origin_x, plan.origin_y );
+		plan.cursor >= 0 && plan.cursor <= 1000000 && ( plan.phase == 0 || plan.phase == 1 ) && valid_tile( plan.target_x, plan.target_y ) && valid_tile( plan.origin_x, plan.origin_y );
 }
 
 void Unit::CheckLive( GSE_CALLABLE ) const {
@@ -166,9 +167,9 @@ const types::Buffer Unit::Serialize( const Unit* unit ) {
 	}
 	if ( unit->m_automation.epoch != 0 ) {
 		const auto& plan = unit->m_automation;
-		buf.WriteString( "unit-automation-v1" ); buf.WriteString( plan.command );
+		buf.WriteString( "unit-automation-v2" ); buf.WriteString( plan.command );
 		buf.WriteInt( plan.epoch ); buf.WriteInt( plan.owner ); buf.WriteInt( plan.issued_turn ); buf.WriteInt( plan.last_turn );
-		buf.WriteInt( plan.target_x ); buf.WriteInt( plan.target_y ); buf.WriteInt( plan.origin_x ); buf.WriteInt( plan.origin_y ); buf.WriteInt( plan.cursor );
+		buf.WriteInt( plan.target_x ); buf.WriteInt( plan.target_y ); buf.WriteInt( plan.origin_x ); buf.WriteInt( plan.origin_y ); buf.WriteInt( plan.cursor ); buf.WriteInt( plan.phase );
 	}
 	if ( unit->m_terraform_home != 0 ) { buf.WriteString( "unit-terraform-home-v1" ); buf.WriteInt( unit->m_terraform_home ); }
 	return buf;
@@ -207,11 +208,12 @@ Unit* Unit::Deserialize( GSE_CALLABLE, types::Buffer& buf, UnitManager* um ) {
 				work.previous_work_units = buf.ReadInt(); work.previous_movement = buf.ReadFloat(); work.previous_moved = buf.ReadBool();
 				work.tile_x = buf.ReadInt(); work.tile_y = buf.ReadInt();
 				if ( work.action.empty() || !ValidWork( work, um->GetMap() ) ) { THROW( "Invalid serialized unit work" ); }
-			} else if ( tag == "unit-automation-v1" && !seen_plan ) {
+			} else if ( ( tag == "unit-automation-v1" || tag == "unit-automation-v2" ) && !seen_plan ) {
 				seen_plan = true;
 				plan.command = buf.ReadString(); plan.epoch = buf.ReadInt(); plan.owner = buf.ReadInt();
 				plan.issued_turn = buf.ReadInt(); plan.last_turn = buf.ReadInt(); plan.target_x = buf.ReadInt(); plan.target_y = buf.ReadInt();
 				plan.origin_x = buf.ReadInt(); plan.origin_y = buf.ReadInt(); plan.cursor = buf.ReadInt();
+				plan.phase = tag == "unit-automation-v2" ? buf.ReadInt() : ( plan.command.empty() || plan.command == "auto_home_base" ? 0 : 1 );
 				if ( plan.epoch == 0 || !ValidAutomation( plan, um->GetMap(), slot->GetIndex() ) ) { THROW( "Invalid serialized automation plan" ); }
 			} else if ( tag == "unit-terraform-home-v1" && !seen_home ) {
 				seen_home = true; terraform_home = buf.ReadInt();
@@ -358,7 +360,34 @@ WRAPIMPL_DYNAMIC_GETTERS( Unit )
 				auto* base = bm ? bm->GetBase( id ) : nullptr;
 				if ( !base || base->m_owner != unit->m_owner ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terraforming home must be a live owned base" ); }
 			}
+			if ( id == unit->m_terraform_home ) { return VALUE( gse::value::Int,, 0 ); }
+			if ( unit->m_home_revision >= std::numeric_limits< int64_t >::max() - 1 ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terraforming home identities exhausted" ); }
+			unit->m_home_undo = { ++unit->m_home_revision, unit->m_terraform_home, id };
 			unit->m_terraform_home = id;
+			return VALUE( gse::value::Int,, unit->m_home_revision );
+		} )
+	},
+
+	{
+		"validate_terraform_home_rollback", NATIVE_CALL( handle = m_order_handle ) {
+			N_EXPECT_ARGS( 1 ); N_GETVALUE( token, 0, Int ); auto* unit = *handle;
+			if ( !unit ) { GSE_ERROR( gse::EC.INVALID_CALL, "Unit no longer exists" ); }
+			unit->CheckLive( GSE_CALL );
+			if ( token <= 0 || token != unit->m_home_undo.token || token != unit->m_home_revision || unit->m_terraform_home != unit->m_home_undo.expected ) {
+				GSE_ERROR( gse::EC.INVALID_CALL, "Terraforming home receipt is stale" );
+			}
+			return VALUE( gse::value::Undefined );
+		} )
+	},
+	{
+		"rollback_terraform_home", NATIVE_CALL( handle = m_order_handle ) {
+			N_EXPECT_ARGS( 1 ); N_GETVALUE( token, 0, Int ); auto* unit = *handle;
+			if ( !unit ) { GSE_ERROR( gse::EC.INVALID_CALL, "Unit no longer exists" ); }
+			unit->CheckLive( GSE_CALL ); unit->m_um->m_game->CheckRW( GSE_CALL ); unit->CheckCustomMutation( GSE_CALL );
+			if ( token <= 0 || token != unit->m_home_undo.token || token != unit->m_home_revision || unit->m_terraform_home != unit->m_home_undo.expected ) {
+				GSE_ERROR( gse::EC.INVALID_CALL, "Terraforming home receipt is stale" );
+			}
+			unit->m_terraform_home = unit->m_home_undo.previous; ++unit->m_home_revision; unit->m_home_undo.token = 0;
 			return VALUE( gse::value::Undefined );
 		} )
 	},
@@ -369,12 +398,12 @@ WRAPIMPL_DYNAMIC_GETTERS( Unit )
 			if ( !unit ) { GSE_ERROR( gse::EC.INVALID_CALL, "Unit no longer exists" ); }
 			unit->CheckLive( GSE_CALL ); const auto& plan = unit->m_automation;
 			return VALUEEXT( gse::value::Object, GSE_CALL, {
-				{ "version", VALUE( gse::value::Int,, 1 ) }, { "command", VALUE( gse::value::String,, plan.command ) },
+				{ "version", VALUE( gse::value::Int,, 2 ) }, { "command", VALUE( gse::value::String,, plan.command ) },
 				{ "epoch", VALUE( gse::value::Int,, plan.epoch ) }, { "owner", VALUE( gse::value::Int,, plan.owner ) },
 				{ "issued_turn", VALUE( gse::value::Int,, plan.issued_turn ) }, { "last_turn", VALUE( gse::value::Int,, plan.last_turn ) },
 				{ "target_x", VALUE( gse::value::Int,, plan.target_x ) }, { "target_y", VALUE( gse::value::Int,, plan.target_y ) },
 				{ "origin_x", VALUE( gse::value::Int,, plan.origin_x ) }, { "origin_y", VALUE( gse::value::Int,, plan.origin_y ) },
-				{ "cursor", VALUE( gse::value::Int,, plan.cursor ) },
+				{ "cursor", VALUE( gse::value::Int,, plan.cursor ) }, { "phase", VALUE( gse::value::Int,, plan.phase ) },
 			} );
 		} )
 	},
@@ -384,14 +413,14 @@ WRAPIMPL_DYNAMIC_GETTERS( Unit )
 			if ( !unit ) { GSE_ERROR( gse::EC.INVALID_CALL, "Unit no longer exists" ); }
 			unit->CheckLive( GSE_CALL ); unit->m_um->m_game->CheckRW( GSE_CALL ); unit->CheckCustomMutation( GSE_CALL );
 			N_EXPECT_ARGS( 1 ); N_GETVALUE( data, 0, Object );
-			if ( data.size() != 11 ) { GSE_ERROR( gse::EC.INVALID_CALL, "Expected complete automation state" ); }
+			if ( data.size() != 12 ) { GSE_ERROR( gse::EC.INVALID_CALL, "Expected complete automation state" ); }
 			N_GETPROP( version, data, "version", Int ); N_GETPROP( command, data, "command", String );
 			N_GETPROP( epoch, data, "epoch", Int ); N_GETPROP( owner, data, "owner", Int );
 			N_GETPROP( issued_turn, data, "issued_turn", Int ); N_GETPROP( last_turn, data, "last_turn", Int );
 			N_GETPROP( target_x, data, "target_x", Int ); N_GETPROP( target_y, data, "target_y", Int );
-			N_GETPROP( origin_x, data, "origin_x", Int ); N_GETPROP( origin_y, data, "origin_y", Int ); N_GETPROP( cursor, data, "cursor", Int );
-			const automation_state_t plan { command, epoch, owner, issued_turn, last_turn, target_x, target_y, origin_x, origin_y, cursor };
-			if ( version != 1 || !ValidAutomation( plan, unit->m_um->GetMap(), unit->m_owner->GetIndex() ) ) {
+			N_GETPROP( origin_x, data, "origin_x", Int ); N_GETPROP( origin_y, data, "origin_y", Int ); N_GETPROP( cursor, data, "cursor", Int ); N_GETPROP( phase, data, "phase", Int );
+			const automation_state_t plan { command, epoch, owner, issued_turn, last_turn, target_x, target_y, origin_x, origin_y, cursor, phase };
+			if ( version != 2 || !ValidAutomation( plan, unit->m_um->GetMap(), unit->m_owner->GetIndex() ) ) {
 				GSE_ERROR( gse::EC.INVALID_CALL, "Invalid native automation state" );
 			}
 			unit->m_automation = plan;
