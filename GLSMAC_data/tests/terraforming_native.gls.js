@@ -365,3 +365,39 @@ behavior.scenario('normal seven-player opening receives source reserves plus onl
 	test.assert(bonus_owner == 1);
 	const before = f.audit_snapshot(); f.process_events(); test.assert(f.audit_snapshot() == before, 'Repeated event drain cannot grant source reserves again');
 });
+
+behavior.scenario('improvement owners are explicit unknown until constructed and survive transfer receiver codec and LIFO undo', () => {
+	const f = fixture(); const tm = f.game.get_tm(); const before = f.terrain_snapshot();
+	const initial = tm.get_terrain_state(2,2); for (name in initial.terraforming_owners) { test.assert(initial.terraforming_owners[name] == (0-1)); }
+	const flags = initial.terraforming; flags.sensor = true; flags.road = true;
+	const owners = initial.terraforming_owners; owners.sensor = f.owner.id + 0; let first = 0; let transferred = 0;
+	f.with_write(() => { first = tm.apply_terrain([{x:2,y:2,terraforming:flags,terraforming_owners:owners}],[]); });
+	const built = tm.get_terrain_state(2,2);
+	test.assert(built.terraforming_owners.sensor == f.owner.id && built.terraforming_owners.road == (0-1), 'An existing unknown road is not guessed friendly');
+	const codec = f.canonical_terrain_codec_probe(); test.assert(codec.roundtrip && codec.stable && codec.malformed_rejected && codec.independent);
+	owners.sensor = 0;
+	f.with_write(() => { transferred = tm.apply_terrain([{x:2,y:2,terraforming_owners:owners}],[]); });
+	test.assert(tm.get_terrain_state(2,2).terraforming_owners.sensor == 0);
+	reject(f, () => { f.with_write(() => { tm.rollback_terrain(first); }); });
+	f.with_write(() => { tm.rollback_terrain(transferred); tm.rollback_terrain(first); });
+	test.assert(f.terrain_snapshot() == before);
+});
+behavior.scenario('malformed absent or nonlive enhancement owners reject the entire transaction before tile changes', () => {
+	const f = fixture(); const tm = f.game.get_tm(); const empty = tm.get_terrain_state(2,2).terraforming_owners;
+	for (invalid of [1,'owner',{}, {sensor:1}]) {
+		reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,moisture:3,terraforming_owners:invalid}],[]); }); });
+	}
+	empty.sensor = f.owner.id + 0;
+	reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,terraforming_owners:empty}],[]); }); });
+});
+behavior.scenario('equal-state terrain ABA fences old receipts while proper LIFO undo restores the predecessor revision', () => {
+	const f = fixture(); const tm = f.game.get_tm(); let a = 0; let b = 0; let c = 0;
+	f.with_write(() => {
+		a = tm.apply_terrain([{x:2,y:2,moisture:2}],[]);
+		b = tm.apply_terrain([{x:2,y:2,moisture:3}],[]);
+		c = tm.apply_terrain([{x:2,y:2,moisture:2}],[]);
+	});
+	reject(f, () => { f.with_write(() => { tm.rollback_terrain(a); }); });
+	f.with_write(() => { tm.rollback_terrain(c); tm.rollback_terrain(b); tm.validate_terrain_rollback(a); tm.rollback_terrain(a); });
+	test.assert(tm.get_terrain_state(2,2).moisture == 3);
+});

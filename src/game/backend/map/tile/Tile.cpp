@@ -20,11 +20,16 @@
 #include "game/backend/Player.h"
 
 #include "util/String.h"
+#include <algorithm>
 
 namespace game {
 namespace backend {
 namespace map {
 namespace tile {
+
+const std::array< std::string, 13 > Tile::s_terraforming_names = {
+	"road", "mag_tube", "forest", "farm", "soil_enricher", "solar", "mine", "condenser", "mirror", "borehole", "sensor", "bunker", "airbase"
+};
 
 const std::unordered_map< direction_t, std::string > Tile::s_direction_str = {
 #define X( _x ) { D_##_x, #_x },
@@ -64,6 +69,7 @@ Tile* Tile::GetNeighbour( const direction_t direction ) {
 }
 
 void Tile::Update() {
+	for ( size_t index = 0; index < m_terraforming_owners.size(); ++index ) { if ( !( terraforming & ( 1 << index ) ) ) { m_terraforming_owners[index] = -1; } }
 	if ( m_has_canonical_elevation ) {
 		*elevation.center = m_canonical_elevation; is_water_tile = m_canonical_water; return;
 	}
@@ -114,6 +120,8 @@ void Tile::SetCanonicalElevation( const elevation_t value, const bool water, con
 }
 
 void Tile::Clear() {
+	m_terrain_revision = 0;
+	m_terraforming_owners.fill( -1 );
 	m_has_canonical_elevation = false;
 	m_has_imported_elevation = false;
 	for ( auto& c : elevation.corners ) {
@@ -149,7 +157,8 @@ const types::Buffer Tile::Serialize() const {
 
 	buf.WriteInt( features );
 	buf.WriteInt( terraforming );
-	if ( m_has_imported_elevation || m_has_canonical_elevation ) {
+	const bool owned = std::any_of( m_terraforming_owners.begin(), m_terraforming_owners.end(), []( const int8_t owner ){ return owner >= 0; } );
+	if ( m_has_imported_elevation || m_has_canonical_elevation || owned ) {
 		buf.WriteBool( m_has_imported_elevation );
 		if ( m_has_imported_elevation ) { buf.WriteInt( m_imported_elevation ); buf.WriteBool( m_imported_water ); }
 	}
@@ -158,11 +167,13 @@ const types::Buffer Tile::Serialize() const {
 		if ( m_has_imported_elevation ) { for ( const auto corner : m_imported_corners ) { buf.WriteInt( corner ); } }
 	}
 
+	if ( owned ) { buf.WriteString( "terraform-owners-v1" ); for ( const auto owner : m_terraforming_owners ) { buf.WriteInt( owner ); } }
 	return buf;
 }
 
 void Tile::Deserialize( types::Buffer buf ) {
-	m_has_imported_elevation = false; m_has_canonical_elevation = false;
+	m_terrain_revision = 0;
+	m_has_imported_elevation = false; m_has_canonical_elevation = false; m_terraforming_owners.fill( -1 );
 
 	coord.x = buf.ReadInt();
 	coord.y = buf.ReadInt();
@@ -188,15 +199,26 @@ void Tile::Deserialize( types::Buffer buf ) {
 		}
 		SetImportedElevation( source_elevation, source_water );
 	}
-	if ( buf.lenr < buf.lenw ) {
-		if ( buf.ReadString() != "canonical-height-v1" ) { THROW( "Unknown canonical height extension" ); }
-		const auto center = buf.ReadInt(); const auto water = buf.ReadBool();
-		if ( center != encoded_center ) { THROW( "Canonical terrain center differs from serialized height" ); }
-		SetCanonicalElevation( center, water, false );
-		if ( m_has_imported_elevation ) {
-			for ( auto& corner : m_imported_corners ) { corner = buf.ReadInt(); if ( corner < ELEVATION_MIN || corner > ELEVATION_MAX ) { THROW( "Invalid imported corner provenance" ); } }
-		}
+	bool owners_seen = false;
+	while ( buf.lenr < buf.lenw ) {
+		const auto extension = buf.ReadString();
+		if ( extension == "canonical-height-v1" && !m_has_canonical_elevation ) {
+			const auto center = buf.ReadInt(); const auto water = buf.ReadBool();
+			if ( center != encoded_center ) { THROW( "Canonical terrain center differs from serialized height" ); }
+			SetCanonicalElevation( center, water, false );
+			if ( m_has_imported_elevation ) {
+				for ( auto& corner : m_imported_corners ) { corner = buf.ReadInt(); if ( corner < ELEVATION_MIN || corner > ELEVATION_MAX ) { THROW( "Invalid imported corner provenance" ); } }
+			}
+		} else if ( extension == "terraform-owners-v1" && !owners_seen ) {
+			owners_seen = true;
+			for ( size_t index = 0; index < m_terraforming_owners.size(); ++index ) {
+				const auto owner = buf.ReadInt();
+				if ( owner < -1 || owner > 7 || ( owner >= 0 && !( terraforming & ( 1 << index ) ) ) ) { THROW( "Invalid improvement construction owner" ); }
+				m_terraforming_owners[index] = owner;
+			}
+		} else { THROW( "Unknown or repeated tile extension" ); }
 	}
+
 	if ( buf.lenr != buf.lenw ) {
 		THROW( "unexpected trailing tile data" );
 	}
@@ -384,6 +406,12 @@ gse::Value* const Tile::GetBonuses( GSE_CALLABLE ) const {
 	X_BONUSES
 #undef X_BONUS
 	return VALUE( gse::value::Object,, GSE_CALL_NOGC, result );
+}
+
+gse::Value* Tile::GetTerraformingOwners( GSE_CALLABLE ) const {
+	gse::value::object_properties_t result;
+	for ( size_t index = 0; index < m_terraforming_owners.size(); ++index ) { result.emplace( s_terraforming_names[index], VALUE( gse::value::Int,, m_terraforming_owners[index] ) ); }
+	return VALUEEXT( gse::value::Object, GSE_CALL, result );
 }
 
 gse::Value* const Tile::GetTerraforming( GSE_CALLABLE ) const {

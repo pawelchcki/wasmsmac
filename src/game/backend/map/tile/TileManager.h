@@ -66,6 +66,8 @@ private:
 			elevation_t imported_elevation;
 			std::array< elevation_t, 4 > imported_corners;
 			bool canonical, canonical_water; elevation_t canonical_elevation;
+			std::array< int8_t, 13 > terraforming_owners;
+			int64_t previous_revision;
 		};
 		std::weak_ptr< const uint8_t > world;
 		std::vector< Entry > entries;

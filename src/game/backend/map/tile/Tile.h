@@ -98,6 +98,7 @@ public:
 	//   it recalculates dynamic properties and solves inconsistencies
 	//   safe to call anytime
 	void Update();
+	static const std::array< std::string, 13 > s_terraforming_names;
 
 	// Original SMAC maps store center heights and a separate land/sea class.
 	// Preserve them until an actual edit changes one of the shared corners.
@@ -129,6 +130,8 @@ public:
 
 private:
 	friend class TileManager;
+	int64_t m_terrain_revision = 0;
+	std::array< int8_t, 13 > m_terraforming_owners = [](){ std::array< int8_t, 13 > value; value.fill( -1 ); return value; }();
 	bool m_has_canonical_elevation = false;
 	elevation_t m_canonical_elevation = 0;
 	bool m_canonical_water = false;
@@ -143,6 +146,7 @@ private:
 	gse::Value* const GetFeatures( GSE_CALLABLE ) const;
 	gse::Value* const GetBonuses( GSE_CALLABLE ) const;
 	gse::Value* const GetTerraforming( GSE_CALLABLE ) const;
+	gse::Value* GetTerraformingOwners( GSE_CALLABLE ) const;
 
 };
 

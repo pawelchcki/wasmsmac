@@ -1,4 +1,5 @@
 #include "TileManager.h"
+#include <limits>
 #include "Geometry.h"
 
 #include "game/backend/Game.h"
@@ -80,6 +81,7 @@ gse::Value* TileManager::GetTerrainState( GSE_CALLABLE, const int64_t x, const i
 		{ "moisture", VALUE( gse::value::Int,, tile->moisture ) }, { "rockiness", VALUE( gse::value::Int,, tile->rockiness ) },
 		{ "bonus", VALUE( gse::value::Int,, tile->bonus ) },
 		{ "features_raw", VALUE( gse::value::Int,, tile->features ) }, { "features", tile->GetFeatures( GSE_CALL ) },
+		{ "terraforming_owners", tile->GetTerraformingOwners( GSE_CALL ) },
 		{ "terraforming_raw", VALUE( gse::value::Int,, tile->terraforming ) }, { "terraforming", tile->GetTerraforming( GSE_CALL ) },
 		{ "canonical", VALUEEXT( gse::value::Object, GSE_CALL, {
 			{ "active", VALUE( gse::value::Bool,, tile->m_has_canonical_elevation ) },
@@ -271,7 +273,9 @@ WRAPIMPL_BEGIN( TileManager )
 				const auto mask = TERRAFORMING_ROAD | TERRAFORMING_FARM | TERRAFORMING_MINE | TERRAFORMING_FOREST;
 				const terraforming_t flags = ( tile->terraforming & ~mask ) | ( road ? TERRAFORMING_ROAD : 0 ) |
 					( farm ? TERRAFORMING_FARM : 0 ) | ( mine ? TERRAFORMING_MINE : 0 ) | ( forest ? TERRAFORMING_FOREST : 0 );
+				if ( tm->m_next_terrain_receipt == std::numeric_limits< int64_t >::max() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain revision capacity exhausted" ); }
 				tm->m_game->GetMap()->SetTerraforming( tile, flags );
+				tile->m_terrain_revision = ++tm->m_next_terrain_receipt;
 				return VALUE( gse::value::Undefined );
 			} )
 		},
