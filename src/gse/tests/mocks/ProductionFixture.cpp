@@ -687,7 +687,7 @@ struct ProductionFixture : gc::Object {
 		auto& from = source->m_settings.global;
 		auto& to = target->m_settings.global;
 		from.map.size_x = 68; from.map.size_y = 34; from.map.preset_level = 0;
-		from.rules.SetNutrientCostFactor( 17 ); from.rules.SetMineralCostFactor( 19 ); from.game_name = "Source wire";
+		from.rules.SetNutrientCostFactor( 17 ); from.rules.SetMineralCostFactor( 19 ); from.rules.SetTerraformingIgnoreTechnologies( false ); from.game_name = "Source wire";
 		const auto worlds_before = state->m_settings.global.rules.GetWorldSizes();
 		if ( state->m_settings.global.rules.HasWorldSizes() ) { from.rules.SetWorldSizes( worlds_before ); }
 		to.map.size_x = 112; to.map.size_y = 56; to.map.preset_level = 2;
@@ -701,6 +701,7 @@ struct ProductionFixture : gc::Object {
 		auto* read = static_cast< value::Callable* >( wrapper->Get( "get_nutrient_cost_factor" ) );
 		auto* mineral_read = static_cast< value::Callable* >( wrapper->Get( "get_mineral_cost_factor" ) );
 		auto* worlds_read = static_cast< value::Callable* >( wrapper->Get( "get_world_sizes" ) );
+		auto* policy_read = static_cast< value::Callable* >( wrapper->Get( "get_terraforming_policy" ) );
 		const auto wire = source->Serialize().ToString();
 		target->Deserialize( types::Buffer( wire ) );
 		auto* read_value = read->Run( GSE_CALL, {} );
@@ -710,7 +711,9 @@ struct ProductionFixture : gc::Object {
 		const bool mineral_received = to.rules.GetMineralCostFactor() == 19;
 		const bool worlds_received = to.rules.GetWorldSizes() == worlds_before && to.rules.HasWorldSizes() == from.rules.HasWorldSizes();
 		const bool worlds_aliases = backend::rules::Rules::DecodeWorldSizes( GSE_CALL, worlds_read->Run( GSE_CALL, {} ) ) == worlds_before;
-		const bool received = to.map.size_x == 68 && to.map.size_y == 34 && to.map.preset_level == 0 &&
+		const auto* policy = static_cast< value::Object* >( policy_read->Run( GSE_CALL, {} ) );
+		const bool policy_received = !to.rules.IgnoreTerraformingTechnologies() && !static_cast< value::Bool* >( policy->Get( "ignore_technologies" ) )->value;
+		const bool received = policy_received && to.map.size_x == 68 && to.map.size_y == 34 && to.map.preset_level == 0 &&
 			to.rules.GetNutrientCostFactor() == 17 && to.game_name == "Source wire";
 		const bool factions = target->GetFM()->Get( "WIRE_SOURCE" ) && !target->GetFM()->Get( "WIRE_OLD" ) &&
 			target->GetFM()->Get( "WIRE_SOURCE" ) != source->GetFM()->Get( "WIRE_SOURCE" );
@@ -791,6 +794,59 @@ struct ProductionFixture : gc::Object {
 		return VALUEEXT( value::Object, GSE_CALL, {
 			{ "copied", VALUE( value::Bool,, copied ) }, { "aliases", VALUE( value::Bool,, aliases && live ) },
 			{ "independent", VALUE( value::Bool,, independent ) }, { "lifetime", VALUE( value::Bool,, rejected ) },
+		} );
+	}
+	Value* EnergyCodecProbe( GSE_CALLABLE ) {
+		const auto before = owner->Serialize().ToString();
+		auto copy = std::make_unique< backend::Player >( owner.get() );
+		auto receiving = std::make_unique< backend::Player >( types::Buffer( before ) );
+		const bool copied = copy->Serialize().ToString() == before && copy->GetEnergyCredits() == owner->GetEnergyCredits() &&
+			copy->GetEnergyIncomeTurn() == owner->GetEnergyIncomeTurn();
+		const bool roundtrip = receiving->Serialize().ToString() == before && receiving->GetEnergyCredits() == owner->GetEnergyCredits() &&
+			receiving->GetEnergyIncomeTurn() == owner->GetEnergyIncomeTurn();
+		auto* wrapper = static_cast< value::Object* >( copy->Wrap( GSE_CALL ) );
+		auto* read = static_cast< value::Callable* >( wrapper->Get( "get_energy_state" ) );
+		copy.reset(); bool lifetime = false;
+		try { read->Run( GSE_CALL, {} ); } catch ( const std::exception& ) { lifetime = true; }
+		return VALUEEXT( value::Object, GSE_CALL, {
+			{ "copy", VALUE( value::Bool,, copied ) }, { "roundtrip", VALUE( value::Bool,, roundtrip ) },
+			{ "lifetime", VALUE( value::Bool,, lifetime ) }, { "unchanged", VALUE( value::Bool,, owner->Serialize().ToString() == before ) },
+		} );
+	}
+	Value* TerraformingPolicyProbe( GSE_CALLABLE ) {
+		backend::rules::Default source;
+		const auto legacy = source.Serialize().ToString();
+		source.SetTerraformingIgnoreTechnologies( false ); source.SetBlindResearch( false );
+		const auto wire = source.Serialize().ToString();
+		auto copied = std::make_unique< backend::rules::Default >( source );
+		backend::rules::Default target;
+		auto* wrapper = static_cast< value::Object* >( target.Wrap( GSE_CALL ) );
+		auto* read = static_cast< value::Callable* >( wrapper->Get( "get_terraforming_policy" ) );
+		target = source;
+		const auto reads = [ & ]( const bool expected ) {
+			auto* result = static_cast< value::Object* >( read->Run( GSE_CALL, {} ) );
+			return static_cast< value::Bool* >( result->Get( "ignore_technologies" ) )->value == expected;
+		};
+		const bool copy = !copied->IgnoreTerraformingTechnologies() && !target.IgnoreTerraformingTechnologies() && reads( false );
+		target.SetTerraformingIgnoreTechnologies( true );
+		const bool independent = !source.IgnoreTerraformingTechnologies() && !copied->IgnoreTerraformingTechnologies() && reads( true );
+		target.Deserialize( types::Buffer( wire ) );
+		const bool transfer = !target.IgnoreTerraformingTechnologies() && !target.IsBlindResearch() && reads( false ) && target.Serialize().ToString() == wire;
+		bool malformed = true;
+		for ( const auto& bad : { wire.substr( 0, wire.size() - 1 ), wire + "trailing" } ) {
+			bool rejected = false; try { target.Deserialize( types::Buffer( bad ) ); } catch ( const std::exception& ) { rejected = true; }
+			malformed = malformed && rejected && target.Serialize().ToString() == wire && reads( false );
+		}
+		target.Deserialize( types::Buffer( legacy ) );
+		const bool legacy_default = target.IgnoreTerraformingTechnologies() && reads( true ) && target.Serialize().ToString() == legacy;
+		auto* copied_wrapper = static_cast< value::Object* >( copied->Wrap( GSE_CALL ) );
+		auto* stale = static_cast< value::Callable* >( copied_wrapper->Get( "get_terraforming_policy" ) );
+		copied.reset(); bool lifetime = false;
+		try { stale->Run( GSE_CALL, {} ); } catch ( const std::exception& ) { lifetime = true; }
+		return VALUEEXT( value::Object, GSE_CALL, {
+			{ "copy", VALUE( value::Bool,, copy ) }, { "independent", VALUE( value::Bool,, independent ) },
+			{ "transfer", VALUE( value::Bool,, transfer ) }, { "legacy_default", VALUE( value::Bool,, legacy_default ) },
+			{ "malformed", VALUE( value::Bool,, malformed ) }, { "lifetime", VALUE( value::Bool,, lifetime ) },
 		} );
 	}
 	Value* RulesCopyProbe( GSE_CALLABLE ) {
@@ -1074,7 +1130,7 @@ struct ProductionFixture : gc::Object {
 		const auto full = backend::unit::Def::Serialize( source ).ToString();
 		types::Buffer input( full );
 		std::unique_ptr< backend::unit::Def > received( backend::unit::Def::Deserialize( input, game.m_um ) );
-		const bool roundtrip = received->GetCombat() == source->GetCombat() && backend::unit::Def::Serialize( received.get() ).ToString() == full;
+		const bool roundtrip = received->GetCombat() == source->GetCombat() && received->CanTerraform() == source->CanTerraform() && backend::unit::Def::Serialize( received.get() ).ToString() == full;
 		types::Buffer prefix( full );
 		prefix.ReadString(); prefix.ReadString(); prefix.ReadString(); prefix.ReadInt();
 		prefix.ReadInt(); prefix.ReadFloat();
@@ -1082,7 +1138,7 @@ struct ProductionFixture : gc::Object {
 		const auto old = full.substr( 0, prefix.lenr );
 		types::Buffer legacy( old );
 		std::unique_ptr< backend::unit::Def > legacy_def( backend::unit::Def::Deserialize( legacy, game.m_um ) );
-		const bool legacy_default = legacy_def->GetCombat() == backend::unit::Def::combat_t{};
+		const bool legacy_default = legacy_def->GetCombat() == backend::unit::Def::combat_t{} && !legacy_def->CanTerraform();
 		auto rejects = [ & ]( types::Buffer bytes ) {
 			try { std::unique_ptr< backend::unit::Def > unexpected( backend::unit::Def::Deserialize( bytes, game.m_um ) ); return false; }
 			catch ( const std::exception& ) { return true; }
@@ -1240,6 +1296,25 @@ struct ProductionFixture : gc::Object {
 		for ( const auto& name : names ) { bytes.WriteString( name ); }
 		return bytes.ToString();
 	}
+	std::string AuditSnapshot() {
+		if ( !game.IsRunning() || !game.m_bm || !game.m_um ) { THROW( "Audit requires a running native world" ); }
+		types::Buffer bytes;
+		bytes.WriteString( FoundingSnapshot() );
+		bytes.WriteString( game.GetMap()->GetTilesPtr()->Serialize().ToString() );
+		bytes.WriteString( state->m_settings.global.rules.Serialize().ToString() );
+		for ( size_t index = 0; index < state->m_slots->GetCount(); ++index ) {
+			const auto& slot = state->m_slots->GetSlot( index );
+			if ( slot.GetState() == backend::slot::Slot::SS_PLAYER ) { bytes.WriteString( slot.GetPlayer()->Serialize().ToString() ); }
+		}
+		for ( int id = 0; id < backend::technology::Table::COUNT; ++id ) {
+			const auto& tech = game.m_technologies.Get( id );
+			bytes.WriteInt( tech.owners );
+			for ( const auto prerequisite : tech.prerequisites ) { bytes.WriteInt( prerequisite ); }
+			for ( const auto weight : tech.weights ) { bytes.WriteInt( weight ); }
+		}
+		bytes.WriteString( game.m_research.Serialize().ToString() );
+		return bytes.ToString();
+	}
 	void ConfigureFounding( const std::string& kind, size_t selected_id = 0 ) {
 		auto* unit = game.m_um->GetUnit( selected_id ? selected_id : colony_id );
 		if ( !unit ) { THROW( "fixture colony no longer live" ); }
@@ -1249,6 +1324,14 @@ struct ProductionFixture : gc::Object {
 		else if ( kind == "water" ) { unit->GetTile()->is_water_tile = true; }
 		else if ( kind == "locked" ) { unit->GetTile()->Lock( 1 ); }
 		else if ( kind == "sensor" ) { unit->GetTile()->terraforming |= backend::map::tile::TERRAFORMING_SENSOR; }
+		else if ( kind == "imported_arid" ) {
+			// Declared resource input for read-only provenance coverage, not an
+			// observed terraforming outcome or a source game's raw height byte.
+			auto* tile = unit->GetTile();
+			tile->moisture = backend::map::tile::MOISTURE_ARID; tile->rockiness = backend::map::tile::ROCKINESS_FLAT;
+			for ( auto* corner : tile->elevation.corners ) { *corner = 64; }
+			tile->SetImportedElevation( 2467, false );
+		}
 		else if ( kind == "arid" ) {
 			auto* tile = unit->GetTile(); tile->moisture = backend::map::tile::MOISTURE_ARID; tile->rockiness = backend::map::tile::ROCKINESS_FLAT;
 			for ( auto* corner : tile->elevation.corners ) { *corner = 64; }
@@ -1294,6 +1377,13 @@ struct ProductionFixture : gc::Object {
 					tile->Update();
 				}
 			}
+		}
+		else if ( kind == "sea_worker_coast" || kind == "sea_worker_coast_locked" ) {
+			// Controlled launch input only: actual source water classification is
+			// preserved independently of the synthetic shared corner mesh.
+			auto* coast = base->GetTile()->W;
+			coast->SetImportedElevation( -400, true );
+			if ( kind == "sea_worker_coast_locked" ) { coast->Lock( 1 ); }
 		}
 		else if ( kind == "occupied" ) { unit->GetTile()->base = base; }
 		else if ( kind == "completed" ) { owner->CompleteTurn(); }
@@ -1632,6 +1722,16 @@ Value* MakeNaturalStartupFixture( GSE_CALLABLE, size_t width, size_t height, con
 	auto* object = static_cast< FixtureObject* >( MakeWorldStartupFixture( GSE_CALL, width, height ) );
 	const auto session = object->session;
 	session->current->PrepareNaturalStartup( terrain );
+	object->Set( "audit_snapshot", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return VALUE( value::String,, session->current->AuditSnapshot() );
+	} ), GSE_CALL );
+	object->Set( "audit_inspect", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 );
+		if ( !session->current->game.IsRunning() || !session->current->game.GetBM() || !session->current->game.GetUM() ) {
+			GSE_ERROR( EC.INVALID_CALL, "Audit requires a running native world" );
+		}
+		return session->current->InspectFounding( GSE_CALL );
+	} ), GSE_CALL );
 	object->Set( "reset_world", NATIVE_CALL( session, object ) {
 		N_EXPECT_ARGS( 1 ); N_GETVALUE( declared_terrain, 0, String );
 		session->current->RestartNaturalStartup( GSE_CALL, declared_terrain );
@@ -1841,6 +1941,12 @@ Value* MakeProductionFixture( GSE_CALLABLE, bool founding, bool selection, const
 		catch ( const std::exception& error ) { GSE_ERROR( EC.INVALID_CALL, error.what() ); }
 		return VALUE( value::Undefined );
 	} ), GSE_CALL );
+	object->Set( "energy_codec_probe", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return session->EnergyCodecProbe( GSE_CALL );
+	} ) );
+	object->Set( "terraforming_policy_probe", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return session->TerraformingPolicyProbe( GSE_CALL );
+	} ) );
 	object->Set( "rules_copy_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->RulesCopyProbe( GSE_CALL );
 	} ), GSE_CALL );

@@ -84,7 +84,11 @@ bool Unit::ValidWork( const work_state_t& work, const map::Map* map ) {
 		return work.work_units == 0 && work.required_work == 0 && work.last_turn == 0 && work.previous_work_units == 0 &&
 			work.previous_movement == 0.0f && !work.previous_moved && work.tile_x == 0 && work.tile_y == 0;
 	}
-	return ( work.action == "road" || work.action == "farm" || work.action == "mine" || work.action == "forest" ) &&
+	static const std::unordered_set< std::string > actions = {
+		"farm", "soil_enricher", "mine", "solar", "forest", "road", "mag_tube", "bunker", "airbase", "sensor",
+		"remove_fungus", "plant_fungus", "condenser", "mirror", "borehole", "aquifer", "raise", "lower", "level",
+	};
+	return actions.count( work.action ) &&
 		work.required_work >= 2 && work.required_work <= 128 && work.work_units >= 0 && work.work_units < work.required_work &&
 		work.last_turn >= 0 && work.previous_work_units >= 0 && work.previous_work_units <= work.work_units &&
 		std::isfinite( work.previous_movement ) && work.previous_movement >= 0.0f && work.previous_movement <= 64.0f &&

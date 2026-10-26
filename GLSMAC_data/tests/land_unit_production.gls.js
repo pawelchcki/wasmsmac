@@ -103,3 +103,46 @@ for (movement of ['water', 'air', 'immovable']) {
 		test.assert(f.snapshot() == before && f.owner.get_production_choices() == choices);
 	});
 }
+
+// Temporary application recipe/launch invariants, not original disabled-template
+// availability, naval construction or camera evidence.
+const sea_worker = (profile) => {
+	const f = fixture(); f.configure('flat_arid_world');
+	if (#is_defined(profile)) { f.configure(profile); }
+	f.with_write(() => {
+		f.game.um.define_unit('SeaFormers', {name: 'Foil Formers', morale: 'SYNTHETIC', type: 'static',
+			movement_type: 'water', movement_per_turn: 4, can_terraform: true,
+			combat: {kind: 'civilian', offense: 0, defense: 1, reactor: 1},
+			render: {type: 'sprite', file: 'synthetic.pcx', x: 0, y: 0, w: 1, h: 1, cx: 0, cy: 0}});
+		f.owner.add_production_choice('SEA_FORMERS', {type: 'unit', id: 'SeaFormers', cost: 40, cost_rows: 4, population_cost: 0});
+	});
+	return f;
+};
+
+behavior.scenario('source-capable naval worker completes at a real adjacent water launch and rolls back atomically', () => {
+	const f = sea_worker('sea_worker_coast'); choose(f, 'SEA_FORMERS');
+	const before = f.snapshot(); const state = f.inspect(); const terrain = f.terrain_snapshot();
+	const receipt = process(f, 2, 43); const unit = f.game.um.get_unit(state.next_unit_id);
+	test.assert(unit.get_def().can_terraform && unit.is_water && unit.movement == 4.0);
+	test.assert(unit.owner == f.owner.id && unit.get_tile().is_water && unit.get_tile() == f.base.get_tile().W);
+	test.assert(f.base.get_size() == 1 && f.base.get_production().minerals == 3 && f.terrain_snapshot() == terrain);
+	f.with_write(() => { f.base.rollback_unit_production(receipt.unit_receipt); });
+	test.assert(f.snapshot() == before && f.inspect().next_unit_id == state.next_unit_id && f.terrain_snapshot() == terrain);
+});
+
+behavior.scenario('inland and locked-coast cities cannot select a naval worker or lose project credit', () => {
+	for (profile of [null, 'sea_worker_coast_locked']) {
+		const f = profile == null ? sea_worker() : sea_worker(profile);
+		const before = f.snapshot(); const state = f.inspect();
+		rejected(() => { choose(f, 'SEA_FORMERS'); });
+		test.assert(f.snapshot() == before && f.inspect() == state);
+	}
+});
+
+behavior.scenario('naval spawn listener failure preserves the actual launch graph project RNG IDs and queues', () => {
+	const f = sea_worker('sea_worker_coast'); choose(f, 'SEA_FORMERS');
+	f.game.um.on('unit_spawn', (e) => { f.game.random.get_int(0,99); throw SpawnError('Reject naval worker'); });
+	f.set_turn(2); const before = f.snapshot(); const state = f.inspect(); const terrain = f.terrain_snapshot();
+	rejected(() => { f.with_write(() => { f.base.process_production(2,43); }); });
+	test.assert(f.snapshot() == before && f.inspect() == state && f.terrain_snapshot() == terrain);
+});

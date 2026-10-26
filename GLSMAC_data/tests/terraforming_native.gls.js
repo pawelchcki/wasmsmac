@@ -9,6 +9,35 @@ const reject = (f, action) => {
 	test.assert(rejected && f.terrain_snapshot() == terrain && f.snapshot() == before && f.inspect() == inspected);
 };
 
+behavior.scenario('complete native terrain reads expose detached raw state without mutating a world', () => {
+	const f = fixture(); f.configure('arid'); const tm = f.game.get_tm();
+	const before = f.terrain_snapshot(); const native = f.snapshot(); const queues = f.inspect();
+	const state = tm.get_terrain_state(2, 2);
+	test.assert(state.version == 1 && state.x == 2 && state.y == 2 && state.width == 4 && state.height == 4);
+	test.assert(state.elevation == {center: 64, left: 64, top: 64, right: 64, bottom: 64});
+	test.assert(state.is_land && !state.is_water && state.moisture == 1 && state.rockiness == 1);
+	test.assert(#sizeof(state.features) == 15 && #sizeof(state.terraforming) == 13);
+	test.assert(state.terraforming == tm.get_terraforming(2, 2) && state.terraforming_raw == 0);
+	test.assert(state.imported == {active: false, source_elevation: null, source_water: null, source_corners: null});
+	test.assert(state.neighbors.W == {x: 0, y: 2} && state.neighbors.E == {x: 0, y: 2});
+	test.assert(tm.get_terrain_state(0, 0).neighbors.N == {x: 0, y: 0}, 'Native polar self-link is observed rather than guessed as vertical wrap');
+	const detached = tm.get_terrain_state(2, 2);
+	detached.elevation.center = 999; detached.features.xenofungus = true; detached.terraforming.airbase = true;
+	test.assert(tm.get_terrain_state(2, 2) == state);
+	test.assert(f.terrain_snapshot() == before && f.snapshot() == native && f.inspect() == queues);
+});
+
+behavior.scenario('imported terrain provenance distinguishes source center from actual shared corners', () => {
+	const f = fixture(); f.configure('imported_arid'); const tm = f.game.get_tm(); const before = f.terrain_snapshot();
+	const state = tm.get_terrain_state(2, 2);
+	test.assert(state.elevation == {center: 2467, left: 64, top: 64, right: 64, bottom: 64});
+	test.assert(state.imported == {active: true, source_elevation: 2467, source_water: false, source_corners: [64,64,64,64]});
+	state.imported.source_corners[0] = 999; state.imported.source_elevation = 0;
+	const again = tm.get_terrain_state(2, 2);
+	test.assert(again.imported.source_elevation == 2467 && again.imported.source_corners == [64,64,64,64]);
+	test.assert(f.terrain_snapshot() == before);
+});
+
 behavior.scenario('native improvement reads are current detached values and exact tile snapshots undo an edit', () => {
 	const f = fixture(); const tm = f.game.get_tm(); const before = f.terrain_snapshot(); const data = empty(); data.farm = true;
 	const initial = tm.get_terraforming(2, 2);
@@ -47,8 +76,10 @@ behavior.scenario('native tile edits reject locked tiles without publishing chan
 
 behavior.scenario('retained native tile improvement callables reject retired worlds', () => {
 	const f = fixture(); const read = f.game.get_tm().get_terraforming; const write = f.game.get_tm().set_terraforming;
+	const terrain_read = f.game.get_tm().get_terrain_state;
 	f.reset(); f.enable_economy();
 	reject(f, () => { read(2, 2); });
+	reject(f, () => { terrain_read(2, 2); });
 	reject(f, () => { f.with_write(() => { write(2, 2, empty()); }); });
 });
 
@@ -69,6 +100,7 @@ for (coords of [[(0 - 1), 0], [4, 0], [0, (0 - 1)], [0, 4], [1, 0], ['2', 2]]) {
 	behavior.scenario('invalid improvement coordinates cannot mutate another tile ' + #to_string(index), () => {
 		const f = fixture();
 		reject(f, () => { f.with_write(() => { f.game.get_tm().set_terraforming(coords[0], coords[1], empty()); }); });
+		reject(f, () => { f.game.get_tm().get_terrain_state(coords[0], coords[1]); });
 	}); index++;
 }
 
@@ -80,3 +112,105 @@ for (data of [{}, {road: false, farm: false, mine: false}, {road: false, farm: f
 		reject(f, () => { f.with_write(() => { f.game.get_tm().set_terraforming(2, 2, data); }); });
 	}); payload_index++;
 }
+
+behavior.scenario('explicit terraform technology policy is durable independent and defaults to the user waiver', () => {
+	const f = fixture(); const rules = f.game.get_settings().global.rules;
+	test.assert(rules.get_terraforming_policy() == {version: 1, ignore_technologies: true});
+	const read = rules.get_terraforming_policy; const baseline = f.global_settings_snapshot('current');
+	rules.set_terraforming_ignore_technologies(false);
+	test.assert(read() == {version: 1, ignore_technologies: false});
+	const wire = f.global_settings_snapshot('current'); test.assert(wire != baseline);
+	rules.set_terraforming_ignore_technologies(true); f.restore_global_settings(wire);
+	test.assert(!read().ignore_technologies);
+	f.restore_global_settings(f.global_settings_snapshot('legacy_rules'));
+	test.assert(read().ignore_technologies);
+	const probe = f.terraforming_policy_probe();
+	test.assert(probe.copy && probe.independent && probe.transfer && probe.legacy_default && probe.malformed && probe.lifetime);
+	test.assert(f.state_rules_wire_probe().received);
+});
+
+// Native transaction invariants. These authored engine-unit edits do not assert
+// the original game's raise/lower amount, cascade or energy formula.
+behavior.scenario('atomic terrain patch supports every actual improvement and feature with exact undo', () => {
+	const f = fixture(); f.configure('arid'); const tm = f.game.get_tm();
+	const before = f.terrain_snapshot(); const native = f.snapshot(); const state = tm.get_terrain_state(2,2);
+	const improvements = state.terraforming; const features = state.features;
+	for (key in improvements) { improvements[key] = true; }
+	features.xenofungus = true; features.river = true;
+	let receipt = 0;
+	f.with_write(() => { receipt = tm.apply_terrain([{x:2,y:2,terraforming:improvements,features:features,rockiness:3,moisture:3}], []); });
+	const changed = tm.get_terrain_state(2,2);
+	test.assert(changed.terraforming == improvements && changed.features.xenofungus && changed.features.river);
+	test.assert(changed.moisture == 3 && changed.rockiness == 3 && f.snapshot() == native);
+	f.with_write(() => { tm.rollback_terrain(receipt); });
+	test.assert(f.terrain_snapshot() == before && f.snapshot() == native);
+	reject(f, () => { f.with_write(() => { tm.rollback_terrain(receipt); }); });
+});
+
+behavior.scenario('shared vertex mutation refreshes all affected native centers and restores imported provenance', () => {
+	const f = fixture(); f.configure('imported_arid'); const tm = f.game.get_tm(); const before = f.terrain_snapshot();
+	let receipt = 0;
+	f.with_write(() => { receipt = tm.apply_terrain([{x:2,y:2,elevation:{left:1064,top:1064,right:1064,bottom:1064}}], []); });
+	const changed = tm.get_terrain_state(2,2);
+	test.assert(changed.elevation.center == 1064 && !changed.imported.active && changed.is_land);
+	const west = tm.get_terrain_state(0,2);
+	test.assert(west.elevation.right == 1064 && west.elevation.center != 64, 'Actual shared corners propagate to native neighbor centers');
+	f.with_write(() => { tm.rollback_terrain(receipt); });
+	test.assert(f.terrain_snapshot() == before && tm.get_terrain_state(2,2).imported.active);
+});
+
+behavior.scenario('malformed patches prevalidate the whole batch before any terrain field changes', () => {
+	const f = fixture(); f.configure('arid'); const tm = f.game.get_tm();
+	for (bad of [{x:0,y:2,moisture:99}, {x:1,y:2,moisture:2}, {x:0,y:2,elevation:{left:99999,top:0,right:0,bottom:0}},
+		{x:0,y:2,features:{xenofungus:true}}, {x:0,y:2,unexpected:true}, {x:2,y:2,moisture:3}]) {
+		reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,moisture:2},bad], []); }); });
+	}
+	reject(f, () => { tm.apply_terrain([{x:2,y:2,moisture:2}], []); });
+});
+
+behavior.scenario('stale terrain rollback validates every changed tile before restoring any field', () => {
+	const f = fixture(); const tm = f.game.get_tm(); let receipt = 0;
+	f.with_write(() => { receipt = tm.apply_terrain([{x:2,y:2,moisture:2},{x:0,y:2,rockiness:3}], []); });
+	f.with_write(() => { tm.apply_terrain([{x:0,y:2,moisture:3}], []); });
+	reject(f, () => { f.with_write(() => { tm.rollback_terrain(receipt); }); });
+});
+
+behavior.scenario('terrain class changes cannot strand unrelated units or change a city ground class', () => {
+	const f = fixture(); const tm = f.game.get_tm();
+	reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,elevation:{left:(0-1000),top:(0-1000),right:(0-1000),bottom:(0-1000)}}], []); }); });
+	reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:0,y:0,elevation:{left:(0-1000),top:(0-1000),right:(0-1000),bottom:(0-1000)}}], []); }); });
+	reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,moisture:2}], [f.unit_id]); }); });
+});
+
+// Treasury mechanics receive authored credits. Original opening balances and
+// income timing are not manufactured by this native ledger regression.
+behavior.scenario('native treasury conserves credits with authoritative affordable revision-fenced debit and undo', () => {
+	const f = fixture(); const player = f.owner; const before = f.snapshot();
+	test.assert(player.get_energy_state() == {credits:0,last_income_turn:0});
+	let grant = 0; let debit = 0;
+	f.with_write(() => { grant = player.change_energy(25,0,f.game.get_turn()); debit = player.change_energy((0-4),25,f.game.get_turn()); });
+	test.assert(player.get_energy_state().credits == 21);
+	const paid = f.snapshot();
+	for (change of [[(0-22),21], [1,25], [9223372036854775807,21]]) {
+		let failed = false; try { f.with_write(() => { player.change_energy(change[0],change[1],f.game.get_turn()); }); } catch { : (e) => { failed = true; } }
+		test.assert(failed && f.snapshot() == paid && player.get_energy_state().credits == 21);
+	}
+	let failed = false; try { player.change_energy(1,21,f.game.get_turn()); } catch { : (e) => { failed = true; } }
+	test.assert(failed && f.snapshot() == paid);
+	const codec = f.energy_codec_probe(); test.assert(codec.copy && codec.roundtrip && codec.lifetime && codec.unchanged);
+	f.with_write(() => { player.rollback_energy(debit); player.rollback_energy(grant); });
+	test.assert(f.snapshot() == before && player.get_energy_state().credits == 0);
+});
+
+behavior.scenario('income credits once per turn and equal-balance later transactions fence stale undo', () => {
+	const f = fixture(); const player = f.owner; let income = 0; let zero = 0;
+	f.with_write(() => { income = player.credit_energy_income(9,f.game.get_turn()); zero = player.change_energy(0,9,f.game.get_turn()); });
+	test.assert(player.get_energy_state() == {credits:9,last_income_turn:f.game.get_turn()});
+	const before = f.snapshot();
+	for (action of [() => { player.credit_energy_income(9,f.game.get_turn()); }, () => { player.rollback_energy(income); }]) {
+		let failed = false; try { f.with_write(action); } catch { : (e) => { failed = true; } }
+		test.assert(failed && f.snapshot() == before);
+	}
+	f.with_write(() => { player.rollback_energy(zero); player.rollback_energy(income); });
+	test.assert(player.get_energy_state() == {credits:0,last_income_turn:0});
+});

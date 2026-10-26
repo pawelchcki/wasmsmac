@@ -295,6 +295,12 @@ const MapState* Map::GetMapState() const {
 
 void Map::SetTerraforming( tile::Tile* tile, const tile::terraforming_t flags ) {
 	if ( tile->terraforming == flags ) { return; }
+	ValidateTerrainMutation();
+	tile->terraforming = flags;
+	MarkTerrainChanged( tile );
+}
+
+void Map::ValidateTerrainMutation() const {
 	if ( m_map_state ) {
 		const bool frontend_ready = m_frontend_resources && m_frontend_resources->active.load();
 		if ( m_map_state->first_run ) { THROW( "Terrain is still being initialized" ); }
@@ -302,7 +308,9 @@ void Map::SetTerraforming( tile::Tile* tile, const tile::terraforming_t flags ) 
 		if ( !m_meshes.terrain_data && !frontend_ready ) { THROW( "Terrain data mesh is missing" ); }
 		if ( !m_textures.terrain && !frontend_ready ) { THROW( "Terrain texture is missing" ); }
 	}
-	tile->terraforming = flags;
+}
+
+void Map::MarkTerrainChanged( tile::Tile* tile ) {
 	tile->Update();
 	if ( m_map_state ) { m_dirty_tiles.emplace( tile->coord.y, tile->coord.x ); }
 }
@@ -813,6 +821,7 @@ const Map::error_code_t Map::LoadFromBuffer( types::Buffer& buffer ) {
 			DELETE( m_tiles );
 		}
 		m_tiles = loaded_tiles;
+		m_terrain_identity = std::make_shared< const uint8_t >( 0 );
 		return EC_NONE;
 	}
 	catch ( std::runtime_error& e ) {
@@ -875,6 +884,7 @@ const Map::error_code_t Map::LoadFromFile( const std::string& path ) {
 			DELETE( m_tiles );
 		}
 		m_tiles = loaded_tiles;
+		m_terrain_identity = std::make_shared< const uint8_t >( 0 );
 		return EC_NONE;
 	}
 	catch ( std::runtime_error& e ) {

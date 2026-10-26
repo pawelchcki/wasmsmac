@@ -1,0 +1,212 @@
+#include "TileManager.h"
+#include "Tile.h"
+#include "game/backend/Game.h"
+#include "game/backend/map/Map.h"
+#include "game/backend/unit/Unit.h"
+#include "game/backend/unit/Def.h"
+#include "game/backend/unit/UnitManager.h"
+#include "gse/value/Int.h"
+#include "gse/value/Bool.h"
+#include <limits>
+
+namespace game::backend::map::tile {
+
+int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* >& patches, const std::vector< gse::Value* >& workers, const bool apply ) {
+	if ( apply ) { m_game->CheckRW( GSE_CALL ); CheckCustomMutation( GSE_CALL ); }
+	auto* map = GetMap( GSE_CALL ); map->ValidateTerrainMutation();
+	if ( patches.empty() || patches.size() > 4096 || workers.size() > 64 || m_next_terrain_receipt == std::numeric_limits< int64_t >::max() ) {
+		GSE_ERROR( gse::EC.INVALID_CALL, "Invalid terrain patch count or receipt capacity" );
+	}
+	struct Patch { Tile* tile; moisture_t moisture; rockiness_t rockiness; feature_t features; terraforming_t terraforming; };
+	std::vector< Patch > prepared;
+	std::set< std::pair< size_t, size_t > > targets, region;
+	std::map< elevation_t*, elevation_t > vertices;
+	const auto integer = [ & ]( const gse::value::object_properties_t& object, const char* key, const int64_t minimum, const int64_t maximum ) {
+		const auto it = object.find( key );
+		if ( it == object.end() || it->second->type != gse::VT_INT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch needs integer " + std::string( key ) ); }
+		const auto number = static_cast< const gse::value::Int* >( it->second )->value;
+		if ( number < minimum || number > maximum ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch value outside bounds: " + std::string( key ) ); }
+		return number;
+	};
+	for ( auto* value : patches ) {
+		if ( value->type != gse::VT_OBJECT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch must be an object" ); }
+		const auto& object = static_cast< const gse::value::Object* >( value )->value;
+		for ( const auto& entry : object ) {
+			if ( entry.first != "x" && entry.first != "y" && entry.first != "moisture" && entry.first != "rockiness" &&
+				entry.first != "features" && entry.first != "terraforming" && entry.first != "elevation" ) {
+				GSE_ERROR( gse::EC.INVALID_CALL, "Unknown terrain patch field: " + entry.first );
+			}
+		}
+		if ( object.size() < 3 ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain patch needs a changed field" ); }
+		auto* tile = GetTileAt( GSE_CALL, integer( object, "x", 0, map->GetWidth() - 1 ), integer( object, "y", 0, map->GetHeight() - 1 ) );
+		const auto position = std::make_pair( tile->coord.y, tile->coord.x );
+		if ( !targets.emplace( position ).second ) { GSE_ERROR( gse::EC.INVALID_CALL, "Duplicate terrain patch tile" ); }
+		Patch patch { tile, tile->moisture, tile->rockiness, tile->features, tile->terraforming };
+		if ( object.count( "moisture" ) ) { patch.moisture = integer( object, "moisture", MOISTURE_NONE, MOISTURE_RAINY ); }
+		if ( object.count( "rockiness" ) ) { patch.rockiness = integer( object, "rockiness", ROCKINESS_NONE, ROCKINESS_ROCKY ); }
+		const auto flags = [ & ]( const char* key, const std::vector< std::pair< std::string, uint16_t > >& names ) {
+			auto* data = object.at( key );
+			if ( data->type != gse::VT_OBJECT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain flags must be an object" ); }
+			const auto& values = static_cast< const gse::value::Object* >( data )->value;
+			if ( values.size() != names.size() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain flags require every named boolean" ); }
+			uint16_t result = 0;
+			for ( const auto& name : names ) {
+				const auto found = values.find( name.first );
+				if ( found == values.end() || found->second->type != gse::VT_BOOL ) { GSE_ERROR( gse::EC.INVALID_CALL, "Invalid terrain boolean: " + name.first ); }
+				if ( static_cast< const gse::value::Bool* >( found->second )->value ) { result |= name.second; }
+			}
+			return result;
+		};
+		if ( object.count( "features" ) ) {
+			patch.features = flags( "features", {
+				{ "river", FEATURE_RIVER }, { "monolith", FEATURE_MONOLITH }, { "xenofungus", FEATURE_XENOFUNGUS },
+				{ "jungle", FEATURE_JUNGLE }, { "uranium", FEATURE_URANIUM }, { "geothermal", FEATURE_GEOTHERMAL },
+				{ "unity_pod", FEATURE_UNITY_POD }, { "volcano", FEATURE_VOLCANO }, { "sunny_mesa", FEATURE_SUNNY_MESA },
+				{ "garland_crater", FEATURE_GARLAND_CRATER }, { "fossil_field_ridge", FEATURE_FOSSIL_FIELD_RIDGE },
+				{ "unity_energy", FEATURE_UNITY_ENERGY }, { "unity_chopper", FEATURE_UNITY_CHOPPER },
+				{ "unity_radar", FEATURE_UNITY_RADAR }, { "dunes", FEATURE_DUNES },
+			} );
+		}
+		if ( object.count( "terraforming" ) ) {
+			patch.terraforming = flags( "terraforming", {
+				{ "road", TERRAFORMING_ROAD }, { "mag_tube", TERRAFORMING_MAG_TUBE }, { "forest", TERRAFORMING_FOREST },
+				{ "farm", TERRAFORMING_FARM }, { "soil_enricher", TERRAFORMING_SOIL_ENRICHER }, { "solar", TERRAFORMING_SOLAR },
+				{ "mine", TERRAFORMING_MINE }, { "condenser", TERRAFORMING_CONDENSER }, { "mirror", TERRAFORMING_MIRROR },
+				{ "borehole", TERRAFORMING_BOREHOLE }, { "sensor", TERRAFORMING_SENSOR }, { "bunker", TERRAFORMING_BUNKER }, { "airbase", TERRAFORMING_AIRBASE },
+			} );
+		}
+		if ( object.count( "elevation" ) ) {
+			auto* value = object.at( "elevation" );
+			if ( value->type != gse::VT_OBJECT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain elevation requires four corner integers" ); }
+			const auto& corners = static_cast< const gse::value::Object* >( value )->value;
+			if ( corners.size() != 4 ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain elevation requires four corner integers" ); }
+			for ( const auto& corner : std::vector< std::pair< const char*, elevation_t* > >{
+				{ "left", tile->elevation.left }, { "top", tile->elevation.top }, { "right", tile->elevation.right }, { "bottom", tile->elevation.bottom },
+			} ) {
+				const auto number = integer( corners, corner.first, ELEVATION_MIN, ELEVATION_MAX );
+				const auto existing = vertices.find( corner.second );
+				if ( existing != vertices.end() && existing->second != number ) { GSE_ERROR( gse::EC.INVALID_CALL, "Conflicting shared terrain vertex" ); }
+				vertices[corner.second] = number;
+			}
+		}
+		prepared.push_back( patch );
+	}
+	TerrainRecord record; record.world = map->m_terrain_identity;
+	for ( auto* value : workers ) {
+		if ( value->type != gse::VT_INT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain participant must be a live worker ID" ); }
+		const auto id = static_cast< const gse::value::Int* >( value )->value;
+		auto* worker = id > 0 && m_game->GetUM() ? m_game->GetUM()->GetUnit( id ) : nullptr;
+		if ( !worker || !worker->m_def->CanTerraform() || worker->m_health <= 0 ||
+			!targets.count( { worker->GetTile()->coord.y, worker->GetTile()->coord.x } ) || record.workers.count( id ) ) {
+			GSE_ERROR( gse::EC.INVALID_CALL, "Terrain participant is not a live capable worker on a target" );
+		}
+		record.workers.emplace( id, worker->m_order_handle );
+	}
+	region = targets;
+	for ( const auto& patch : prepared ) {
+		for ( auto* neighbor : patch.tile->neighbours ) {
+			for ( auto* corner : neighbor->elevation.corners ) {
+				if ( vertices.count( corner ) && vertices.at( corner ) != *corner ) { region.emplace( neighbor->coord.y, neighbor->coord.x ); break; }
+			}
+		}
+	}
+	for ( const auto& position : region ) {
+		auto* tile = map->GetTile( position.second, position.first );
+		if ( tile->IsLocked() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Affected terrain tile is locked" ); }
+		std::array< elevation_t, 4 > corners; bool retains_import = tile->m_has_imported_elevation;
+		elevation_t sum = 0; size_t water = 0;
+		for ( size_t i = 0; i < corners.size(); ++i ) {
+			const auto found = vertices.find( tile->elevation.corners[i] );
+			corners[i] = found == vertices.end() ? *tile->elevation.corners[i] : found->second;
+			retains_import = retains_import && corners[i] == tile->m_imported_corners[i];
+			sum += corners[i]; if ( corners[i] < ELEVATION_LEVEL_COAST ) { ++water; }
+		}
+		if ( sum / 4 < ELEVATION_LEVEL_COAST ) { ++water; }
+		const bool next_water = retains_import ? tile->m_imported_water : water > 2;
+		if ( next_water != tile->is_water_tile ) {
+			if ( tile->base ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain class change would alter a city's ground" ); }
+			for ( const auto& entry : tile->units ) {
+				const auto type = entry.second->m_def->GetMovementType();
+				if ( ( type == unit::MT_LAND && next_water || type == unit::MT_WATER && !next_water ) && !record.workers.count( entry.first ) ) {
+					GSE_ERROR( gse::EC.INVALID_CALL, "Terrain class change would strand an unrelated unit" );
+				}
+			}
+		}
+		record.entries.push_back( { tile, "", { *tile->elevation.center, *tile->elevation.left, *tile->elevation.top, *tile->elevation.right, *tile->elevation.bottom },
+			tile->moisture, tile->rockiness, tile->features, tile->terraforming, tile->is_water_tile, next_water,
+			tile->m_has_imported_elevation, tile->m_imported_water, tile->m_imported_elevation, tile->m_imported_corners } );
+	}
+	if ( !apply ) { return 0; }
+	const auto token = m_next_terrain_receipt + 1;
+	auto dirty_before = map->m_dirty_tiles;
+	auto inserted = m_terrain_records.emplace( token, std::move( record ) ).first;
+	try {
+		for ( const auto& vertex : vertices ) { *vertex.first = vertex.second; }
+		for ( const auto& patch : prepared ) {
+			patch.tile->moisture = patch.moisture; patch.tile->rockiness = patch.rockiness;
+			patch.tile->features = patch.features; patch.tile->terraforming = patch.terraforming;
+		}
+		for ( auto& entry : inserted->second.entries ) {
+			map->MarkTerrainChanged( entry.tile ); entry.expected = entry.tile->Serialize().ToString();
+		}
+	} catch ( ... ) {
+		RestoreTerrain( inserted->second ); map->m_dirty_tiles.swap( dirty_before ); m_terrain_records.erase( inserted ); throw;
+	}
+	m_next_terrain_receipt = token;
+	return token;
+}
+
+void TileManager::RestoreTerrain( const TerrainRecord& record ) {
+	// Shared vertices must all be restored before any imported center/class is
+	// refreshed. No caller-owned objects or extensible callbacks enter this undo.
+	for ( const auto& entry : record.entries ) {
+		for ( size_t i = 0; i < 4; ++i ) { *entry.tile->elevation.corners[i] = entry.elevation[i + 1]; }
+	}
+	for ( const auto& entry : record.entries ) {
+		auto* tile = entry.tile;
+		tile->moisture = entry.moisture; tile->rockiness = entry.rockiness; tile->features = entry.features; tile->terraforming = entry.terraforming;
+		tile->m_has_imported_elevation = entry.imported; tile->m_imported_elevation = entry.imported_elevation;
+		tile->m_imported_water = entry.imported_water; tile->m_imported_corners = entry.imported_corners;
+		*tile->elevation.center = entry.elevation[0]; tile->is_water_tile = entry.previous_water;
+	}
+}
+
+const TileManager::TerrainRecord& TileManager::ValidateTerrainRollback( GSE_CALLABLE, const int64_t receipt ) const {
+	auto* map = GetMap( GSE_CALL ); map->ValidateTerrainMutation();
+	const auto found = m_terrain_records.find( receipt );
+	if ( found == m_terrain_records.end() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Unknown terrain receipt" ); }
+	const auto& record = found->second;
+	const auto world = record.world.lock();
+	if ( !world || world != map->m_terrain_identity ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain receipt belongs to a retired grid" ); }
+	for ( const auto& entry : record.entries ) {
+		auto* tile = entry.tile;
+		if ( tile->IsLocked() || tile->Serialize().ToString() != entry.expected || tile->is_water_tile != entry.expected_water ) {
+			GSE_ERROR( gse::EC.INVALID_CALL, "Terrain receipt is stale or locked" );
+		}
+		if ( tile->is_water_tile != entry.previous_water ) {
+			if ( tile->base ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain undo would alter a city's ground" ); }
+			for ( const auto& occupant : tile->units ) {
+				const auto type = occupant.second->m_def->GetMovementType();
+				if ( type == unit::MT_LAND && entry.previous_water || type == unit::MT_WATER && !entry.previous_water ) {
+					const auto worker = record.workers.find( occupant.first );
+					const auto handle = worker == record.workers.end() ? std::shared_ptr< game::backend::unit::Unit* >{} : worker->second.lock();
+					if ( !handle || *handle != occupant.second ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain undo would strand an unrelated unit" ); }
+				}
+			}
+		}
+	}
+	return record;
+}
+
+void TileManager::RollbackTerrain( GSE_CALLABLE, const int64_t receipt ) {
+	m_game->CheckRW( GSE_CALL ); CheckCustomMutation( GSE_CALL );
+	auto* map = GetMap( GSE_CALL );
+	const auto& record = ValidateTerrainRollback( GSE_CALL, receipt );
+	// Reserve dirty entries before mutation so allocation failures cannot leave
+	// a half-restored world. Native field restoration itself allocates nothing.
+	auto dirty = map->m_dirty_tiles;
+	for ( const auto& entry : record.entries ) { dirty.emplace( entry.tile->coord.y, entry.tile->coord.x ); }
+	RestoreTerrain( record ); map->m_dirty_tiles.swap( dirty ); m_terrain_records.erase( receipt );
+}
+
+}

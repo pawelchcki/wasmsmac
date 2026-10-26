@@ -119,6 +119,28 @@ return (game) => {
 			}
 		}
 
+		// User-requested technology waiver affects worker availability only. Keep
+		// the original opening project calculation separate from these new choices.
+		if (game.get_settings().global.rules.get_terraforming_policy().ignore_technologies) {
+			for (unit of starting_units) {
+				if (unit.weapon_mode == 9) {
+					let already_available = !faction.is_naval && unit.prerequisite == 'None';
+					if (!faction.is_naval) {
+						for (token of faction.starting_technologies) { if (token == unit.prerequisite) { already_available = true; } }
+					}
+					if (!already_available) {
+						game.event('add_production_choice', {player: player, id: unit.choice,
+							data: {type: 'unit', id: unit.id, cost: unit.rows * 10, cost_rows: unit.rows, population_cost: unit.population}});
+					}
+				}
+			}
+			const sea_former = game.get('sea_former_rule');
+			if (#is_defined(sea_former) && sea_former != null) {
+				game.event('add_production_choice', {player: player, id: sea_former.choice,
+					data: {type: 'unit', id: sea_former.id, cost: sea_former.rows * 10, cost_rows: sea_former.rows, population_cost: 0}});
+			}
+		}
+
 		// spawn headquarters base
 		const headquarters = {
 			owner: player,

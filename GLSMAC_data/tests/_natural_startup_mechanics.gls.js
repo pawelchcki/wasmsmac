@@ -2,6 +2,9 @@
 // stores, tile yields or expected city answers. Audio/artwork loading is omitted.
 return (f, declared_sources, declared_factions) => {
 	const game = f.game;
+	// Recorded startup contracts retain their declared original availability mode.
+	// Normal play defaults to the separate user-requested technology waiver.
+	game.get_settings().global.rules.set_terraforming_ignore_technologies(false);
 	const sources = #is_defined(declared_sources) ? declared_sources : #include('./_startup_faction_sources_fixture')({});
 	#include('../default/factions').configure({
 		add: (id, data) => {

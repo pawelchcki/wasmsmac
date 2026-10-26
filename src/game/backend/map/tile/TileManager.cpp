@@ -12,6 +12,8 @@
 #include "gse/ExecutionPointer.h"
 #include "gse/value/Bool.h"
 #include "gse/value/Int.h"
+#include "gse/value/Array.h"
+#include "gse/value/Null.h"
 
 namespace game {
 namespace backend {
@@ -39,7 +41,55 @@ Tile* TileManager::GetTileAt( GSE_CALLABLE, const int64_t x, const int64_t y ) c
 	return map->GetTile( x, y );
 }
 
+gse::Value* TileManager::GetTerrainState( GSE_CALLABLE, const int64_t x, const int64_t y ) const {
+	const auto* tile = GetTileAt( GSE_CALL, x, y );
+	const auto* map = GetMap( GSE_CALL );
+	// Detached native values only. Imported center/class are retained in engine
+	// units; the original source map's raw height byte is not stored here.
+	gse::Value* source_elevation = VALUE( gse::value::Null );
+	gse::Value* source_water = VALUE( gse::value::Null );
+	gse::Value* source_corners = VALUE( gse::value::Null );
+	if ( tile->m_has_imported_elevation ) {
+		source_elevation = VALUE( gse::value::Int,, tile->m_imported_elevation );
+		source_water = VALUE( gse::value::Bool,, tile->m_imported_water );
+		gse::value::array_elements_t corners;
+		for ( const auto elevation : tile->m_imported_corners ) { corners.push_back( VALUE( gse::value::Int,, elevation ) ); }
+		source_corners = VALUE( gse::value::Array,, corners );
+	}
+	gse::value::object_properties_t neighbors;
+	for ( const auto& entry : std::vector< std::pair< std::string, const Tile* > >{
+		{ "W", tile->W }, { "NW", tile->NW }, { "N", tile->N }, { "NE", tile->NE },
+		{ "E", tile->E }, { "SE", tile->SE }, { "S", tile->S }, { "SW", tile->SW },
+	} ) {
+		const auto* neighbor = entry.second;
+		neighbors.emplace( entry.first, neighbor ? VALUEEXT( gse::value::Object, GSE_CALL, {
+			{ "x", VALUE( gse::value::Int,, neighbor->coord.x ) }, { "y", VALUE( gse::value::Int,, neighbor->coord.y ) },
+		} ) : static_cast< gse::Value* >( VALUE( gse::value::Null ) ) );
+	}
+	return VALUEEXT( gse::value::Object, GSE_CALL, {
+		{ "version", VALUE( gse::value::Int,, 1 ) },
+		{ "neighbors", VALUEEXT( gse::value::Object, GSE_CALL, neighbors ) },
+		{ "x", VALUE( gse::value::Int,, tile->coord.x ) }, { "y", VALUE( gse::value::Int,, tile->coord.y ) },
+		{ "width", VALUE( gse::value::Int,, map->GetWidth() ) }, { "height", VALUE( gse::value::Int,, map->GetHeight() ) },
+		{ "elevation", VALUEEXT( gse::value::Object, GSE_CALL, {
+			{ "center", VALUE( gse::value::Int,, *tile->elevation.center ) },
+			{ "left", VALUE( gse::value::Int,, *tile->elevation.left ) }, { "top", VALUE( gse::value::Int,, *tile->elevation.top ) },
+			{ "right", VALUE( gse::value::Int,, *tile->elevation.right ) }, { "bottom", VALUE( gse::value::Int,, *tile->elevation.bottom ) },
+		} ) },
+		{ "is_land", VALUE( gse::value::Bool,, !tile->is_water_tile ) }, { "is_water", VALUE( gse::value::Bool,, tile->is_water_tile ) },
+		{ "moisture", VALUE( gse::value::Int,, tile->moisture ) }, { "rockiness", VALUE( gse::value::Int,, tile->rockiness ) },
+		{ "bonus", VALUE( gse::value::Int,, tile->bonus ) },
+		{ "features_raw", VALUE( gse::value::Int,, tile->features ) }, { "features", tile->GetFeatures( GSE_CALL ) },
+		{ "terraforming_raw", VALUE( gse::value::Int,, tile->terraforming ) }, { "terraforming", tile->GetTerraforming( GSE_CALL ) },
+		{ "imported", VALUEEXT( gse::value::Object, GSE_CALL, {
+			{ "active", VALUE( gse::value::Bool,, tile->m_has_imported_elevation ) },
+			{ "source_elevation", source_elevation }, { "source_water", source_water }, { "source_corners", source_corners },
+		} ) },
+	} );
+}
+
 void TileManager::Clear() {
+	m_terrain_records.clear();
 	m_tile_lock_requests.clear();
 	m_tile_locks.clear();
 	m_tile_lock_callbacks.clear();
@@ -157,6 +207,43 @@ void TileManager::ReleaseTileLocks( const size_t initiator_slot ) {
 WRAPIMPL_BEGIN( TileManager )
 	WRAPIMPL_PROPS
 	WRAPIMPL_TRIGGERS
+		{
+			"validate_terrain", NATIVE_CALL( handle = m_live_handle ) {
+				N_EXPECT_ARGS( 2 ); N_GETVALUE( patches, 0, Array ); N_GETVALUE( workers, 1, Array ); auto* tm = *handle;
+				if ( !tm || tm->m_game->GetTM() != tm ) { GSE_ERROR( gse::EC.INVALID_CALL, "Tile manager no longer exists" ); }
+				tm->ApplyTerrain( GSE_CALL, patches, workers, false ); return VALUE( gse::value::Undefined );
+			} )
+		},
+		{
+			"validate_terrain_rollback", NATIVE_CALL( handle = m_live_handle ) {
+				N_EXPECT_ARGS( 1 ); N_GETVALUE( receipt, 0, Int ); auto* tm = *handle;
+				if ( !tm || tm->m_game->GetTM() != tm ) { GSE_ERROR( gse::EC.INVALID_CALL, "Tile manager no longer exists" ); }
+				tm->ValidateTerrainRollback( GSE_CALL, receipt ); return VALUE( gse::value::Undefined );
+			} )
+		},
+		{
+			"apply_terrain", NATIVE_CALL( handle = m_live_handle ) {
+				N_EXPECT_ARGS( 2 ); N_GETVALUE( patches, 0, Array ); N_GETVALUE( workers, 1, Array );
+				auto* tm = *handle;
+				if ( !tm || tm->m_game->GetTM() != tm ) { GSE_ERROR( gse::EC.INVALID_CALL, "Tile manager no longer exists" ); }
+				return VALUE( gse::value::Int,, tm->ApplyTerrain( GSE_CALL, patches, workers ) );
+			} )
+		},
+		{
+			"rollback_terrain", NATIVE_CALL( handle = m_live_handle ) {
+				N_EXPECT_ARGS( 1 ); N_GETVALUE( receipt, 0, Int ); auto* tm = *handle;
+				if ( !tm || tm->m_game->GetTM() != tm ) { GSE_ERROR( gse::EC.INVALID_CALL, "Tile manager no longer exists" ); }
+				tm->RollbackTerrain( GSE_CALL, receipt ); return VALUE( gse::value::Undefined );
+			} )
+		},
+		{
+			"get_terrain_state", NATIVE_CALL( handle = m_live_handle ) {
+				N_EXPECT_ARGS( 2 ); N_GETVALUE( x, 0, Int ); N_GETVALUE( y, 1, Int );
+				auto* tm = *handle;
+				if ( !tm || tm->m_game->GetTM() != tm ) { GSE_ERROR( gse::EC.INVALID_CALL, "Tile manager no longer exists" ); }
+				return tm->GetTerrainState( GSE_CALL, x, y );
+			} )
+		},
 		{
 			"get_terraforming", NATIVE_CALL( handle = m_live_handle ) {
 				N_EXPECT_ARGS( 2 ); N_GETVALUE( x, 0, Int ); N_GETVALUE( y, 1, Int );

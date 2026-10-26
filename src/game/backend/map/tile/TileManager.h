@@ -2,6 +2,7 @@
 
 #include <unordered_set>
 #include <memory>
+#include <array>
 
 #include "gse/GCWrappable.h"
 
@@ -16,6 +17,7 @@ namespace game {
 namespace backend {
 
 class Game;
+namespace unit { class Unit; }
 
 namespace map {
 
@@ -51,6 +53,27 @@ private:
 	Game* m_game = nullptr;
 	const std::shared_ptr< TileManager* > m_live_handle = std::make_shared< TileManager* >( this );
 	Tile* GetTileAt( GSE_CALLABLE, int64_t x, int64_t y ) const;
+	gse::Value* GetTerrainState( GSE_CALLABLE, int64_t x, int64_t y ) const;
+	int64_t ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* >& patches, const std::vector< gse::Value* >& workers, bool apply = true );
+	void RollbackTerrain( GSE_CALLABLE, int64_t receipt );
+	struct TerrainRecord {
+		struct Entry {
+			Tile* tile;
+			std::string expected;
+			std::array< elevation_t, 5 > elevation;
+			moisture_t moisture; rockiness_t rockiness; feature_t features; terraforming_t terraforming;
+			bool previous_water, expected_water, imported, imported_water;
+			elevation_t imported_elevation;
+			std::array< elevation_t, 4 > imported_corners;
+		};
+		std::weak_ptr< const uint8_t > world;
+		std::vector< Entry > entries;
+		std::map< size_t, std::weak_ptr< unit::Unit* > > workers;
+	};
+	void RestoreTerrain( const TerrainRecord& record );
+	const TerrainRecord& ValidateTerrainRollback( GSE_CALLABLE, int64_t receipt ) const;
+	std::map< int64_t, TerrainRecord > m_terrain_records;
+	int64_t m_next_terrain_receipt = 0;
 
 	// server-side lock tracking
 	struct tile_lock_request_t {

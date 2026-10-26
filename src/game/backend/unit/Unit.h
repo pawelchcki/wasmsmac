@@ -18,6 +18,7 @@ class Slot;
 }
 namespace map::tile {
 class Tile;
+class TileManager;
 }
 
 namespace unit {
@@ -85,6 +86,7 @@ public:
 	WRAPDEF_SERIALIZABLE;
 
 private:
+	friend class map::tile::TileManager;
 	UnitManager* const m_um;
 	order_t m_order = order_t::NO_ORDERS;
 	work_state_t m_work;

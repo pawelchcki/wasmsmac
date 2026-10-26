@@ -65,6 +65,7 @@ return (glsmac) => {
 			resources.define(game);
 			const starting_rules = unit_rules.parse(document);
 			game.set('starting_unit_rules', unit_rules.materialize(um, starting_rules));
+			game.set('sea_former_rule', unit_rules.materialize_sea_former(um, starting_rules));
 			units.define(game, starting_rules);
 
 			const worldscript = #is_defined(glsmac.config.worldscript) ? glsmac.config.worldscript : 'default';

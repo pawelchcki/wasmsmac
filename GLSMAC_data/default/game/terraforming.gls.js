@@ -1,5 +1,7 @@
-// First bounded work policy: one healthy ordinary Former on flat arid land.
-// Installed TERRAIN declarations supply work rates, prerequisites and labels.
+// Authoritative worker policy. Installed TERRAIN declarations supply land/sea
+// work rates, prerequisites and labels.
+const source_rules = #include('./terraforming_rules');
+const describe = (game, unit, action) => { return source_rules.for_tile(game.get('terraforming_rules'), unit.get_tile(), action); };
 const empty = () => { return {action: '', work_units: 0, required_work: 0, last_turn: 0,
 	previous_work_units: 0, previous_movement: 0.0, previous_moved: false, tile_x: 0, tile_y: 0, active: false}; };
 const flags = (game, tile) => {
@@ -8,11 +10,19 @@ const flags = (game, tile) => {
 };
 const prerequisite_error = (game, owner, prerequisite) => {
 	if (prerequisite == 'Disable') { return 'Terraforming action is disabled'; }
+	if (game.get_settings().global.rules.get_terraforming_policy().ignore_technologies) { return; }
 	if (prerequisite != 'None') {
 		let owned = false;
-		for (player of game.get_players()) {
-			if (player.id == owner) {
-				for (token of player.get_faction().starting_technologies) { if (token == prerequisite) { owned = true; } }
+		if (game.get('technologies_initialized') == true) {
+			for (definition of game.get('technology_rules')) {
+				if (definition.token == prerequisite && game.technologies.has_tech(definition.id, owner + 1)) { owned = true; }
+			}
+		} else {
+			// Declared pre-technology startup sources have only faction grants.
+			for (player of game.get_players()) {
+				if (player.id == owner) {
+					for (token of player.get_faction().starting_technologies) { if (token == prerequisite) { owned = true; } }
+				}
 			}
 		}
 		if (!owned) { return 'Terraforming prerequisite is not owned'; }
@@ -68,6 +78,7 @@ const tick = (game, unit, action) => {
 };
 return {
 	flags: flags,
+	describe: describe,
 	prerequisite_error: prerequisite_error,
 	needs_confirmation: needs_confirmation,
 	validate: (e) => {
