@@ -86,9 +86,8 @@ const tick = (game, unit, action) => {
 	let terrain_receipt = 0;
 	if (completed + 2 >= required) {
 		if (action == 'level') {
-			// Accepted original rockiness_raw2→1 maps through the existing
-			// importer to native ROCKY3→ROLLING2. The next category is an
-			// explicit application step until independently recorded.
+			// Accepted original rockiness_raw2→1→0 maps through the existing
+			// importer to native ROCKY3→ROLLING2→FLAT1 in genuine successive turns.
 			terrain_receipt = game.get_tm().apply_terrain([{x:tile.x + 0,y:tile.y + 0,rockiness:tile.rockiness - 1}],[unit.id + 0]);
 		} else {
 		const data = flags(game, tile); data[action] = true;

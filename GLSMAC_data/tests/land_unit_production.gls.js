@@ -122,8 +122,11 @@ const sea_worker = (profile) => {
 behavior.scenario('source-capable naval worker completes at a real adjacent water launch and rolls back atomically', () => {
 	const f = sea_worker('sea_worker_coast'); choose(f, 'SEA_FORMERS');
 	const before = f.snapshot(); const state = f.inspect(); const terrain = f.terrain_snapshot();
+	let observed_home = 0; f.game.um.on('unit_spawn', (e) => { observed_home = e.unit.get_terraform_home(); });
 	const receipt = process(f, 2, 43); const unit = f.game.um.get_unit(state.next_unit_id);
 	test.assert(unit.get_def().can_terraform && unit.is_water && unit.movement == 4.0);
+	test.assert(unit.get_terraform_home() == f.base.id && observed_home == f.base.id, 'The originating owned base is present before the production spawn notification');
+	test.assert(f.unit_order_codec_probe(unit.id).roundtrip, 'Produced home survives the actual receiving unit codec');
 	test.assert(unit.owner == f.owner.id && unit.get_tile().is_water && unit.get_tile() == f.base.get_tile().get_W());
 	test.assert(f.base.get_size() == 1, 'Naval worker must not consume a citizen');
 	test.assert(f.base.get_production().minerals == 3, 'Actual naval project: ' + #to_string(f.base.get_production()));

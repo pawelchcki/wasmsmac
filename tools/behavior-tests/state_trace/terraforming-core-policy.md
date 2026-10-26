@@ -64,8 +64,9 @@ seams, not seeded expected results.
 
 `apply_terrain(patches, worker_ids)` validates a bounded complete batch before
 changing any field. Patches identify coordinates and optional complete named
-feature/improvement dictionaries, moisture, rockiness and four engine-height
-corners. Duplicate tiles, conflicting shared vertices, invalid fields, out-of-range
+feature/improvement dictionaries, moisture, rockiness and either four engine-height
+corners or an explicit canonical center/class. The two coordinate models cannot
+be mixed in one transaction. Duplicate tiles, conflicting shared vertices, invalid fields, out-of-range
 values and locked affected tiles reject atomically. Actual shared vertices refresh
 all affected centers/classes and invalidate imported provenance only when their
 corners change. Existing terrain rendering regenerates neighboring layers and
@@ -87,19 +88,24 @@ fallbacks and meaningful end-to-end tests.
 
 ## Treasury prerequisite
 
-`player.get_energy_state()` exposes native credits and last income turn.
+`player.get_energy_state()` exposes native credits, last income turn and the
+explicit `initialized` stamp.
 `change_energy(delta, expected_credits, turn_id)` and
 `credit_energy_income(amount, turn_id)` require authoritative write scope, a live
 player, current turn, affordable bounded arithmetic and current balance. Income
 is credited at most once per turn. Receipt undo is fenced by native player
 lifetime, turn, transaction revision and expected ledger state. Copies and the
 versioned Player wire retain balances; exact legacy records remain unfunded zero.
-No opening grant, infinite funds or free height work is implied.
+New worlds initialize once from installed RULES row 20 plus their actual faction
+ENERGY bonus. A zero reserve is also stamped as initialized. The versioned wire
+preserves initialization and eligibility; old unfunded records cannot acquire a
+new grant simply through loading. No infinite funds or free height work is implied.
 
-Normal-play income will reuse the existing actual base energy allocation's
+Normal-play income reuses the existing actual base energy allocation's
 economy share once per completed turn as declared application policy. Original
-opening treasury, income timing and height fee formulas remain unsupported until
-recorded separately. The technology waiver never waives fees.
+income timing and height fee formulas remain unsupported until recorded
+separately. The starting reserve is a source declaration rather than a fitted
+post-turn balance. The technology waiver never waives fees.
 
 ## First foundation checkpoint: verified, incomplete action coverage
 
@@ -142,3 +148,56 @@ eight numeric samples, including `1/3` and signed zero, using actual native
 execution. The strict JSON value equals the exported native binary32 value;
 reconstructing merely the same rounded binary32 from a shorter JSON decimal is
 not accepted. These checks add no original terraforming agreement totals.
+
+## Combined native checkpoint v3
+
+The combined runtime is pinned to source `bdbe6e420222f92e12d2bfe56a6b25876b894212`
+and C++ tree `54d79dd9136f93ae1263bc8b7ab2be5c2bde2005`. Its JS SHA256 is
+`4dc26e4d0116f4e31fffd1b258dcad76dd2fef1fe8bf67452208106e08149839`; WASM
+SHA256 is `2774ca920a914709bb3671c6440c1269b81803f8bf4188513eaa4a12717cc205`.
+The private FastDebug build used two workers and the same verified unchanged
+installer outputs as the previous checkpoint. Host GSE source is separately
+snapshotted by the isolated test harness.
+
+Canonical center edits retain untouched neighboring gameplay heights/classes
+while refreshing shared render corners. Both canonical values and any retained
+imported provenance survive real receiving-map serialization and subsequent
+`Update()` calls. Direct-corner edits retain their earlier behavior. Invalid
+mixed-coordinate batches reject before mutation. These are engine invariants,
+not a raise/lower effect algorithm.
+
+The native treasury now validates an entire logical LIFO chain before restoring
+any entry. Legitimate multiple credits/debits unwind together; bad middle
+tokens, wrong order, duplicates, reuse and equal-balance ABA reject atomically.
+New-world initialization from source zero supports fenced undo/retry before
+startup and cannot be repeated afterward. Seven-owner startup also verifies
+source reserve 10 plus one authored faction ENERGY 100 bonus, without grants
+to unrelated owners. Original post-turn treasury agreement is not claimed.
+
+The durable native automation intent and owned home-base identity have real
+codec, receiving-owner, detached read, cancellation, strict payload and frontend
+synchronization checks (26 scenarios / 68 assertions). A real source-capable
+naval worker's production notification sees its originating owned base before
+publication; the production receipt still restores project, IDs and graph. The
+pointer-target helper has a real seven-owner no-mutation check, including absent,
+false, true, removed and malformed named handlers. This metadata and event hook
+do not establish functionality of the ten automation commands by themselves.
+
+The new Level primitive reduces one native rockiness category per completion.
+The accepted original rate-1 `level-twice-rate1-v2` witness records original raw
+2→1→0; the existing importer maps those to native 3→2→1. The candidate checks
+the two real successive-turn operations, full terrain preservation, no energy
+fee, exhausted movement and cleared work/order. Receipt rollback and stale
+receipt rejection are additional application invariants. Stock source rate 8
+progress/cancellation remain application checks until stock-rate observations
+exist. Seven scenarios / 21 assertions pass. This brings completed primitive
+implementation to the existing four actions plus Level, not the full 26 variants.
+
+Final focused checks on v3 passed terrain 37/162, source declarations 25/75,
+land/naval production 13/40, native input/target hook 9/64, existing Former work
+31/62, source transfer 23/358 and world startup 12/202, in scenarios/assertions.
+The initial new initialization test used an unsupported GSE call-index expression;
+its failure is preserved and the corrected expression was rerun successfully.
+No original expected observations were edited. General height amount, fee,
+cascades, remaining primitive effects, sea action completion, all ten plan engines,
+resource/traversal consequences and visual timing remain separate pending work.

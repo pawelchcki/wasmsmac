@@ -331,3 +331,37 @@ behavior.scenario('canonical terrain batches retain unrelated fields and reject 
 		reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,canonical:bad}],[]); }); });
 	}
 });
+
+behavior.scenario('new-world zero treasury initialization is stamped reversible and retryable only before startup', () => {
+	const f = test.natural_startup_fixture(16,16,'flat-arid');
+	#include('./_natural_startup_mechanics')(f);
+	f.initialize_single_player('GAIANS','Citizen');
+	const players = f.game.get_players(); const player = players[0];
+	test.assert(!#is_defined(player.validate_initial_energy(0)) && player.get_energy_state() == {credits:0,last_income_turn:0,initialized:false});
+	let token = 0; f.with_write(() => { token = player.initialize_energy(0); });
+	test.assert(player.get_energy_state() == {credits:0,last_income_turn:0,initialized:true} && #is_defined(player.validate_initial_energy(0)));
+	player.validate_energy_rollback_sequence([token]);
+	f.with_write(() => { player.rollback_energy_sequence([token]); });
+	test.assert(!#is_defined(player.validate_initial_energy(0)) && !player.get_energy_state().initialized);
+	let reused = false; try { player.validate_energy_rollback(token); } catch { : (e) => { reused = true; } } test.assert(reused);
+	f.start_world();
+	for (owner of f.game.get_players()) { test.assert(owner.get_energy_state() == {credits:0,last_income_turn:0,initialized:true} && #is_defined(owner.validate_initial_energy(0))); }
+	const before = f.audit_snapshot(); const inspect = f.audit_inspect();
+	let failed = false; try { f.with_write(() => { player.initialize_energy(0); }); } catch { : (e) => { failed = true; } }
+	test.assert(failed && f.audit_snapshot() == before && f.audit_inspect() == inspect);
+});
+behavior.scenario('normal seven-player opening receives source reserves plus only each actual faction ENERGY bonus', () => {
+	const f = test.natural_startup_fixture(16,16,'flat-arid'); const sources = #include('./_startup_faction_sources_fixture')({});
+	const lines = #split(sources.sources['morgan.txt'],'\n'); lines[2] = 'ENERGY,100'; let text = ''; for (line of lines) { text += line + '\n'; }
+	sources.sources['morgan.txt'] = text; sources.reload();
+	#include('./_natural_startup_mechanics')(f,sources); f.game.set('energy_rules',{starting_credits:10});
+	f.initialize_single_player('GAIANS','Citizen'); f.start_world();
+	let bonus_owner = 0;
+	for (owner of f.game.get_players()) {
+		const bonus = owner.get_faction().economy_bonuses.starting_energy;
+		if (bonus == 100) { bonus_owner++; }
+		test.assert(owner.get_energy_state() == {credits:10 + bonus,last_income_turn:0,initialized:true});
+	}
+	test.assert(bonus_owner == 1);
+	const before = f.audit_snapshot(); f.process_events(); test.assert(f.audit_snapshot() == before, 'Repeated event drain cannot grant source reserves again');
+});

@@ -1,6 +1,6 @@
 // Original accepted accelerated witness: original rockiness_raw2→1 imports as
-// native ROCKY3→ROLLING2. Other category, stock-rate and lifecycle cases below
-// are declared application regressions, not additional original observations.
+// native ROCKY3→ROLLING2. The repeated witness also proves original1→0
+// (native2→1). Stock-rate and lifecycle cases remain application regressions.
 const behavior = #include('./_behavior');
 const fixture = #include('./_terraform_level_fixture');
 const command = #include('../default/game/event/unit_terraform');
@@ -58,4 +58,13 @@ behavior.scenario('inherited work cancellation retains then refunds only its cur
 	test.assert(f.former.movement == 0.0 && f.former.get_terraforming().work_units == 2 && f.former.get_tile().rockiness == 3);
 	f.advance(); f.command('level'); f.command('cancel_work');
 	test.assert(f.former.movement == 1.0 && f.former.get_terraforming().work_units == 2 && f.former.get_tile().rockiness == 3);
+});
+
+behavior.scenario('genuine next-turn Level reduces rolling to flat without height or treasury changes', () => {
+	const f = fixture(1,3); f.command('level'); f.advance();
+	const before = terrain(f); const energy = f.owner.get_energy_state();
+	for (state of before) { if (state.x == 2 && state.y == 2) { state.rockiness = 1; } }
+	f.command('level');
+	test.assert(f.former.get_tile().rockiness == 1 && terrain(f) == before);
+	test.assert(f.owner.get_energy_state() == energy && f.former.get_order() == 'NO_ORDERS' && f.former.movement == 0.0);
 });

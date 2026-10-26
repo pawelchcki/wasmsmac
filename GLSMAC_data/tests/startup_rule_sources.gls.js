@@ -155,3 +155,26 @@ behavior.scenario('Sea Former application composition uses installed Foil and Te
 	test.assert(recipe.rows == f.game.um.get_prototype_base_cost(4,0,false,0,9,6,1,1));
 	test.assert(consumer.materialize_sea_former(f.game.um, fixture.parse()) == null, 'Absent naval source components do not become a guessed hull');
 });
+
+const energy_rules = #include('../default/game/energy_rules');
+const energy_document = (reserve) => {
+	let source = '#RULES\n'; for (let row = 0; row < 20; row++) { source += '0\n'; }
+	return test.parse_smac_text(source + reserve + '\n#END\n','rules');
+};
+behavior.scenario('starting treasury comes from the actual source row including authored zero without a hidden fallback', () => {
+	for (reserve of [0,10,37]) { test.assert(energy_rules.parse(energy_document(#to_string(reserve))) == {starting_credits:reserve}); }
+	for (reserve of ['','-1','10.0','1000001','9223372036854775808']) {
+		let failed = false; try { energy_rules.parse(energy_document(reserve)); } catch { : (e) => { failed = true; } } test.assert(failed);
+	}
+});
+behavior.scenario('faction ENERGY and TERRAFORM declarations are independent bounded metadata', () => {
+	const economy = #include('../default/game/faction_economy');
+	for (pairs of ['TECH,Ecology','ENERGY,100','TERRAFORM,0','ENERGY,19,TERRAFORM,1']) {
+		const result = economy.parse(test.parse_smac_text('#SYNTHETIC\nHeader\n' + pairs + '\n#END\n','dialogs'),'SYNTHETIC');
+		test.assert(result.starting_energy == (pairs == 'ENERGY,100' ? 100 : (pairs == 'ENERGY,19,TERRAFORM,1' ? 19 : 0)));
+		test.assert(result.terraform_cost_halved == (pairs == 'TERRAFORM,0' || pairs == 'ENERGY,19,TERRAFORM,1'));
+	}
+	for (pairs of ['ENERGY,-1','ENERGY,1.0','ENERGY,1000001','ENERGY,1,ENERGY,2','TERRAFORM,','TERRAFORM,0,TERRAFORM,1']) {
+		let failed = false; try { economy.parse(test.parse_smac_text('#SYNTHETIC\nHeader\n' + pairs + '\n#END\n','dialogs'),'SYNTHETIC'); } catch { : (e) => { failed = true; } } test.assert(failed);
+	}
+});
