@@ -111,9 +111,30 @@ The complete matrix on that frozen v4 source/runtime subsequently passed all
 36 cases / 680 assertions, 166 observations, 1,162 owner snapshots and 21,248
 tile rows; every native process exited zero. The manifest is retained at
 `/tmp/terraform-pr2-full36-staged-v4/manifest.json`. This is the declared 16×16
-fixture, not original agreement. Final v6 source must repeat that matrix after
-cooperation/shared-progress/aquifer-reuse changes. Native normal road/Tube,
+fixture, not original agreement.
+
+The current production source (`25ef18d3` default scripts, `115032ff` native)
+also passed the complete matrix in PR35 CI on head `0b419a29`, run
+`40515414432`. Artifact `12743685282` has SHA-256
+`220bb967eaa9718c5cbb8440fadc7fd445ec9e7b78f112232cd49501983b2b7b`.
+Independent replay of all 36 raw logs confirms 36 scenarios / 680 assertions,
+166 observations, 1,162 owner snapshots and 21,248 tile rows, with every raw
+native exit zero and completion fence present. The same artifact's complete
+cooperative observation passes 1 / 532 over four seven-owner snapshots with
+22 units, seven bases and 128 tiles each. Cloud runtime hashes differ from
+the private v6 build; both refer to the same native source tree. The compact
+receipt is [terraform-current-cloud-proof.json](terraform-current-cloud-proof.json).
+The local private-v6 repetition intentionally stopped after 11 passed cases at a
+completed-case boundary when equivalent cloud coverage was running; it is a
+partial result, not another complete matrix pass.
+
+Native normal road/Tube,
 produced SeaFormer home/ports, cooperative work, observation and mounted progress
-have separate passing source-bound results in the current smoke runbook. Real
-browser checks and final CI/review remain separate. Original passing action
+have separate passing source-bound results in the current smoke runbook. The
+real controls browser check also passes on `0322db43`; its exact input, native
+exit and sealed-log scope is recorded in
+[terraform-controls-browser-v6-proof.json](terraform-controls-browser-v6-proof.json).
+Height/Sea browser coverage and final CI/review remain separate. Current Hot
+regression/UI failures are not hidden by these trace passes: disband shutdown
+and capacity cleanup remain unresolved. Original passing action
 cases remain zero; parser tests cannot replace native execution or strict shutdown.
