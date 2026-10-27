@@ -31,7 +31,7 @@ def load_catalog(path):
     scripts = set()
     for suite in value["suites"]:
         required = {"id", "script", "domains", "evidence"}
-        if not isinstance(suite, dict) or not required <= set(suite) or set(suite) - required - {"packets", "scheduling"}:
+        if not isinstance(suite, dict) or not required <= set(suite) or set(suite) - required - {"packets", "scheduling", "execution_timeout"}:
             raise ProtocolError("invalid suite fields")
         if not isinstance(suite["id"], str) or not re.fullmatch(r"[a-z][a-z0-9-]*", suite["id"]) or suite["id"] in seen:
             raise ProtocolError("invalid or duplicate suite id")
@@ -42,6 +42,12 @@ def load_catalog(path):
         if script in scripts:
             raise ProtocolError("duplicate suite script")
         scripts.add(script)
+        if "execution_timeout" in suite:
+            budget = suite["execution_timeout"]
+            if (not isinstance(budget, dict) or set(budget) != {"seconds", "reason"} or
+                    type(budget["seconds"]) is not int or not 1 <= budget["seconds"] <= 300 or
+                    not isinstance(budget["reason"], str) or not budget["reason"].strip()):
+                raise ProtocolError("invalid declared execution timeout")
         if "scheduling" in suite:
             scheduling = suite["scheduling"]
             if (not isinstance(scheduling, dict) or set(scheduling) != {"mode", "reason"} or
@@ -209,13 +215,29 @@ def run_suite(suite, runtime, snapshot, temporary, timeout, node="node", worker=
     return result
 
 
-def scheduled_results(suites, runtime, snapshot, temporary, timeout, node, jobs, runner=None):
+def timeout_budget(suite, requested, default=120):
+    declared = suite.get("execution_timeout")
+    seconds = declared["seconds"] if declared else None
+    return dict(requested_seconds=requested, declared_seconds=seconds,
+                declared_reason=declared["reason"] if declared else None,
+                default_seconds=default,
+                effective_seconds=requested if requested is not None else (seconds if seconds is not None else default),
+                source="cli" if requested is not None else ("catalog" if declared else "default"))
+
+
+def scheduled_results(suites, runtime, snapshot, temporary, timeout, node, jobs, runner=None, default_timeout=120):
     """Drain each ordinary worker block before a declared exclusive suite."""
     runner = run_suite if runner is None else runner
+    def execute(suite):
+        budget = timeout_budget(suite, timeout, default_timeout)
+        result = runner(suite, runtime, snapshot, temporary, budget["effective_seconds"], node)
+        result["timeout_budget"] = budget
+        return result
+
     def ordinary(block):
         if block:
             with ThreadPoolExecutor(max_workers=jobs) as pool:
-                futures = [pool.submit(runner, suite, runtime, snapshot, temporary, timeout, node)
+                futures = [pool.submit(execute, suite)
                            for suite in block]
                 for future in as_completed(futures):
                     yield future.result()
@@ -228,7 +250,7 @@ def scheduled_results(suites, runtime, snapshot, temporary, timeout, node, jobs,
             continue
         yield from ordinary(block)
         block = []
-        result = runner(suite, runtime, snapshot, temporary, timeout, node)
+        result = execute(suite)
         result["scheduling"] = dict(suite["scheduling"], requested_jobs=jobs, suite_worker_limit=1)
         yield result
     yield from ordinary(block)
@@ -241,7 +263,8 @@ def main(argv=None):
     parser.add_argument("--jobs", type=int)
     parser.add_argument("--suite", action="append", help="select suite id (repeatable)")
     parser.add_argument("--domain", choices=("gameplay", "economy", "decision-logic", "ui", "ux"))
-    parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument("--timeout", type=float, help="explicit per-worker seconds; overrides any declared suite deadline")
+    parser.add_argument("--default-timeout", type=float, help="runner fallback seconds; declared suite deadlines still apply")
     parser.add_argument("--node", default="node")
     parser.add_argument("--report", type=Path, default=DIRECTORY / ".build/fast-report.json")
     parser.add_argument("--list", action="store_true")
@@ -252,8 +275,10 @@ def main(argv=None):
     try:
         if args.lane != "all" and args.jobs > 2:
             raise ProtocolError("selected lanes support at most two workers")
-        if not 1 <= args.jobs <= 32 or not 0 < args.timeout <= 300:
+        if not 1 <= args.jobs <= 32 or (args.timeout is not None and not 0 < args.timeout <= 300):
             raise ProtocolError("jobs must be 1..32 and timeout in (0, 300]")
+        if args.default_timeout is not None and not 0 < args.default_timeout <= 300:
+            raise ProtocolError("default timeout must be in (0, 300]")
         suites = load_catalog(args.catalog)["suites"]
         if args.suite:
             unknown = set(args.suite) - {suite["id"] for suite in suites}
@@ -287,7 +312,9 @@ def main(argv=None):
             snapshot_json = canonical(snapshot)
             snapshot_path.write_text(snapshot_json, encoding="utf-8")
             results = []
-            for result in scheduled_results(suites, runtime, snapshot_path, temporary, args.timeout, args.node, args.jobs):
+            default_timeout = args.default_timeout if args.default_timeout is not None else 30
+            for result in scheduled_results(suites, runtime, snapshot_path, temporary, args.timeout, args.node, args.jobs,
+                                            default_timeout=default_timeout):
                 results.append(result)
                 if result["status"] == "passed":
                     print(f"PASS {result['id']}: {result['scenarios']} scenarios, {result['assertions']} assertions ({result['elapsed_ms']} ms)")
@@ -299,6 +326,7 @@ def main(argv=None):
             raise ProtocolError("runtime changed during the run; finish the build before testing")
         report = {
             "version": 1, "kind": "glsmac-headless-regression", "lane": args.lane, "candidate_executed": True, "jobs": args.jobs,
+            "requested_timeout_s": args.timeout, "default_timeout_s": default_timeout,
             "runtime": str(runtime), "runtime_sha256": runtime_hash,
             "wasm_sha256": wasm_hash,
             "scripts_sha256": hashlib.sha256(snapshot_json.encode("utf-8")).hexdigest(),
