@@ -33,7 +33,7 @@ they do not attribute every second of the failed game run to this function.
 The adjacent JSON binds actual source, browser and prefix hashes. Full raw
 inputs and per-call records remain in `/tmp/terraform-log-dom-benchmark`.
 
-## Proposed diagnostic print hook, awaiting approval
+## Approved diagnostic print-hook source; runtime proof pending
 
 Keep production web/default/native bytes unchanged. Pause only the main-frame
 `GLSMAC.js` request through Playwright's existing routing boundary. At that
@@ -51,12 +51,12 @@ buffer, truncation, trace cut, extra input or deadline increase is proposed.
 Debug-log autoscroll becomes explicitly unsupported under this instrumentation;
 native game windows and rendered canvas remain the subject of the proof.
 
-Before another candidate run, replay all 883 messages with exact full UTF-8
+The manager approved this source design. Before another candidate run, replay all 883 messages with exact full UTF-8
 hash retention in NO-WASM Chromium for both detail states. Pure tests must
 reject missing/repeated/late installation and preserve stdout/stderr order.
 The next candidate browser requires manager approval and a fresh reviewed host.
 
-## Proposed collector finalization, awaiting approval
+## Approved collector finalization source; candidate proof pending
 
 The failed run's `application.log` has 11551500 bytes. The continuously saved
 JSONL chunks contain 11551539 bytes: an already pending read appended 39 bytes
@@ -79,3 +79,20 @@ should reproduce the old 39-byte race, then prove final chunk equality, stable
 metadata, rejected post-close reads and artifact I/O failure propagation.
 No native collector, game timing, source fields or memory limit changes belong
 to this harness correction.
+
+Source implementation adds an explicit open/closing/sealing/sealed cursor.
+An already accepted read remains eligible to append during closing; subsequent
+body reads reject. After passive receipts/frame and browser closure, sealing
+awaits the serialized queue and freezes the final text and read records.
+Only then are joined chunks, raw text, hashes and report written. A close
+failure stays an unsealed prefix with unknown tail; a timed-out final read
+stays failed even if its response later arrives. Pure tests reproduce a
+39-byte delayed response, cancelled final evaluation and immutable post-seal
+artifact equality. The prior failed artifacts remain distinct and unchanged.
+
+The separate `terraform-log-hook-replay.mjs` constructs an explicitly declared
+configuration model from the actual source function and only the two capture
+assignments. It does not load the runtime or instantiate WASM. It exercises
+both output lanes in a declared alternating replay, since original channel
+boundaries were not recorded. Actual runtime binding and first-callback proof
+remain requirements of the next candidate browser.

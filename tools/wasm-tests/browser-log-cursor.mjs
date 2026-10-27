@@ -22,8 +22,29 @@ export function readBrowserLogDelta({offset}) {
 }
 
 export class BrowserLogCursor {
-  constructor(page,onPacket=()=>{}){this.page=page;this.onPacket=onPacket;this.text='';this.reads=[];this.queue=Promise.resolve();this.failure=null;}
+  constructor(page,onPacket=()=>{}){this.page=page;this.onPacket=onPacket;this.text='';this.reads=[];this.queue=Promise.resolve();this.failure=null;this.phase='open';this.finalQueued=false;this.sealed=null;}
   read(){
+    if(this.phase!=='open')return Promise.reject(Error('Browser log cursor is closing or sealed'));
+    return this.#enqueue();
+  }
+  beginClose(){
+    assert.equal(this.phase,'open','Cursor closing starts exactly once');this.phase='closing';
+  }
+  finalRead(){
+    assert.equal(this.phase,'closing');assert.equal(this.finalQueued,false,'Final suffix read queues once');this.finalQueued=true;
+    return this.#enqueue();
+  }
+  async seal(){
+    assert.equal(this.phase,'closing');
+    this.phase='sealing';
+    // The owner must close the producer/browser first, so its outstanding
+    // evaluations settle. Accepted reads finish; no new body reads can enter.
+    await this.queue;
+    this.phase='sealed';
+    this.sealed=Object.freeze({text:this.text,reads:Object.freeze(this.reads.map(row=>Object.freeze({...row}))),failure:this.failure?String(this.failure):null});
+    return this.sealed;
+  }
+  #enqueue(){
     const operation=this.queue.then(async()=>{
       if(this.failure)throw this.failure;
       const started=performance.now();

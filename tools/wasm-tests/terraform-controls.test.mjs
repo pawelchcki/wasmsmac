@@ -11,6 +11,7 @@ import {fixtureSources} from './terraform-browser-inputs.mjs';
 import {TerraformGeometry,nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {BrowserLogCursor} from './browser-log-cursor.mjs';
 import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
+import {installNativeLogHook} from './browser-native-log-hook.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const scriptsRoot = process.env.WASM_SCRIPTS_ROOT || root;
@@ -75,6 +76,11 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const observer=readFileSync(`${scriptsRoot}/GLSMAC_data/tests/_state_trace_observer.gls.js`,'utf8');
   const terrainObserver=readFileSync(`${scriptsRoot}/GLSMAC_data/tests/_terrain_trace_observer.gls.js`,'utf8');
   const cooperationObserver=readFileSync(`${scriptsRoot}/GLSMAC_data/tests/_terraform_cooperation_observer.gls.js`,'utf8');
+  const bootstrapSource=readFileSync(`${build}/bootstrap.js`,'utf8');
+  const originalLogSource=bootstrapSource.match(/function log\(message\) \{\n[^]*?\n\}/)?.[0];assert.ok(originalLogSource);
+  const runtimeSource=readFileSync(`${build}/GLSMAC.js`,'utf8');
+  const printCapture='if (Module["print"]) out = Module["print"];',errorCapture='if (Module["printErr"]) err = Module["printErr"];';
+  assert.ok(runtimeSource.includes(printCapture)&&runtimeSource.includes(errorCapture),'Pinned runtime must capture existing Module print configuration');
   const report={version:1,scope:'source-declared Terraform controls and native pointer target application invariants',
     original_visual_agreement:'unsupported', original_passing_cases:0,
     candidate_executed:false,status:'running',
@@ -87,7 +93,8 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     scripts_root:scriptsRoot,fixture_sources:{world:hash(world),main:hash(main),state_observer:hash(observer),terrain_observer:hash(terrainObserver),cooperation_observer:hash(cooperationObserver)},
     declared_input:{world:'all-seven nonempty controlled16x16',normal_policy:'default-ignore-technologies',source_rates:'unchanged-installed',unit_ownership:'actual-local-native-player'},native_snapshots:[],
     web_sha256:Object.fromEntries(['index.html','bootstrap.js','asset-store.js'].map(name=>[name,hash(readFileSync(`${build}/${name}`))])),
-    component_sha256:hash(readFileSync(`${assets}/VT.cvr`)), captures:[]};
+    component_sha256:hash(readFileSync(`${assets}/VT.cvr`)), captures:[],
+    native_log_configuration:{scope:'test-only existing Module print configuration',debug_autoscroll:'unsupported',hook_source_sha256:hash(installNativeLogHook.toString()),original_log_source_sha256:hash(originalLogSource),runtime_capture_statements:[printCapture,errorCapture],installations:0}};
   const server=spawn('python3',['tools/serve-wasm.py',build,'--port','0','--assets',assets],{cwd:root});
   t.after(()=>server.kill());
   const address=await new Promise((resolve,reject)=>{
@@ -118,23 +125,52 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     },{capture:true,passive:true});
   });
   const errors=[];report.navigation_timeline=[];
+  await page.route('**/GLSMAC.js',async route=>{
+    const request=route.request();
+    if(request.resourceType()!=='script'||request.frame()!==page.mainFrame()){await route.continue();return;}
+    try{
+      assert.equal(report.native_log_configuration.installations,0,'Main runtime print configuration installs once');
+      const ack=await page.evaluate(installNativeLogHook,{expectedOriginalSource:originalLogSource});
+      report.native_log_configuration.installations++;
+      report.native_log_configuration.barrier={url:request.url(),resource_type:request.resourceType(),acknowledged_node_ms:performance.now(),before_unmodified_runtime_response:true,ack};
+      await route.continue();
+    }catch(error){errors.push(String(error));await route.abort('failed');}
+  });
   const navigation=(kind,url)=>report.navigation_timeline.push({kind,url,observed_node_ms:performance.now()});
   page.on('framenavigated',frame=>{if(frame===page.mainFrame())navigation('main-frame-navigated',frame.url());});
   page.on('requestfailed',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())report.navigation_timeline.push({kind:'main-frame-request-failed',url:request.url(),failure:request.failure(),observed_node_ms:performance.now()});});
   page.on('request',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())navigation('main-frame-navigation-request',request.url());});
   page.on('pageerror',error=>{errors.push(error.stack||String(error));navigation('page-error',page.url());});page.on('crash',()=>errors.push('Chromium crashed'));
   t.after(async()=>{try{if(report.status!=='passed')report.status='failed-or-incomplete';report.browser_errors=errors;
-    // Persist the complete retained prefix even when a timed-out browser no
-    // longer responds. A bounded final suffix read never replaces that prefix.
-    writeFileSync(`${artifacts}/application.log`,logCursor.text);
-    try{let timer;try{await Promise.race([logCursor.read(),new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('Final browser log suffix read timed out')),1000);})]);}finally{clearTimeout(timer);}}
+    logCursor.beginClose();
+    try{let timer;try{await Promise.race([logCursor.finalRead(),new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('Final browser log suffix read timed out')),1000);})]);}finally{clearTimeout(timer);}}
     catch(error){report.log_capture_error=String(error);report.status='failed-or-incomplete';}
-    writeFileSync(`${artifacts}/application.log`,logCursor.text);
-    report.log_transport={offset_unit:'UTF-16-code-units',raw_chunk_file:'application-log-chunks.jsonl',partial:!!report.log_capture_error||report.status!=='passed',unread_tail:report.log_capture_error?'unknown after final read failure':report.status!=='passed'?'possible after final read; application exit not established':false,retained_utf16:logCursor.text.length,retained_utf8:Buffer.byteLength(logCursor.text,'utf8'),reads:logCursor.reads};
-    report.diagnostic_root_records=logCursor.text.split('\n').filter(line=>line.includes('TF_DIAGNOSTIC_REGISTRY|')||line.includes('TF_DIAGNOSTIC_ROOT_KEY|')||line.includes('TF_DIAGNOSTIC_ROOT_AFTER|'));
     try{report.dom_key_receipts=await page.evaluate(()=>window.__terraformDomReceipt);}catch(error){report.dom_capture_error=String(error);}
+    try{report.native_log_configuration.callbacks=await page.evaluate(()=>globalThis.__terraformNativeLogHook);report.native_log_configuration.callback_metadata_partial=report.status!=='passed';}catch(error){report.native_log_configuration.capture_error=String(error);}
     if(report.status!=='passed'){try{await page.locator('#canvas').screenshot({path:`${artifacts}/failed-frame.png`,timeout:1000});}catch(error){report.frame_capture_error=String(error);}}
-    writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');assert.equal(report.log_capture_error,undefined,'A successful browser proof requires its final raw log suffix');}finally{await browser.close();}});
+    try{await browser.close();}catch(error){report.browser_close_error=String(error);report.status='failed-or-incomplete';}
+    const producerClosed=!browser.isConnected();
+    const frozen=producerClosed?await logCursor.seal():{text:logCursor.text,reads:structuredClone(logCursor.reads),failure:'Producer close failed; prefix only'};
+    const chunks=readFileSync(logChunksPath,'utf8').split('\n').filter(Boolean).map(row=>JSON.parse(row));
+    const joined=chunks.map(row=>row.text).join('');
+    if(producerClosed)assert.equal(joined,frozen.text,'Sealed raw text must equal every final received chunk');
+    writeFileSync(`${artifacts}/application.log`,frozen.text);
+    report.log_transport={offset_unit:'UTF-16-code-units',raw_chunk_file:'application-log-chunks.jsonl',sealed:producerClosed,partial:!!report.log_capture_error||report.status!=='passed'||!producerClosed,unread_tail:report.status!=='passed'?'unknown; application exit or final read failed':false,retained_utf16:frozen.text.length,retained_utf8:Buffer.byteLength(frozen.text,'utf8'),raw_sha256:hash(frozen.text),chunk_count:chunks.length,joined_chunk_sha256:hash(joined),reads:frozen.reads,settled_read_failure:frozen.failure};
+    report.diagnostic_root_records=frozen.text.split('\n').filter(line=>line.includes('TF_DIAGNOSTIC_REGISTRY|')||line.includes('TF_DIAGNOSTIC_ROOT_KEY|')||line.includes('TF_DIAGNOSTIC_ROOT_AFTER|'));
+    let verificationError;
+    try{
+      assert.equal(report.browser_close_error,undefined,'Producer closure must complete before artifact sealing');
+      assert.equal(report.log_capture_error,undefined,'A successful browser proof requires its final raw log suffix');
+      if(report.status==='passed'){
+        assert.equal(report.native_log_configuration.installations,1);
+        assert.ok(report.native_log_configuration.callbacks?.first_callback,'Actual runtime callback must exercise the configured sink');
+        assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_out_bound,true);
+        assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_err_bound,true);
+      }
+    }catch(error){verificationError=error;report.final_artifact_verification_error=String(error);report.status='failed-or-incomplete';}
+    writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');
+    if(verificationError)throw verificationError;
+  }finally{if(browser.isConnected())await browser.close();}});
   const fatal=/TF_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i;
   let fatalLineTail='';
   const log=async()=>{const packet=await logCursor.read();const freshText=fatalLineTail+packet.text;assert.doesNotMatch(freshText,fatal);fatalLineTail=freshText.slice(freshText.lastIndexOf('\n')+1);assert.deepEqual(errors,[]);return logCursor.text;};
@@ -213,6 +249,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     // the semantic row is live, before SDL coalescing can defer it past click.
     await page.mouse.move(p.x,p.y);
     const hover=semantic?await awaitNative(()=>nativeHover(report.input_ledger.events,fence,hitNodes,semantic.bounds),'Intended native hover'):null;
+    assert.equal(logCursor.phase,'open','Closed proof must not issue further pointer input');
     await page.mouse.down({button:'left'});await page.mouse.up({button:'left'});
     const receipt=await awaitNative(()=>completedNativeClick(report.input_ledger.events,fence,target),'Native left mouseup dispatch');
     receipt.hover=hover;receipt.target=structuredClone(target);receipt.pre_click_sequence=fence;receipt.observed_node_ms=performance.now();
@@ -272,7 +309,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   assert.ok(report.input_ledger.events.some(event=>event.kind==='input.ingress'),'Actual SDL input ingress must be recorded');
   assert.ok(report.input_ledger.events.some(event=>event.kind==='input.dispatch'),'Actual engine input dispatch must be recorded');
   report.native_guards='Seven actual owners/cities and complete128tile map unchanged for open/non-owned-click/Escape/Tab; owned-base pointer submitted one actual authoritative plan';
-  report.unsupported=['full36actioneffects','heightquote/payment','sea-controls','originalvisualagreement','animation/audio','livebrowserRNGstate','typedfrontendmesh/facing/frame telemetry'];
+  report.unsupported=['full36actioneffects','heightquote/payment','sea-controls','originalvisualagreement','animation/audio','livebrowserRNGstate','typedfrontendmesh/facing/frame telemetry','external-debug-log-autoscroll'];
   await page.locator('#canvas').screenshot({path:`${artifacts}/target-submitted.png`});
   await page.keyboard.press('Control+Alt+q');await page.waitForFunction(()=>document.body.dataset.state==='exited');assert.deepEqual(errors,[]);report.status='passed';
 });
