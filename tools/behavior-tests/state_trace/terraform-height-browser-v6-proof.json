@@ -613,5 +613,37 @@
     "original animation timing/audio/music",
     "live browser RNG-state getter",
     "external debug-log autoscroll"
-  ]
+  ],
+  "typed_raw_audit_history_note": "typed_raw_audit and its report SHA preserve the initial historical audit at the original browser proof. They are not the source hash of later strengthened auditors.",
+  "typed_raw_reaudits": [
+    {
+      "id": "raw-policy-and-provenance-v2",
+      "kind": "read-only accepted capture re-audit; zero new game/browser cases",
+      "auditor_source": "tools/behavior-tests/state_trace/terraform_height_browser_audit.py",
+      "auditor_source_sha256": "90464cd16bc106dd18084ddd659deaad8eef8a856b364db6296ab8621851f466",
+      "code_freeze": "238c5f5d2e990fe162511e7b5e729f5a87219d0e",
+      "result_path": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit.json",
+      "result_sha256": "cb354d5b6676b86772e898fdecb2947355931c5d5cfb8405a4b6b38744ef3755",
+      "raw_sha256": "7877baed15b88c2700f3042fe5c31f64c6ee66517dcef04541c1ced832bad473",
+      "report_sha256": "7f196c8f5de67e76355f3f49cff0ac20a4a4f3ef35fc7021c90d993f73f76f3c",
+      "preflight_sha256": "791b078abf2949ddb1fb2efcd322b05dc41198e6114f31aa1ad2816375264622",
+      "complete_worlds": 6,
+      "per_world": {
+        "players": 7,
+        "units": 8,
+        "bases": 7,
+        "tiles": 128
+      },
+      "changed_fields": 229,
+      "float_unit_fields": 96,
+      "command": "python3 tools/behavior-tests/state_trace/terraform_height_browser_audit.py --artifacts /tmp/terraform-land-height-v6-second --output tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit.json"
+    }
+  ],
+  "historical_preflight_creation": {
+    "kind": "separate source-only preflight command retained with original artifacts; not emitted by the original browser driver",
+    "source_path": "/tmp/terraform-land-height-v6-second/preflight.mjs",
+    "source_sha256": "b16106ef4a875993bc6bdc6bb89a1dd98d7fb8e92d42c70cd421ce6ee6313880",
+    "artifact_sha256": "791b078abf2949ddb1fb2efcd322b05dc41198e6114f31aa1ad2816375264622",
+    "new_producer_scope": "committed terraform-height-preflight.mjs emits future fresh preflight files; it did not generate or replace this historical artifact"
+  }
 }

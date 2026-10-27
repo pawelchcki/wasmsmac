@@ -237,3 +237,52 @@ needs a separately reviewed fixture and resource grant:
    a new read-only renderer getter would need a separate proven need and C++
    lease. Coast/climate/Pressure Dome/victim algorithms, original graphics,
    animations and audio stay outside passing totals until independently observed.
+
+## Reproducible preflight and strengthened read-only re-audit
+
+The actual accepted browser attempt used a separately executed source-only
+`preflight.mjs`, retained next to its original artifacts. The original committed
+browser driver did **not** emit that file. The existing historical preflight,
+report, raw/chunks, worlds and initial audit result remain immutable; new producer
+metadata is not attributed retrospectively to that run.
+
+Future captures now call `terraform-height-preflight.mjs` before starting their
+asset server or browser. It hashes actual loaded runtime files, source/fixture
+bytes and original/executed rules; derives map dimensions/count from the actual
+map bytes; records all20 shared-duration old/new fields and both domains; and
+writes `preflight.json`, exact main/world input sources and `fixture-map.MP`.
+It checks these against the actual capture snapshot, rejects a differing existing
+artifact, and makes no native policy claim before runtime. The optional standalone
+metadata preparation command starts no browser and evaluates no WASM:
+
+```sh
+node tools/wasm-tests/terraform-height-preflight.mjs \
+  --scripts-root /path/to/frozen/source \
+  --app-dir /tmp/wasmsmac-terraform-pr2-web-v6 \
+  --assets-dir /path/to/installed/assets \
+  --artifacts-dir /path/to/new/height-artifacts
+```
+
+The later normal browser command may consume only a byte-identical preflight
+from those same source/runtime/input bindings. An old or changed preparation
+fails before engine launch. A metadata-only fresh-directory check on source
+238c5f5d produced
+`/tmp/terraform-height-reproducible-preflight-only/preflight.json`, SHA
+`7ce14a78dbf610f01d57671fbc6e52316389998635ffb71858d669ef3072268a`, with
+`candidate_executed:false`. That is a preparation result, not another game case.
+
+The strengthened auditor independently binds all six retained world policies to
+actual raw `TH_INPUTS.policy` and requires exact native types/values
+`{version:1, ignore_technologies:true}`. Missing, changed, wrong-version or
+Int/Bool-substituted policies reject. Existing raw state remains the authority.
+Public metadata tests create a fresh directory without an engine; policy mutation
+regressions also run against the actual six captured packets when
+`TERRAFORM_HEIGHT_CAPTURE` points to the retained artifact directory.
+
+The proof JSON keeps its initial `typed_raw_audit` and original report SHA as
+history. Its additive `typed_raw_reaudits` entry identifies the current auditor
+source SHA and separate committed `terraform-height-browser-v6-reaudit.json`
+output/hash. That read-only replay consumes the unchanged14,465,994-byte raw
+capture and original report/preflight, checks all6 worlds/229 changed fields and
+96 native Float tokens, and adds zero game/browser cases. No original-world or
+expected-answer data was regenerated.
