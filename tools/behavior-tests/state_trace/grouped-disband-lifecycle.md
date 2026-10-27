@@ -61,3 +61,24 @@ and removes its own fixture. Dynamic IDs remain obtained from that case's real
 native entities. Cross-case chronology across different workers is not claimed
 as gameplay timing; the ordered logical corpus and each case's action sequence
 are preserved.
+
+## Group helper verification
+
+On the exact published cloud engine (native tree `115032ffc7f53ff7f0c3a9f997da12674e25e643`),
+the expanded `script-stages` regression completed normally: three scenarios,
+23 assertions, raw zero exit and native success footer in 1.900 seconds.
+Both optional Python negative checks were executed with the absolute runtime
+provided (zero skips), passed in 3.885 seconds, and retained the real failing-test
+outputs. Their intentional body/cleanup errors completed naturally, ran the
+native-checked owned cleanup, stopped repeating timers and emitted no deferred
+PASS, summary or native success. These two expected failures are harness checks,
+not additional passing gameplay cases. Retained source/runtime bindings and raw
+logs are in `/tmp/terraform-pr35-grouped-helper-proof`.
+
+The first grouped-control registration attempt exposed GSE's indexed-append
+ArrayRef behavior and is retained separately. Materializing the original entry
+before appending fixed that test-only registration error. The subsequent grouped
+whole-corpus attempt reached all nine stage ends and its 7/47 summary but still
+failed the original 120-second gate; it is not reported as a completed suite.
+Actual completion of all three isolated packets through the logical dispatcher
+is pending at this source checkpoint.
