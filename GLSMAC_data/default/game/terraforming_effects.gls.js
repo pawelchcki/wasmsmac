@@ -2,7 +2,8 @@
 // player manual (pp46–50). Exact runtime comparisons still define measured
 // agreement; this module does not invent height contours, fees or river routes.
 const simple = ['farm','soil_enricher','mine','solar','forest','road','mag_tube','bunker','airbase','sensor','remove_fungus','plant_fungus','level','condenser','mirror','borehole','aquifer'];
-const additional = ['mine','solar','forest','condenser','mirror','borehole','sensor','bunker','airbase'];
+const resource_choices = ['mine','solar','forest','condenser','mirror','borehole'];
+const infrastructure = ['sensor','bunker','airbase'];
 const contains = (items,value) => { for (item of items) { if (item == value) { return true; } } return false; };
 const supports = (action) => { return contains(simple,action); };
 // Declared application drainage: breadth-first nonascending route to actual
@@ -56,8 +57,17 @@ const validate = (game,unit,action) => {
 };
 const replacements = (data,action) => {
 	const result = [];
-	if (contains(additional,action) || action == 'plant_fungus') {
-		for (name of additional) { if (name != action && data.terraforming[name]) { result :+ name; } }
+	if (contains(resource_choices,action) || action == 'plant_fungus') {
+		for (name of resource_choices) { if (name != action && data.terraforming[name]) { result :+ name; } }
+	}
+	// Independent defensive/air infrastructure does not replace resource
+	// improvements. Forests and boreholes explicitly exclude other enhancements;
+	// planting fungus destroys enhancements other than roads and mag tubes.
+	if (action == 'forest' || action == 'borehole' || action == 'plant_fungus') {
+		for (name of infrastructure) { if (data.terraforming[name]) { result :+ name; } }
+	}
+	if (contains(infrastructure,action)) {
+		for (name of ['forest','borehole']) { if (data.terraforming[name]) { result :+ name; } }
 	}
 	if (action == 'farm' || action == 'soil_enricher') {
 		for (name of ['forest','condenser','borehole']) { if (data.terraforming[name]) { result :+ name; } }
