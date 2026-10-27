@@ -56,6 +56,9 @@ const fixture = (input) => {
 		for (source of input.sources) { if (source.name == name) { return test.parse_smac_text(source.source, format); } }
 		throw Error('Undeclared installed in-game menu source: ' + name);
 	};
+	// This bounded fixture bypasses configure_game. Supply its declared source
+	// through the same parser that normal startup runs before mounting the HUD.
+	f.game.set('terraforming_rules', #include('../default/game/terraforming_rules').parse(f.glsmac.load_smac_text('alphax.txt', 'rules')));
 	f.glsmac.exit = () => { throw Error('Unexpected application exit in menu-only trace'); };
 	f.glsmac.reset = () => { throw Error('Unexpected application reset in menu-only trace'); };
 	f.events.get_map = () => { return f.map; };
