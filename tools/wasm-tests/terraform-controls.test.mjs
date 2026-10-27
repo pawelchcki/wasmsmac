@@ -154,7 +154,10 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
       assert.equal(report.browser_close_error,undefined,'Producer closure must complete before artifact sealing');
       assert.equal(report.log_capture_error,undefined,'A successful browser proof requires its final raw log suffix');
       if(report.status==='passed'){
+        assert.deepEqual(errors,[],'Late browser/barrier errors cannot leave a passing artifact');
         assert.equal(report.native_log_configuration.installations,1);
+        assert.equal(report.native_log_configuration.barrier.continued,true,'Actual main runtime response must acknowledge continuation');
+        assert.ok(report.native_log_configuration.worker_requests?.some(row=>row.continued===true),'At least one actual pthread runtime continuation must acknowledge success');
         assert.ok(report.native_log_configuration.callbacks?.first_callback,'Actual runtime callback must exercise the configured sink');
         assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_out_bound,true);
         assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_err_bound,true);

@@ -68,13 +68,19 @@ export async function attachRuntimeLogBarrier(page,browser,{runtimeURL,bootstrap
   record('fetch-paused',{event:paused});
   try{
    const role=await evidence(paused);
+   if(stopped)return;
    if(role.kind==='main'){
     assert.equal(metadata.installations,0);
     const ack=await page.evaluate(installNativeLogHook,{expectedOriginalSource:originalLogSource});
+    if(stopped)return;
     metadata.installations++;metadata.barrier={...role,ack,acknowledged_node_ms:performance.now(),before_unmodified_runtime_response:true};
-   }else{metadata.worker_requests??=[];metadata.worker_requests.push({...role,continued_without_frame_lookup:true});}
-   ledger.consume(paused,role);record('continue',{role});
+   }
+   ledger.consume(paused,role);record('continue-requested',{role});
    await cdp.send('Fetch.continueRequest',{requestId:paused.requestId});
+   if(stopped)return;
+   const acknowledged_node_ms=performance.now();record('continue-acknowledged',{role});
+   if(role.kind==='main'){metadata.barrier.continued=true;metadata.barrier.continuation_acknowledged_node_ms=acknowledged_node_ms;}
+   else{metadata.worker_requests??=[];metadata.worker_requests.push({...role,continued:true,continuation_acknowledged_node_ms:acknowledged_node_ms,continued_without_frame_lookup:true});}
   }catch(error){if(stopped)return;record('rejected',{error:String(error),fetch_id:paused.requestId,network_id:paused.networkId});onError(error);try{await cdp.send('Fetch.failRequest',{requestId:paused.requestId,errorReason:'BlockedByClient'});}catch{} }
  });
  await cdp.send('Fetch.enable',{patterns:[{urlPattern:runtimeURL,requestStage:'Request'}]});

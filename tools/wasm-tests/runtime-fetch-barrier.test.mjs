@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
-import {RuntimeFetchEvidence} from './runtime-fetch-barrier.mjs';
+import {EventEmitter} from 'node:events';
+import {RuntimeFetchEvidence,attachRuntimeLogBarrier} from './runtime-fetch-barrier.mjs';
 const actual=JSON.parse(readFileSync(new URL('./fixtures/runtime-request-observations.json',import.meta.url)));
 const normalize=e=>({requestId:e.request_id,request:{url:e.url},type:e.type,frameId:e.frame_id,loaderId:e.loader_id,initiator:e.initiator});
 const main=normalize(actual.main),worker=normalize(actual.worker);
@@ -37,4 +38,34 @@ test('destroyed targets, navigation and repeated main runtime fail closed',()=>{
  e.targetChanged(actual.target);assert.throws(()=>e.classify(pause(worker,'worker')),/destroyed/);assert.throws(()=>e.targetCreated(actual.target),/resurrected/);
  const reload={...main,requestId:'second-main'};e.networkRequest(reload);assert.throws(()=>e.classify(pause(reload,'reload')),/only once/);
  const changed=fixture();install(changed);changed.networkRequest(worker);changed.targetCreated(actual.target);changed.frameNavigated({id:main.frameId,loaderId:'new-document',url:'declared'});assert.throws(()=>changed.classify(pause(worker,'old-worker')),/Navigation invalidates/);
+});
+function protocolFixture({evaluate=async()=>({declared:'model ack'})}={}){
+ const cdp=new EventEmitter(),root=new EventEmitter(),commands=[],continuations=[],errors=[],metadata={installations:0};
+ cdp.send=async(command,args)=>{
+  commands.push({command,args});
+  if(command==='Page.getFrameTree')return{frameTree:{frame:{id:main.frameId,loaderId:main.loaderId,url:'declared model'}}};
+  if(command==='Fetch.continueRequest')return new Promise(resolve=>continuations.push(resolve));
+  return{};
+ };
+ root.send=async()=>({});const page={context:()=>({newCDPSession:async()=>cdp}),evaluate};const browser={newBrowserCDPSession:async()=>root};
+ const attach=()=>attachRuntimeLogBarrier(page,browser,{runtimeURL:main.request.url,bootstrapURL:main.initiator.stack.callFrames[0].url,originalLogSource:'declared model',metadata,onError:e=>errors.push(String(e))});
+ return{cdp,root,commands,continuations,errors,metadata,attach};
+}
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+test('main and worker continuation metadata requires actual protocol acknowledgement',async()=>{
+ const f=protocolFixture(),barrier=await f.attach();f.cdp.emit('Network.requestWillBeSent',main);f.cdp.emit('Fetch.requestPaused',pause(main,'main'));await tick();
+ assert.equal(f.metadata.installations,1);assert.equal(f.metadata.barrier.continued,undefined);
+ f.continuations.shift()({});await tick();assert.equal(f.metadata.barrier.continued,true);
+ f.root.emit('Target.targetCreated',{targetInfo:actual.target});f.cdp.emit('Network.requestWillBeSent',worker);f.cdp.emit('Fetch.requestPaused',pause(worker,'worker'));await tick();
+ assert.equal(f.metadata.worker_requests,undefined);f.continuations.shift()({});await tick();assert.equal(f.metadata.worker_requests[0].continued,true);assert.deepEqual(f.errors,[]);barrier.stop();
+});
+test('closing during an outstanding installation prevents late metadata or continuation',async()=>{
+ let resolveAck;const f=protocolFixture({evaluate:()=>new Promise(resolve=>{resolveAck=resolve;})}),barrier=await f.attach();
+ f.cdp.emit('Network.requestWillBeSent',main);f.cdp.emit('Fetch.requestPaused',pause(main,'main'));await tick();const before=JSON.stringify(f.metadata);barrier.stop();resolveAck({late:'ack'});await tick();
+ assert.equal(JSON.stringify(f.metadata),before);assert.equal(f.metadata.installations,0);assert.equal(f.commands.some(row=>row.command==='Fetch.continueRequest'),false);assert.deepEqual(f.errors,[]);
+});
+test('unknown positive worker identity times out and rejects the exact paused request',async()=>{
+ const f=protocolFixture(),barrier=await f.attach();f.cdp.emit('Network.requestWillBeSent',main);f.cdp.emit('Fetch.requestPaused',pause(main,'main'));await tick();f.continuations.shift()({});await tick();
+ f.cdp.emit('Network.requestWillBeSent',worker);f.cdp.emit('Fetch.requestPaused',pause(worker,'unknown-worker'));await new Promise(resolve=>setTimeout(resolve,2100));
+ assert.match(f.errors[0],/No positive runtime request evidence/);assert.equal(f.metadata.worker_requests,undefined);assert.ok(f.commands.some(row=>row.command==='Fetch.failRequest'&&row.args.requestId==='unknown-worker'));barrier.stop();
 });

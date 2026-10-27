@@ -152,13 +152,17 @@ up to two seconds for positive matching evidence. Unknown IDs, wrong frames,
 destroyed targets, navigation, shared-worker targets, duplicate consumed
 requests and a second main installation reject. Main installation happens
 before continuing the unmodified response; workers continue without another
-installation. Protocol observers and pending evidence timers stop after
+installation. Continuation records become successful only after CDP
+`Fetch.continueRequest` acknowledges them; a paused request is not sufficient.
+A passing candidate requires at least one actual acknowledged pthread request
+and rechecks browser/barrier errors after cleanup. Protocol observers and pending evidence timers stop after
 producer closure, before final artifact metadata freezes. The actual
 first-callback out/err identity checks remain unchanged.
 
 The source-only pure fixture selects actual Network/Target fields from
 `/tmp/terraform-runtime-request-diagnostic/report.json`. Its Fetch IDs are
 explicitly declared protocol-model fields until the new live Fetch diagnostic
-executes. Twenty-two pure tests pass; no actual CDP Fetch or candidate proof
+executes. Twenty-five pure tests pass, including delayed acknowledgement,
+stop-during-installation and bounded rejection of unknown requests; no actual CDP Fetch or candidate proof
 is claimed yet. `runtime-fetch-barrier-diagnostic.mjs` stages the next NO-WASM
 proof using only a tiny configuration/worker model, never the runtime bytes.
