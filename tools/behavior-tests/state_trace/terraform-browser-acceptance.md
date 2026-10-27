@@ -84,3 +84,33 @@ observes all 29 action rows. These are diagnostic roles, not input handlers or
 new native APIs. Three pure wire-integrity tests exercise missing/duplicate/wrong
 label/bad bounds/wrong hit rejection and exact native float coordinates; they do
 not count as a real-browser pass.
+
+The original-root `423d23f2` browser reached all 29 rows, actual native
+Escape/Tab and both Ctrl+R dispatch completions, accepted owned-base target
+submission and four complete seven-owner/128-tile snapshots. It timed out at
+the unchanged 180000 ms overall deadline before delivering the exit key, so
+it remains a failed browser case. This establishes no shutdown defect. Its
+final 11.8 MB DOM log was not saved; the typed report retains 95102 native
+events, which cannot reconstruct the original raw formatting.
+
+The bounded followup changes only harness log transport. Browser and Node
+retain append-only text using explicit UTF-16 code-unit offsets; only fresh
+suffixes cross Playwright. Concurrent reads serialize, and rewrites, truncation,
+element replacement, cursor reset or mismatched offsets fail closed. Every
+received suffix is immediately persisted as a JSONL raw-text chunk, including
+split surrogate pairs; `application.log` is the exact joined UTF-8 text. A
+failed final read preserves all earlier chunks and marks unknown unread tail
+as partial. Per-read suffix sizes and durations are diagnostic only. Product
+bootstrap logging, trace fields, snapshots, frames, inputs and deadlines stay
+unchanged. Browser-local `textContent` reads and append-prefix checks remain;
+this change makes no claim that DOM layout or all local scanning is cheap.
+
+Offline replay of the unmodified earlier 9078678-byte real application log
+preserved SHA256 `529b5064280d719f0897a2e1aaf2b2eb301757c4678f6b5a87528872290bd54e`
+and all six packets/64183 native events exactly. Across 446 serialized reads,
+9078678 code units transferred once. The later 95102-event typed report was
+replayed separately without claiming original raw bytes. Six cursor tests
+cover Unicode/surrogates, concurrent polling, reset/rewrite rejection, offsets,
+lossless chunk persistence and I/O failure. These offline checks grant no
+browser pass. Reproduce with `terraform-browser-log-replay.mjs RAW_LOG
+LATER_TYPED_REPORT OUTPUT_JSON`; its output binds both actual input hashes.

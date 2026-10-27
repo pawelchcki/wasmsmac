@@ -2,13 +2,14 @@
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
+import {appendFileSync,mkdirSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {chromium} from 'playwright';
 import {PNG} from 'pngjs';
 import {fixtureSources} from './terraform-browser-inputs.mjs';
 import {TerraformGeometry,nativeToCanvas} from './terraform-browser-geometry.mjs';
+import {BrowserLogCursor} from './browser-log-cursor.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const scriptsRoot = process.env.WASM_SCRIPTS_ROOT || root;
@@ -97,6 +98,13 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const browser=await chromium.launch({headless:true,executablePath:process.env.WASM_BROWSER_EXECUTABLE||undefined,
     args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const page=await browser.newPage({viewport:{width:1100,height:1000}}); page.setDefaultTimeout(60000);
+  const logChunksPath=`${artifacts}/application-log-chunks.jsonl`;
+  writeFileSync(logChunksPath,'');
+  const logCursor=new BrowserLogCursor(page,packet=>{
+    // JSON string escaping preserves even a UTF-16 surrogate split across
+    // reads. These are lossless raw-text chunks, not reconstructed packets.
+    if(packet.text)appendFileSync(logChunksPath,JSON.stringify({start_utf16:packet.start,end_utf16:packet.end,text:packet.text})+'\n');
+  });
   await page.addInitScript(()=>{
     window.__terraformDomReceipt={events:[],dropped:0};
     for(const type of ['keydown','keyup'])window.addEventListener(type,event=>{
@@ -115,14 +123,22 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   page.on('request',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())navigation('main-frame-navigation-request',request.url());});
   page.on('pageerror',error=>{errors.push(error.stack||String(error));navigation('page-error',page.url());});page.on('crash',()=>errors.push('Chromium crashed'));
   t.after(async()=>{try{if(report.status!=='passed')report.status='failed-or-incomplete';report.browser_errors=errors;
-    try{const text=await page.locator('#log').textContent({timeout:1000});writeFileSync(`${artifacts}/application.log`,text);report.diagnostic_root_records=text.split('\n').filter(line=>line.includes('TF_DIAGNOSTIC_REGISTRY|')||line.includes('TF_DIAGNOSTIC_ROOT_KEY|')||line.includes('TF_DIAGNOSTIC_ROOT_AFTER|'));}
+    // Persist the complete retained prefix even when a timed-out browser no
+    // longer responds. A bounded final suffix read never replaces that prefix.
+    writeFileSync(`${artifacts}/application.log`,logCursor.text);
+    try{let timer;try{await Promise.race([logCursor.read(),new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('Final browser log suffix read timed out')),1000);})]);}finally{clearTimeout(timer);}}
     catch(error){report.log_capture_error=String(error);}
+    writeFileSync(`${artifacts}/application.log`,logCursor.text);
+    report.log_transport={offset_unit:'UTF-16-code-units',raw_chunk_file:'application-log-chunks.jsonl',partial:!!report.log_capture_error||report.status!=='passed',unread_tail:report.log_capture_error?'unknown after final read failure':report.status!=='passed'?'possible after final read; application exit not established':false,retained_utf16:logCursor.text.length,retained_utf8:Buffer.byteLength(logCursor.text,'utf8'),reads:logCursor.reads};
+    report.diagnostic_root_records=logCursor.text.split('\n').filter(line=>line.includes('TF_DIAGNOSTIC_REGISTRY|')||line.includes('TF_DIAGNOSTIC_ROOT_KEY|')||line.includes('TF_DIAGNOSTIC_ROOT_AFTER|'));
     try{report.dom_key_receipts=await page.evaluate(()=>window.__terraformDomReceipt);}catch(error){report.dom_capture_error=String(error);}
     if(report.status!=='passed'){try{await page.locator('#canvas').screenshot({path:`${artifacts}/failed-frame.png`,timeout:1000});}catch(error){report.frame_capture_error=String(error);}}
     writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');}finally{await browser.close();}});
   const fatal=/TF_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i;
+  let fatalLineTail='';
+  const log=async()=>{const packet=await logCursor.read();const freshText=fatalLineTail+packet.text;assert.doesNotMatch(freshText,fatal);fatalLineTail=freshText.slice(freshText.lastIndexOf('\n')+1);assert.deepEqual(errors,[]);return logCursor.text;};
   const waitLog=async marker=>{await page.waitForFunction(({marker,fatal})=>document.querySelector('#log').textContent.includes(marker)||new RegExp(fatal).test(document.querySelector('#log').textContent)||document.body.dataset.state==='failed',{marker,fatal:fatal.source});
-    assert.doesNotMatch(await page.locator('#log').textContent(),fatal);assert.deepEqual(errors,[]);};
+    await log();};
   await page.goto(address); await page.waitForFunction(()=>document.body.dataset.state==='ready');
   const manifest=await (await page.request.get(`${address}/assets/manifest.json`)).json();
   const entry=manifest.files.find(row=>row.path==='VT.cvr'); assert.ok(entry,'Real manifest must include the CVR resource');
@@ -146,9 +162,8 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
       '--quickstart','--quickstart-seed',initialSeed,'--quickstart-mapfile','/persist/glsmac/maps/cvr-arid.MP','--quickstart-faction','GAIANS']);
   },{scripts,main,world,observer,terrainObserver,cooperationObserver,initialSeed});
   report.candidate_executed=true; await page.locator('#start').click(); await waitLog('TF_READY');
-  const log=async()=>{const value=await page.locator('#log').textContent();assert.doesNotMatch(value,fatal);assert.deepEqual(errors,[]);return value;};
   let freshFence=null;
-  const fresh=async(prefix,action)=>{const before=(await log()).length;freshFence={marker:prefix,log_offset:before,observed_node_ms:performance.now()};await action();await page.waitForFunction(({before,prefix,fatal})=>{const t=document.querySelector('#log').textContent;return t.slice(before).includes(prefix)||new RegExp(fatal).test(t);},{before,prefix,fatal:fatal.source});return(await log()).slice(before);};
+  const fresh=async(prefix,action)=>{const before=(await log()).length;const tail=fatalLineTail;freshFence={marker:prefix,log_offset:before,observed_node_ms:performance.now()};await action();await page.waitForFunction(({before,prefix,fatal,tail})=>{const suffix=document.querySelector('#log').textContent.slice(before);return suffix.includes(prefix)||new RegExp(fatal).test(tail+suffix);},{before,prefix,fatal:fatal.source,tail});return(await log()).slice(before);};
   const lines=(text,prefix)=>text.split('\n').filter(line=>line.includes(prefix)).map(line=>line.slice(line.indexOf(prefix)+prefix.length).trim());
   const geometry=new TerraformGeometry();report.input_ledger={enabled:true,dropped:0,events:[]};let traceCursor=0;
   const collect=text=>{
