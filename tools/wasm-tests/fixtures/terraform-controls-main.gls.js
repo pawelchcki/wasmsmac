@@ -48,7 +48,7 @@
     return {selected:preview.selected_unit_id,pending:preview.order_pending == null ? null : #clone(preview.order_pending),order_label:preview.order_label == null ? null : preview.order_label.text + '',
      movement_label:preview.movement_label == null ? null : preview.movement_label.text + '',work_progress:preview.work_progress_label == null ? null : preview.work_progress_label.text + '',target:preview.terraforming_target.snapshot(),modal:popup.is_shown()};
    });
-   let headers_logged = false; const tagged_rows = {};
+   let headers_logged = false; const tagged_rows = {}; let diagnostic_ticks = 0;
    const properties = (node) => {
     const result = {};
     for (key of ['left','top','width','height','bottom']) { const value = node[key]; result[key] = #is_defined(value) ? value : null; }
@@ -109,7 +109,10 @@
      const point = glsmac.focus_owned_base(owned[0].id); focus_pending = false;
      #print('TF_BASE_POINT|' + #json_text_exact(point));
     }
-    if (armed) { observe(); } return true;
+    if (armed) { observe(); }
+    diagnostic_ticks = diagnostic_ticks + 1;
+    if (diagnostic_ticks >= 5) { diagnostic_ticks = 0; #print('TF_DIAGNOSTIC_TRACE|' + #json_text_exact(glsmac.ui.presentation_trace_drain())); }
+    return true;
    });
   });
  }); glsmac.run();
