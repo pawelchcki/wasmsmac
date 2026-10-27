@@ -68,28 +68,36 @@ test('sea-preserving case cannot silently expand to an emerged tile or feature r
 // Public protocol data, not claimed native outcomes. Live source bootstrap
 // must supply every witness before the driver can call this acceptance check.
 function bootstrap(){
-  const recipe={id:'SeaFormers',application_recipe:'foil-terraform-module-v1',weapon_mode:9,movement_type:'water',movement:4,rows:8,source_components:{chassis:3,prototype:null}};
-  const setup={actor:8,home_id:1,declared:{recipe,resumed_choice:'FORMERS',restored:{cost:80,minerals:83,last_processed_turn:0,population:1}},production:{choice_id:'FORMERS',minerals:3,last_processed_turn:1}};
-  const birth={unit_id:8,owner:0,definition:'SeaFormers',is_water:true,can_terraform:true,turn:1,home_id:1,home_population:1,x:8,y:8,movement:4,health:1,production:{choice_id:'',minerals:3,last_processed_turn:1}};
-  const records=[{kind:'TH_SEA_BIRTH',value:birth},...Array.from({length:7},(_,i)=>({kind:'TH_RECEIPT',value:{name:'process_base_production',event_id:`0_${i+1}`,caller:0,success:true,data:{turn_id:1,minerals:0}}})),
-    {kind:'TH_RECEIPT',value:{name:'set_base_production',event_id:'0_8',caller:0,success:true,data:{choice_id:'FORMERS'}}}];
+  const recipe={id:'SeaFormers',choice:'SEA_FORMERS',application_recipe:'foil-terraform-module-v1',weapon_mode:9,movement_type:'water',movement:4,rows:5,source_components:{chassis:3,prototype:null}};
+  const base_states=Array.from({length:7},(_,i)=>({base_id:i+1,owner:i,population:1,production:{choice_id:'FORMERS',minerals:i===0?4:0,last_processed_turn:1}}));
+  const setup={actor:8,home_id:1,base_states,declared:{version:2,recipe,resumed_choice:'FORMERS',restored:{cost:40,minerals:43,last_processed_turn:0,population:1}},production:{choice_id:'FORMERS',minerals:4,last_processed_turn:1}};
+  const actual={version:2,base_id:1,owner:0,turn:1,observed_choice_cost:40,requested_stock:43,population_cost:0,population:1,choice_id:'SEA_FORMERS',source_recipe:recipe,actual_prefill:{choice_id:'SEA_FORMERS',minerals:43,last_processed_turn:0}};
+  const preturn={version:2,turn:1,home_id:1,bases:base_states.map((row,i)=>({...structuredClone(row),eligible:i===0,
+    production:{choice_id:i===0?'SEA_FORMERS':'FORMERS',minerals:i===0?43:0,last_processed_turn:i===0?0:1},intake:{MINERALS:1,NUTRIENTS:2},consumption:{MINERALS:0,NUTRIENTS:2}}))};
+  const birth={unit_id:8,owner:0,definition:'SeaFormers',is_water:true,can_terraform:true,turn:1,home_id:1,home_population:1,x:8,y:8,movement:4,health:1,production:{choice_id:'',minerals:4,last_processed_turn:1}};
+  const records=[{kind:'TH_SEA_ACCOUNTING',value:actual},{kind:'TH_SEA_PRETURN',value:preturn},{kind:'TH_SEA_BIRTH',value:birth},
+    {kind:'TH_RECEIPT',value:{name:'process_base_production',event_id:'0_61',caller:0,success:true,data:{turn_id:1,minerals:1}}},
+    ...Array.from({length:7},(_,i)=>({kind:'TH_RECEIPT',value:{name:'process_base_growth',event_id:`0_${i+62}`,caller:0,success:true,data:{turn_id:1}}})),
+    {kind:'TH_RECEIPT',value:{name:'set_base_production',event_id:'0_69',caller:0,success:true,data:{choice_id:'FORMERS'}}}];
   return{records,setup};
 }
 
 test('production bootstrap binds native publication to ordered current-turn ACKs and exact stock home launch',async()=>{
   const {verifySeaBootstrap}=await import('./terraform-sea-height-observation.mjs');
   const {records,setup}=bootstrap();const before=structuredClone({records,setup});
-  assert.equal(verifySeaBootstrap(records,setup).production_acknowledgements.length,7);assert.deepEqual({records,setup},before);
+  assert.equal(verifySeaBootstrap(records,setup).production_acknowledgements.length,1);assert.deepEqual({records,setup},before);
 });
 
 test('production bootstrap rejects early resumption missing ACKs and undeclared stock/income changes',async()=>{
   const {verifySeaBootstrap}=await import('./terraform-sea-height-observation.mjs');
   for(const mutate of [
     r=>r.records.unshift(r.records.pop()),r=>r.records.splice(2,1),
-    r=>r.records[1].value.data.minerals=1,r=>r.records[1].value.caller=1,r=>r.records[1].value.data.turn_id=2,
-    r=>r.setup.declared.restored.cost=40,r=>r.setup.declared.restored.minerals=84,
-    r=>r.records[0].value.production.minerals=4,r=>r.setup.production.minerals=4,
-    r=>r.records[0].value.home_id=2,r=>r.records[0].value.x=10,r=>r.records[0].value.home_population=0,
+    r=>r.records[3].value.data.minerals=0,r=>r.records[3].value.caller=1,r=>r.records[3].value.data.turn_id=2,
+    r=>r.setup.declared.restored.cost=80,r=>r.setup.declared.restored.minerals=83,
+    r=>r.records[2].value.production.minerals=3,r=>r.setup.production.minerals=3,
+    r=>r.records[2].value.home_id=2,r=>r.records[2].value.x=10,r=>r.records[2].value.home_population=0,
     r=>r.setup.declared.recipe.weapon_mode=0,r=>r.setup.declared.recipe.source_components.chassis=0,
+    r=>r.records[0].value.actual_prefill.minerals=42,r=>r.records[1].value.bases[1].production.last_processed_turn=0,
+    r=>r.setup.base_states[6].production.last_processed_turn=0,
   ]){const row=bootstrap();mutate(row);assert.throws(()=>verifySeaBootstrap(row.records,row.setup));}
 });

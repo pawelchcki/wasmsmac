@@ -10,8 +10,8 @@ return (game) => {
  const sea = game.get('sea_former_rule');
  if (project == null || !#is_defined(sea) || sea == null) { throw Error('Installed land/Sea Former recipe is missing'); }
  if (sea.weapon_mode != 9 || sea.movement_type != 'water' || sea.application_recipe != 'foil-terraform-module-v1' || sea.source_components.chassis != 3 || sea.source_components.prototype != null) { throw Error('Unexpected installed Foil composition'); }
- const declared = {version:1,recipe:#clone(sea),resumed_choice:project.choice + '',port:{x:10,y:8},launch:{x:8,y:8},
-  production_input:'existing native restore_production before FirstTurn; source sea price plus3 authored minerals; real turn event supplies actual current intake',
+ const declared = {version:2,recipe:#clone(sea),resumed_choice:project.choice + '',port:{x:10,y:8},launch:{x:8,y:8},
+  production_input:'existing native restore_production during queued startup at current turn1, before ordinary production; actual source sea price plus3; real turn event supplies current intake',
   stock_extra:3,restored:null};
  game.set('sea_browser_setup',declared);
  let home = null;
@@ -25,10 +25,18 @@ return (game) => {
    for (row of base.get_owner().get_production_choices()) { if (row.id == sea.choice) { if (choice != null) { throw Error('Duplicate Sea production choice'); } choice = row; } }
    if (choice == null || choice.type != 'unit' || choice.unit_id != sea.id || choice.population_cost != 0 || #typeof(choice.cost) != 'Int' || choice.cost <= 0) { throw Error('Native source Sea production choice unavailable'); }
    const cost = choice.cost; const stock = cost + 3;
-   // Explicit authored input, before the first live observation. No treasury,
+   #print('TH_SEA_DECLARED|' + #json_text_exact({version:2,base_id:base.id + 0,owner:base.get_owner().id + 0,
+    recipe:#clone(sea),choice_id:choice.id,population_cost:choice.population_cost,cost:cost,stock:stock,
+    population:#sizeof(base.get_pops()),turn:game.get_turn() + 0}));
+   // Explicit authored input, before ordinary production and live observation. No treasury,
    // technology, generated map, production cost or completion guard is changed.
    base.restore_production({choice_id:sea.choice,minerals:stock,last_processed_turn:0},'');
-   declared.restored = {choice_id:sea.choice,cost:cost,minerals:stock,last_processed_turn:0,population:#sizeof(base.get_pops())};
+   const prefill = base.get_production();
+   #print('TH_SEA_ACCOUNTING|' + #json_text_exact({version:2,base_id:base.id + 0,owner:base.get_owner().id + 0,
+    choice_id:choice.id,observed_choice_cost:cost,requested_stock:stock,actual_prefill:prefill,
+    source_recipe:#clone(sea),population_cost:choice.population_cost,population:#sizeof(base.get_pops()),turn:game.get_turn() + 0}));
+   if (sea.rows != 5 || cost != 40 || stock != 43 || prefill.choice_id != sea.choice || prefill.minerals != 43 || prefill.last_processed_turn != 0) { throw Error('Native Sea accounting differs from the declared v2 profile'); }
+   declared.restored = {choice_id:prefill.choice_id,cost:cost,minerals:prefill.minerals,last_processed_turn:prefill.last_processed_turn,population:#sizeof(base.get_pops())};
    game.set('sea_browser_setup',declared);
   }
  });
@@ -54,6 +62,14 @@ return (game) => {
   game.on('turn',() => {
    if (game.get_turn() == 1) {
     if (home == null || declared.restored == null) { throw Error('Authored Sea producer did not initialize'); }
+    const states = [];
+    for (base of game.get_bm().get_bases()) {
+     const state = base.get_production();
+     states :+ {base_id:base.id + 0,owner:base.get_owner().id + 0,x:base.get_tile().x + 0,y:base.get_tile().y + 0,
+      population:#sizeof(base.get_pops()),production:state,intake:base.get_intake(),consumption:base.get_consumption(),
+      eligible:state.choice_id != '' && state.last_processed_turn < game.get_turn()};
+    }
+    #print('TH_SEA_PRETURN|' + #json_text_exact({version:2,turn:game.get_turn() + 0,home_id:home.id + 0,bases:states}));
     game.event('set_base_production',{base:home,choice_id:project.choice});
    }
   });

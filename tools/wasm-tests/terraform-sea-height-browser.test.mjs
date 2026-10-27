@@ -181,7 +181,7 @@ test('real produced SeaFormer Raise quote Cancel draft and paid completion prese
     Module.callMain=args=>callMain([...args,'--datapath','/height-snapshot/GLSMAC_data','--mainscript','browser_height_main','--worldscript','browser_height','--quickstart','--quickstart-seed',seed,'--quickstart-mapfile','/persist/glsmac/maps/sea-height-coast.MP','--quickstart-faction','GAIANS']);
   },{scripts,helpers,main,world,seed});
   report.candidate_executed=true;await page.locator('#start').click();
-  await page.waitForFunction(()=>document.querySelector('#log').textContent.includes('TH_READY')||document.body.dataset.state==='failed');await read();
+  await page.waitForFunction(pattern=>document.querySelector('#log').textContent.includes('TH_READY')||new RegExp(pattern,'i').test(document.querySelector('#log').textContent)||document.body.dataset.state==='failed',heightFatal.source);await read();
   assert.ok(latest('TH_INPUTS'));report.native_input=latest('TH_INPUTS');
   report.sea_setup=latest('TH_SEA_SETUP');assert.ok(report.sea_setup);
   assert.equal(report.sea_setup.is_water,true);assert.equal(report.sea_setup.is_land,false);
@@ -190,8 +190,8 @@ test('real produced SeaFormer Raise quote Cancel draft and paid completion prese
   assert.equal(report.sea_setup.declared.recipe.weapon_mode,9);assert.equal(report.sea_setup.declared.recipe.application_recipe,'foil-terraform-module-v1');
   report.production_bootstrap=verifySeaBootstrap(records,report.sea_setup);
   assert.equal(report.native_input.can_terraform,true);assert.equal(report.native_input.raise_rule.turns,1);assert.equal(report.native_input.raise_rule.sea.turns,1);
-  assert.equal(report.sea_setup.declared.recipe.rows,8,'Fixed installed recipe must retain its native eight-row composition');
-  assert.equal(report.sea_setup.declared.restored.cost,80);
+  assert.equal(report.sea_setup.declared.recipe.rows,5,'Fixed installed recipe must retain its source five-row composition');
+  assert.equal(report.sea_setup.declared.restored.cost,40);
   assert.equal(report.sea_setup.declared.restored.minerals,report.sea_setup.declared.restored.cost+3);
   assert.ok(report.sea_setup.home_population>0);assert.equal(report.sea_setup.production.choice_id,report.sea_setup.declared.resumed_choice);
   assert.equal(report.native_input.energy.credits,report.native_input.starting_credits+report.native_input.faction_bonus);

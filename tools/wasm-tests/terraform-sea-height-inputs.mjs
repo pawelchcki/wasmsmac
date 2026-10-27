@@ -1,9 +1,9 @@
 // New declared map bytes only. The importer and actual quote supply outcomes.
 import {declaredTerrain} from './terraform-browser-inputs.mjs';
-export const seaHeightInput=Object.freeze({version:1,width:16,height:16,players:7,
+export const seaHeightInput=Object.freeze({version:2,bootstrap_contract:'installed-source-current-turn-production.v2',width:16,height:16,players:7,
   port:Object.freeze({x:10,y:8}),actor:Object.freeze({x:8,y:8}),
   changed_map_fields:Object.freeze({altitude_byte:32,contour_byte:30}),
-  action:'raise',domain:'sea remains sea',production_stock:'actual source Sea recipe cost plus3; declared before FirstTurn'});
+  action:'raise',domain:'sea remains sea',production_stock:'actual source Sea recipe cost plus3; restored during queued startup before ordinary production'});
 export function seaHeightTerrain(){
   const bytes=declaredTerrain(),offset=15+0xaa4+(8*16/2+8/2)*44;
   // One deep-water tile beside the authored land port; all other imported
