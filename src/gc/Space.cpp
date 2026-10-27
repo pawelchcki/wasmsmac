@@ -202,7 +202,10 @@ const bool Space::Collect() {
 		GC_DEBUG_END();
 	}
 
-	std::unordered_set< Object* > removed_objects = {};
+	// m_objects is already unique and visited once. Retain only the deletion
+	// sequence until the existing second unlink phase; another hash set would
+	// allocate a node and growing bucket table for every unreachable object.
+	std::vector< Object* > removed_objects;
 	{
 		std::lock_guard guard3( m_accumulations_mutex ); // prevent collection during accumulation // TODO: improve
 
@@ -214,14 +217,13 @@ const bool Space::Collect() {
 					for ( const auto& object : m_objects ) {
 						const auto& it = m_reachable_objects_tmp.find( object );
 						if ( it == m_reachable_objects_tmp.end() ) {
-							ASSERT( removed_objects.find( object ) == removed_objects.end(), "object " + std::to_string( (unsigned long long)object ) + " was already removed" );
 #if defined( DEBUG ) || defined( FASTDEBUG )
 							GC_LOG( "Destroying unreachable object: " + util::String::ToHexString( (unsigned long long)object ) /* TODO + "[ " + object->ToString() + " ]"*/ );
 #endif
 #ifdef DEBUG
 							debug::g_memory_watcher->MaybeDelete( object );
 #endif
-							removed_objects.insert( object );
+							removed_objects.push_back( object );
 							delete object;
 						}
 					}
