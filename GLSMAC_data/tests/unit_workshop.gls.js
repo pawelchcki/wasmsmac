@@ -92,7 +92,7 @@ behavior.scenario('ownership or turn changes invalidate open Workshop without a 
 behavior.scenario('removed or repurposed production IDs cannot select a stale preview', () => {
 	for (kind of ['remove', 'replace']) {
 		const f = fixture(); f.change(); const dialog = f.workshop(); pick(dialog, 'FORMERS');
-		if (kind == 'remove') { f.choices = [f.choices[0], f.choices[1]]; }
+		if (kind == 'remove') { f.choices = [#clone(f.choices[0]), #clone(f.choices[1])]; }
 		else { f.choices[2].unit_id = 'ScoutPatrol'; }
 		dialog.ok.emit('click', {});
 		test.assert(f.screen.workshop.dialog == null && f.screen.production_choices.value == 'TANKS' && f.state.events == []);
@@ -108,7 +108,7 @@ behavior.scenario('production OK cannot submit behind an active Workshop and hid
 });
 
 behavior.scenario('empty unit inventory is a cancellable Workshop without invented designs', () => {
-	const f = fixture(); f.choices = [f.choices[0]]; f.change(); const dialog = f.workshop();
+	const f = fixture(); f.choices = [#clone(f.choices[0])]; f.change(); const dialog = f.workshop();
 	test.assert(dialog.choices == null && f.view.find('text', 'text', 'No unit designs are available to build.') != null);
 	dialog.ok.emit('click', {}); test.assert(f.screen.production_choices.value == 'TANKS' && f.state.events == []);
 	f.screen.hide_production_selection();
