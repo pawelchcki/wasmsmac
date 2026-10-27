@@ -1,6 +1,8 @@
 #include "Game.h"
 #include "State.h"
 #include "Player.h"
+#include "gse/value/Bool.h"
+#include "gse/value/Int.h"
 #include "game/backend/slot/Slot.h"
 #include <exception>
 #include <utility>
