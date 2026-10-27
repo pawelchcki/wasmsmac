@@ -21,6 +21,40 @@ audit = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(audit)
 
 
+def paid_fixture_world(before, plan, actor_id, payer):
+    """Synthetic Native-shaped effect from explicit fixture patches, not audit output."""
+    after = copy.deepcopy(before)
+    next(u for u in after['units'] if u['id'] == actor_id)['movement'] = 0.0
+    detail = after['terrain_trace']['unit_details'][actor_id]
+    detail['moved_this_turn'] = True
+    for quote in detail['quotes'].values():
+        if quote is not None: quote.update(allowed_now=False, reason='Unit is out of moves')
+    after['terrain_trace']['player_details'][payer]['energy']['credits'] -= 4
+    after['terrain_trace']['player_details'][payer]['energy_revision'] += 1
+    tiles = before['terrain_trace']['tiles']
+    changes = {(p['x'], p['y']): p['canonical'] for p in plan}
+    offsets = {'left': (-1, 0), 'top': (0, -1), 'right': (1, 0), 'bottom': (0, 1)}
+    vertices = {((x + dx) % 16, y + dy) for x, y in changes for dx, dy in offsets.values()}
+    for key, tile in after['terrain_trace']['tiles'].items():
+        x, y = tile['x'], tile['y']; changed = False
+        for name, (dx, dy) in offsets.items():
+            vx, vy = (x + dx) % 16, y + dy
+            if (vx, vy) not in vertices: continue
+            centers = [((vx - 1) % 16, vy), (vx, vy - 1), ((vx + 1) % 16, vy), (vx, vy + 1)]
+            values = [changes.get((cx, cy), {}).get('elevation', tiles[f'{cx},{cy}']['elevation']['center']) for cx, cy in centers]
+            value = sum(values) // 4
+            changed |= value != tile['elevation'][name]
+            tile['elevation'][name] = value
+        patch = changes.get((x, y))
+        if patch is None and not changed: continue
+        tile['terrain_epoch'] += 1
+        tile['canonical'].update(active=True, elevation=patch['elevation'] if patch else tiles[key]['elevation']['center'], is_water=False)
+        if patch:
+            tile['elevation']['center'] = patch['elevation']
+            tile['imported'].update(active=False, source_corners=None, source_elevation=None, source_water=None)
+    return after
+
+
 def protocol_fixture():
     """Synthetic schema inputs only, never an original/candidate observation."""
     players = [{'id': f'p{i}', 'raw_id': i, 'faction': 'GAIANS' if i == 0 else f'other{i}'} for i in range(7)]
@@ -35,7 +69,12 @@ def protocol_fixture():
                 'imported': {'active': True, 'source_elevation': 240, 'source_water': False, 'source_corners': [240] * 4},
                 'is_land': True, 'is_water': False, 'native_type': {'domain': 'land'},
                 'native_height_band': {name: False for name in audit.BANDS}, 'unknown_native': {'value': -0.0}}
-    tiles['8,8']['neighbors']['E'] = {'x': 10, 'y': 8}
+    directions = dict(zip(('W', 'NW', 'N', 'NE', 'E', 'SE', 'S', 'SW'),
+                          ((-2, 0), (-1, -1), (0, -2), (1, -1), (2, 0), (1, 1), (0, 2), (-1, 1))))
+    for tile in tiles.values():
+        x, y = tile['x'], tile['y']
+        tile['neighbors'] = {name: {'x': (x + dx) % 16, 'y': y + dy} if 0 <= y + dy < 16 else None
+                             for name, (dx, dy) in directions.items()}
     capabilities = {name: True for name in ('all_players', 'terrain_height', 'terrain_type', 'terrain_resources',
         'traverse_quotes', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase',
         'home_identity', 'improvement_owners', 'terrain_epoch', 'paid_height_work', 'naval_recovery',
@@ -47,7 +86,9 @@ def protocol_fixture():
     quote = {'version': 1, 'supported': True, 'action': 'raise', 'resuming': False, 'paid_fee': 0, 'base_fee': 4, 'fee': 4, 'credits': 10,
              'mode': 'functional_approximation', 'policy': 'application.band-slope-height.v1', 'fee_policy': 'application.band-fee.v1',
              'unit_id': 8, 'owner': 0, 'turn': 1, 'x': 8, 'y': 8, 'source_elevation': 240, 'source_water': False,
-             'destination_elevation': 1500, 'destination_water': False, 'plan': [{'x': 8, 'y': 8, 'canonical': {'elevation': 1500, 'is_water': False}}]}
+             'destination_elevation': 1500, 'destination_water': False,
+             'plan': [{'x': 8 + dx, 'y': 8 + dy, 'canonical': {'elevation': 1500 if dx == dy == 0 else 500, 'is_water': False}}
+                      for dx, dy in ((0, 0), (-2, 0), (-1, -1), (0, -2), (1, -1), (2, 0), (1, 1), (0, 2), (-1, 1))]}
     packets = []
     for i in range(6):
         ui = {'actor': 8, 'owner': 0, 'turn': 1, 'session': 0 if i == 0 else 1, 'dialog_generation': (0, 1, 2, 3, 3, 4)[i],
@@ -60,20 +101,7 @@ def protocol_fixture():
         packets.append({'query': i + 1, 'query_owner': request, 'ui': ui, 'world': copy.deepcopy(world)})
     final = packets[-1]
     final['ui'].update(movement=0.0, movement_bits=0)
-    after = final['world']
-    after['units'][-1]['movement'] = 0.0
-    after['terrain_trace']['unit_details']['u8'].update(moved_this_turn=True)
-    after['terrain_trace']['unit_details']['u8']['quotes']['E'].update(allowed_now=False, reason='Unit is out of moves')
-    after['terrain_trace']['player_details']['p0']['energy']['credits'] = 6
-    after['terrain_trace']['player_details']['p0']['energy_revision'] = 2
-    for key in ('8,8', '10,8'):
-        tile = after['terrain_trace']['tiles'][key]
-        tile['terrain_epoch'] = 1
-        tile['canonical'].update(active=True, elevation=1500 if key == '8,8' else 240, is_water=False)
-    target = after['terrain_trace']['tiles']['8,8']
-    target['elevation']['center'] = 1500
-    target['imported'].update(active=False, source_corners=None, source_elevation=None, source_water=None)
-    after['terrain_trace']['tiles']['10,8']['elevation']['left'] = 241
+    final['world'] = paid_fixture_world(world, quote['plan'], 'u8', 'p0')
     receipt = {'name': 'unit_terraform', 'event_id': '0_68', 'caller': 0, 'success': True, 'data': {'unit_id': 8, 'action': 'raise', 'confirmed_height': True}}
     inputs = {'policy': {'version': 1, 'ignore_technologies': True}, 'actor': 8, 'can_terraform': True, 'raise_rule': {'turns': 1},
               'starting_credits': 10, 'faction_bonus': 0, 'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}}
@@ -88,7 +116,7 @@ def protocol_fixture():
         records.append(('TH_NATIVE', row, (i + 1) * 10))
         records.append(('TH_TRACE', {'enabled': True, 'dropped': 0, 'events': events[i * 3:(i + 1) * 3]}, (i + 1) * 10 + 1))
     records.append(('TH_RECEIPT', receipt, 55))
-    report = {'native_input': copy.deepcopy(inputs), 'height_receipt': copy.deepcopy(receipt),
+    report = {'candidate_executed': True, 'native_input': copy.deepcopy(inputs), 'height_receipt': copy.deepcopy(receipt),
               'native_snapshots': [{'checkpoint': name, 'query_after_native_key': (i + 1) * 3,
                                     'observation': audit.node_projection(row)} for i, (name, row) in enumerate(zip(audit.CHECKPOINTS, packets))]}
     return records, report
@@ -121,6 +149,33 @@ class AuditMutations:
         self.assertEqual(result['per_world'], {'players': 7, 'units': 8, 'bases': 7, 'tiles': 128})
         self.assertEqual(result['native_float_unit_fields_checked'], 96)
         self.assertTrue(audit.equal(before, (self.records, self.report)))
+
+    def test_reject_candidate_execution_flag_before_any_case_credit(self):
+        for value in (False, None, 1, 0, 'true'):
+            self.setUp(); self.report['candidate_executed'] = value
+            with self.assertRaisesRegex(AssertionError, 'Actual candidate execution'):
+                audit.audit_records(self.records, self.report)
+        self.setUp(); self.report.pop('candidate_executed')
+        with self.assertRaisesRegex(AssertionError, 'Actual candidate execution'):
+            audit.audit_records(self.records, self.report)
+
+    def test_reject_coherent_quote_and_paid_world_with_wrong_fixed_footprint(self):
+        for variant in ('one-patch', 'remote-patch', 'wrong-slope', 'missing-patch'):
+            self.setUp(); before = self.packets()[0]['world']
+            actor = next(u for u in before['units'] if u['raw_id'] == 8)
+            quote = copy.deepcopy(self.packets()[1]['ui']['height_presentation']['quote'])
+            if variant == 'one-patch': quote['plan'] = quote['plan'][:1]
+            if variant == 'remote-patch': quote['plan'] = quote['plan'][:1] + [{'x': 2, 'y': 2, 'canonical': {'elevation': 500, 'is_water': False}}]
+            if variant == 'wrong-slope': quote['plan'][1]['canonical']['elevation'] += 1
+            if variant == 'missing-patch': quote['plan'].pop()
+            for packet in self.packets()[1:]: packet['ui']['height_presentation']['quote'] = copy.deepcopy(quote)
+            self.packets()[-1]['world'] = paid_fixture_world(before, quote['plan'], actor['id'], actor['owner'])
+            self.reject()
+
+    def test_reject_changed_shared_corner_inside_allowed_region(self):
+        tile = self.packets()[-1]['world']['terrain_trace']['tiles']['8,8']
+        tile['elevation']['left'] += 1
+        self.reject()
 
     def test_reject_swapped_checkpoints(self):
         indexes = [i for i, row in enumerate(self.records) if row[0] == 'TH_NATIVE']

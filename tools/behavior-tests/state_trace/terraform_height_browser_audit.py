@@ -130,6 +130,7 @@ def validate_trace(records):
 
 
 def validate_sequence(records, report):
+    assert report.get('candidate_executed') is True, 'Actual candidate execution must be Boolean true before case credit'
     inputs = [value for kind, value, _ in records if kind == 'TH_INPUTS']
     assert len(inputs) == 1
     policy = inputs[0]['policy']
@@ -194,9 +195,58 @@ def validate_sequence(records, report):
     return packets, native
 
 
+DIRECTIONS = ('W', 'NW', 'N', 'NE', 'E', 'SE', 'S', 'SW')
+NEIGHBOR_OFFSETS = ((-2, 0), (-1, -1), (0, -2), (1, -1), (2, 0), (1, 1), (0, 2), (-1, 1))
+
+
+def source_raise_plan(base, actor):
+    """Pinned land fixture: GSE band/slope policy from BEFORE, never quote/AFTER."""
+    tiles = base['terrain_trace']['tiles']
+    start = (actor['x'], actor['y'])
+    initial = tiles[f'{start[0]},{start[1]}']
+    assert start == (8, 8) and initial['is_water'] is False
+    assert type(initial['elevation']['center']) is int
+    destination = (initial['elevation']['center'] // 1000 + 1) * 1000 + 500
+    assert destination == 1500, 'Different declared land-height source band'
+    queue, seen, patches = [(*start, 0)], {start}, []
+    for x, y, distance in queue:
+        state = tiles[f'{x},{y}']
+        assert type(state['elevation']['center']) is int
+        bound = destination - distance * 1000
+        if state['elevation']['center'] < bound:
+            assert state['is_water'] is False and bound >= 0, 'Land-only case cannot certify a domain conversion'
+            patches.append({'x': x, 'y': y, 'canonical': {'elevation': bound, 'is_water': False}})
+        if distance < 7 and destination - (distance + 1) * 1000 >= -3500:
+            for direction in DIRECTIONS:
+                point = state['neighbors'][direction]
+                if point is not None:
+                    assert type(point['x']) is int and type(point['y']) is int
+                    point = (point['x'], point['y'])
+                    if point not in seen:
+                        seen.add(point); queue.append((*point, distance + 1))
+    # The authored interior 16x16 source map has eight distinct neighbours.
+    fixed = {start, *((start[0] + dx, start[1] + dy) for dx, dy in NEIGHBOR_OFFSETS)}
+    assert len(patches) == 9 and {(p['x'], p['y']) for p in patches} == fixed, 'Different fixed-fixture Raise footprint'
+    region = set(fixed)
+    for x, y in fixed:
+        region.update((x + dx, y + dy) for dx, dy in NEIGHBOR_OFFSETS)
+    observed_region = set(fixed)
+    for x, y in fixed:
+        observed_region.update((point['x'], point['y']) for point in tiles[f'{x},{y}']['neighbors'].values() if point is not None)
+    assert len(region) == 25 and observed_region == region, 'Different fixed-fixture derived region'
+    return patches, region
+
+
+def shared_vertex(x, y, corner, width):
+    dx, dy = {'left': (-1, 0), 'top': (0, -1), 'right': (1, 0), 'bottom': (0, 1)}[corner]
+    return ((x + dx) % width, y + dy)
+
+
 def expected_paid_world(base, after, quote, actor_id, payer):
     expected = copy.deepcopy(base)
     actor = next(row for row in expected['units'] if row['id'] == actor_id)
+    plan, region = source_raise_plan(base, actor)
+    assert equal(quote['plan'], plan), 'Live quote differs from BEFORE/source-derived Raise plan'
     actor['movement'] = 0.0
     actor['order'] = 'NO_ORDERS'
     detail = expected['terrain_trace']['unit_details'][actor_id]
@@ -209,33 +259,33 @@ def expected_paid_world(base, after, quote, actor_id, payer):
     assert type(quote['fee']) is int and 0 < quote['fee'] <= energy['energy']['credits']
     energy['energy']['credits'] -= quote['fee']
     energy['energy_revision'] += 1
-    patches = {}
-    for patch in quote['plan']:
-        assert set(patch) == {'x', 'y', 'canonical'}
-        assert set(patch['canonical']) == {'elevation', 'is_water'}
-        assert type(patch['x']) is int and type(patch['y']) is int
-        assert type(patch['canonical']['elevation']) is int and patch['canonical']['is_water'] is False
-        key = f"{patch['x']},{patch['y']}"
-        assert key not in patches and key in base['terrain_trace']['tiles']
-        patches[key] = patch
-    assert patches
-    region = set(patches)
-    for key in patches:
-        for point in base['terrain_trace']['tiles'][key]['neighbors'].values():
-            if point is not None:
-                region.add(f"{point['x']},{point['y']}")
-    for key in region:
-        old, observed = base['terrain_trace']['tiles'][key], after['terrain_trace']['tiles'][key]
+    patches = {f"{p['x']},{p['y']}": p for p in plan}
+    tiles = base['terrain_trace']['tiles']
+    changed_vertices = {}
+    for patch in plan:
+        x, y = patch['x'], patch['y']
+        assert 2 <= x < base['width'] - 2 and 2 <= y < base['height'] - 2
+        for corner in CORNERS:
+            vertex = shared_vertex(x, y, corner, base['width'])
+            incident = [tile for tile in tiles.values() if any(shared_vertex(tile['x'], tile['y'], c, base['width']) == vertex for c in CORNERS)]
+            assert len(incident) == 4
+            total = sum(patches.get(f"{tile['x']},{tile['y']}", {}).get('canonical', {}).get('elevation', tile['elevation']['center']) for tile in incident)
+            # Native integer division truncates toward zero, including negatives.
+            changed_vertices[vertex] = (abs(total) // 4) * (-1 if total < 0 else 1)
+    affected = set()
+    for key, old in tiles.items():
         target = expected['terrain_trace']['tiles'][key]
-        geometry_changed = any(not equal(old['elevation'][name], observed['elevation'][name]) for name in CORNERS)
+        geometry_changed = False
+        for name in CORNERS:
+            vertex = shared_vertex(old['x'], old['y'], name, base['width'])
+            if vertex in changed_vertices:
+                value = changed_vertices[vertex]
+                geometry_changed |= value != old['elevation'][name]
+                target['elevation'][name] = value
         patch = patches.get(key)
         if patch is None and not geometry_changed:
             continue
-        if geometry_changed:
-            for name in CORNERS:
-                value = observed['elevation'][name]
-                assert type(value) is int and -3500 <= value <= 3500
-                target['elevation'][name] = value  # observed geometry only, never a numeric mesh-fidelity claim
+        affected.add((old['x'], old['y']))
         assert type(old['terrain_epoch']) is int
         target['terrain_epoch'] = old['terrain_epoch'] + 1
         target['canonical'].update(active=True,
@@ -249,8 +299,9 @@ def expected_paid_world(base, after, quote, actor_id, payer):
             target['imported'].update(active=False, source_corners=None, source_elevation=None, source_water=None)
             for name, limit in zip(BANDS, (0, -1000, -2000)):
                 target['native_height_band'][name] = elevation < limit
+    assert affected == region and len(affected) == 25, 'Different source-derived shared-geometry footprint'
     assert equal(after, expected), ('Unexpected exact native paid-world field/value/type', diffs(expected, after)[:8])
-    return patches, region
+    return patches, {f'{x},{y}' for x, y in region}
 
 
 def audit_records(records, report):
@@ -314,7 +365,7 @@ def audit_records(records, report):
         if len(path) >= 4 and path[:2] == ('terrain_trace', 'tiles') and path[2] in region:
             key, tail = path[2], path[3:]
             if tail == ('terrain_epoch',): category = 'affected tile epoch'
-            if len(tail) == 2 and tail[0] == 'elevation' and tail[1] in CORNERS: category = 'adjacent shared geometry (observed only)'
+            if len(tail) == 2 and tail[0] == 'elevation' and tail[1] in CORNERS: category = 'source-derived Native shared geometry'
             if len(tail) == 2 and tail[0] == 'canonical' and tail[1] in ('active', 'elevation', 'is_water'): category = 'native canonical write/pin'
             if key in patches:
                 if tail == ('elevation', 'center'): category = 'quoted gameplay elevation'
