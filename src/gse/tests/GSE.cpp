@@ -153,13 +153,24 @@ void AddGSETests( task::gsetests::GSETests* task ) {
 			} );
 			g_engine->GetGC()->Iterate();
 			GT_ASSERT( discarded == 1024 && retained == 0, "batch sweep lost a shared cyclic root or retained unreachable allocations" );
+			// Commit a second, nested batch into a space that already retains
+			// live registrations. Both accumulation levels must preserve them.
+			space.Accumulate( &root, [ & ]() {
+				new Tracked( &space, discarded );
+				space.Accumulate( &root, [ & ]() {
+					for ( size_t i = 0; i < 63; ++i ) { new Tracked( &space, discarded ); }
+				} );
+			} );
+			GT_ASSERT( discarded == 1024 && retained == 0, "accumulation destroyed existing registrations" );
+			g_engine->GetGC()->Iterate();
+			GT_ASSERT( discarded == 1088 && retained == 0, "nested batch registration lost live objects or leaked unreachable objects" );
 			space.Accumulate( &root, [ & ]() { root.first = nullptr; } );
 			g_engine->GetGC()->Iterate();
-			GT_ASSERT( discarded == 1024 && retained == 0, "one remaining root did not preserve its complete cycle" );
+			GT_ASSERT( discarded == 1088 && retained == 0, "one remaining root did not preserve its complete cycle" );
 			space.Accumulate( &root, [ & ]() { root.shared = nullptr; } );
 			g_engine->GetGC()->Iterate();
 			g_engine->GetGC()->Iterate();
-			GT_ASSERT( discarded == 1024 && retained == 32, "released batch was leaked or destroyed more than once" );
+			GT_ASSERT( discarded == 1088 && retained == 32, "released batch was leaked or destroyed more than once" );
 			GT_OK();
 		}
 	);

@@ -156,7 +156,11 @@ void Space::AccumulateImpl( const f_accum_t& f ) {
 			if ( !m_accumulated_objects.empty() ) {
 				std::lock_guard guard( m_objects_mutex );
 				GC_LOG( "Accumulated " + std::to_string( m_accumulated_objects.size() ) + " objects" );
-				m_objects.insert( m_accumulated_objects.begin(), m_accumulated_objects.end() );
+					// Both sets own pointer metadata, not the objects themselves.
+					// Transfer nodes rather than duplicating every registration at
+					// the end of a large accumulation. Any duplicate keys remain in
+					// the source and are discarded by the same clear as before.
+					m_objects.merge( m_accumulated_objects );
 				m_accumulated_objects.clear();
 			}
 		};
