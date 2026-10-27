@@ -126,6 +126,7 @@ jobs:
           tools/wasm-tests/runtime-fetch-barrier.test.mjs
           tools/wasm-tests/terraform-browser-geometry.test.mjs
           tools/wasm-tests/terraform-browser-pointer.test.mjs
+          tools/wasm-tests/unit-workshop-key-receipt.test.mjs
       - name: Capture all 26 terraforming variants and ten worker commands
         run: >-
           python3 tools/behavior-tests/state_trace/terraform_actions.py
