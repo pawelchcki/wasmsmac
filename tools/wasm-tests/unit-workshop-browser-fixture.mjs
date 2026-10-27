@@ -35,7 +35,13 @@ export const workshopMain=String.raw`#main((glsmac) => {
  glsmac.on('configure_game',(configured) => {
   const game = configured.game; const receipts = [];
   game.on('event_result',(e) => {
-   const row = {name:e.name + '',event_id:e.event_id + 0,caller:e.caller + 0,success:e.success == true};
+   if (#typeof(e.name) != 'String' || #typeof(e.event_id) != 'String' || #typeof(e.caller) != 'Int' || #typeof(e.success) != 'Bool') {
+    throw Error('Unexpected native event receipt scalar types');
+   }
+   if (#sizeof(receipts) == 0) { #print('WS_RECEIPT_TYPES|' + #json_text_exact({name:#typeof(e.name),event_id:#typeof(e.event_id),caller:#typeof(e.caller),success:#typeof(e.success)})); }
+   // Opaque native transaction token, distinct from Int entity handles and
+   // source definition/production String IDs. Preserve the complete token.
+   const row = {name:e.name + '',event_id:e.event_id + '',caller:e.caller + 0,success:e.success == true};
    receipts :+ row; #print('WS_RECEIPT|' + #json_text_exact(row));
    if (!e.success) { #print('WS_ERROR|event-rejected'); }
   });

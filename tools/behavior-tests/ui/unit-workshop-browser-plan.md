@@ -153,6 +153,41 @@ it hides and clears every retained fake badge. Move/despawn/tile-transfer paths
 also clear them. Thus the replacement-ID branch has no demonstrated reachable
 production path. It remains unchanged instead of being counted as a visible fix.
 
+## First runtime attempt and native receipt type audit
+
+The first real attempt used execution head `ca170322`, immutable production
+`87d22ffe`, native `115032ff`/v6 and byte-pinned shared CDP helpers from the strict
+Terraform run at `0322db43`. Its Node test exited 1 after 23.171 seconds during
+startup: the new observer incorrectly added integer zero to the native transaction
+String `0_1`. No Workshop control or native snapshot was reached. Browser/server
+cleanup completed, raw chunks joined exactly, and logs were sealed/partial.
+`/tmp/unit-workshop-browser-v1/outcome.json` retains the exact failure and hashes.
+This is a fixture failure, with zero Workshop/original passes and no established
+native exit-zero result. The shared transport itself acknowledged the actual
+main runtime and eight pthread runtime requests.
+
+The bounded fix preserves the complete transaction String, validates all native
+receipt scalar types and prints the first observed type record. It changes no
+production source, expected observation, identity scheme or game behavior.
+`Game::NotifyEventResult` constructs name/event_id as String, caller as Int and
+success as Bool. `Event::GetId` and its serialized field are String; the current
+generator combines slot and sequence into a token, which the observer never
+parses or numerically normalizes. The whole new flow was audited separately:
+
+| Field | Actual identity/type | Treatment |
+| --- | --- | --- |
+| Receipt event_id | Opaque native transaction String | Preserve exact String; never equate to entity ID |
+| Receipt caller | Native participant Int | Materialize Int |
+| Live unit/base id | Native entity Int | Use Int to reacquire current native registry object |
+| Production choice id | Source production String | Match the existing native available inventory |
+| Production descriptor unit_id | Definition String, e.g. Formers | Match template identity, not a live unit handle |
+| Unit order request unit_id | Live native entity Int | Kept distinct from the descriptor field of the same name |
+| Presentation node ID | Native presentation String | Exact lookup; no arithmetic or source-ordinal substitution |
+| Query/watch/Workshop tokens | Separate script lifecycle Int counters | Fence their own sessions only |
+
+The corrected embedded GSE fixture remains unexecuted until a newly granted,
+separately frozen attempt. The historical failed execution source is unchanged.
+
 ## Concrete graphics and Workshop gaps
 
 | Area | Current bounded support | Unsupported |
@@ -161,4 +196,4 @@ production path. It remains unchanged instead of being counted as a visible fix.
 | Movement | Existing body interpolation and badge blink | Original facing, trajectory/cadence and intermediate-frame agreement |
 | Work/animation | Existing PSI attack/death clips; resource metadata only for Former tools | Farm/Raise/etc. clip binding, limbs, transforms, visibility and timing |
 | Workshop | Existing source designs, stats, guarded preview, production draft handoff | Authoring/customization, save/obsolete/upgrade, rotation and original UI layout |
-| Browser proof | Source-prepared native Window/SDL/state/pixel acceptance | Actual execution until an exclusive slot is granted; original passing cases remain zero |
+| Browser proof | Source-prepared native Window/SDL/state/pixel acceptance; first actual native startup failure retained | Workshop controls/pixels still unverified after observer type failure; original passing cases remain zero |
