@@ -89,9 +89,9 @@ const complete_and_undo = () => {
  const f = scene.f; const game = f.game; const tile = scene.pair.first.get_tile(); let owner = null;
  for (player of game.get_players()) { if (player.id == 1) { owner = player; } }
  const extra = [];
- f.with_write(() => { for (let i = 0; i < 2; i++) { const input = {def:'Formers',health:1.0,morale:2}; input.owner = owner; input.tile = tile; extra :+ game.get_um().spawn_unit(input); } });
+ f.with_write(() => { for (let i = 0; i < 2; i++) { const input = {def:'Formers',health:1.0,morale:2}; input.owner = owner; input.tile = tile; const spawned = game.get_um().spawn_unit(input); extra :+ (spawned.id + 0); } });
  let receipt = null;
- for (unit of extra) { receipt = command('unit_terraform',unit,{unit_id:unit.id + 0,action:'farm',replace_existing:true}); }
+ for (unit_id of extra) { const unit = game.get_um().get_unit(unit_id); receipt = command('unit_terraform',unit,{unit_id:unit_id,action:'farm',replace_existing:true}); }
  pure_poll(); test.assert(preview.work_progress_label == null && preview.rendered_work.action == '' && preview.rendered_cohort == null,
   'A peer completing the shared job clears the selected worker progress without reselection');
  f.with_write(() => { #include('../default/game/event/unit_terraform').rollback(receipt); });
