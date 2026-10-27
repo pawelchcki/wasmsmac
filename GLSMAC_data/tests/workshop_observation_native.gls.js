@@ -45,4 +45,3 @@ behavior.scenario('native-loaded source linkage follows a shifted Terraforming r
  try { reader.weapon_profile(wrong,document.rows('UNITS'),weapons); } catch { : (failure) => { rejected = true; } }
  test.assert(rejected,'A mismatched actual source row must reject instead of replacing the expected role');
 });
-behavior.finish();
