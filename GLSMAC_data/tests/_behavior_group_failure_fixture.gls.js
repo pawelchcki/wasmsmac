@@ -1,6 +1,6 @@
 // Expected-negative lifecycle probe only, kept outside the passing catalog.
-const behavior = #include('./_behavior'); const mocks = #include('./_ui_mocks');
-return (mode) => {
+const mocks = #include('./_ui_mocks');
+return (behavior,mode) => {
  const scene = {f:null,view:null,poll:null,poll_calls:0,second:false,before:''};
  test.stage_cleanup('group-failure-owned-resource-cleanup',() => {
   if (scene.poll != null) { scene.poll.stop(); }

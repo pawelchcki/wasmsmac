@@ -1,2 +1,3 @@
 // Explicit expected-negative execution; never a passing regression suite.
-#include('./_behavior_group_failure_fixture')('cleanup');
+const behavior = #include('./_behavior');
+#include('./_behavior_group_failure_fixture')(behavior,'cleanup');

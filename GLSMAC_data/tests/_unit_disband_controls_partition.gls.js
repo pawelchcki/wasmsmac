@@ -1,7 +1,7 @@
 // Each selected case owns a fresh native/UI fixture. Packetization changes no
 // case body, input, assertion or cleanup and never splits a live case/world.
-const behavior = #include('./_behavior'); const scenarios = #include('./_unit_disband_regression_cases');
-return (begin,end) => {
+const scenarios = #include('./_unit_disband_regression_cases');
+return (behavior,begin,end) => {
  if (#typeof(begin) != 'Int' || #typeof(end) != 'Int') { throw Error('Disband packet bounds must be integers'); }
  if (begin < 0 || end > 7 || begin >= end || #sizeof(scenarios) < 7) { throw Error('Disband packet must select original control cases'); }
  const cases = [];

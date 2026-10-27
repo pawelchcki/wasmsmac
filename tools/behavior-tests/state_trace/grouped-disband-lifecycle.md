@@ -82,3 +82,12 @@ whole-corpus attempt reached all nine stage ends and its 7/47 summary but still
 failed the original 120-second gate; it is not reported as a completed suite.
 Actual completion of all three isolated packets through the logical dispatcher
 is pending at this source checkpoint.
+
+The first logical packet attempt naturally completed its first three native
+bodies and native success footer, but the strict protocol rejected its mismatched
+summary (1 scenario / 37 counted assertions versus three completion markers).
+A nested relative include had instantiated a second `_behavior` module under a
+`././` spelling, leaving the worker's outer summary on different mutable state.
+Packet and negative-probe producers now obtain the outer instrumentation once
+and pass that actual object to their helper. No global module-cache behavior,
+case body, expected count or native shutdown check is relaxed.
