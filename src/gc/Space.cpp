@@ -1,6 +1,7 @@
 #include "Space.h"
 
 #include <thread>
+#include <deque>
 
 #include "engine/Engine.h"
 #include "GC.h"
@@ -209,7 +210,9 @@ const bool Space::Collect() {
 	// m_objects is already unique and visited once. Retain only the deletion
 	// sequence until the existing second unlink phase; another hash set would
 	// allocate a node and growing bucket table for every unreachable object.
-	std::vector< Object* > removed_objects;
+	// Segmented storage also avoids a second contiguous buffer during growth
+	// when a large accumulation leaves little address space before teardown.
+	std::deque< Object* > removed_objects;
 	{
 		std::lock_guard guard3( m_accumulations_mutex ); // prevent collection during accumulation // TODO: improve
 
