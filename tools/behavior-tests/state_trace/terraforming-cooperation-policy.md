@@ -139,3 +139,14 @@ measurement runner accepts the real `terraforming-cooperation-capacity` catalog
 ID and preserves that complete log/runtime/source/RSS binding. Its typed native
 transport test pads the actual identity to the exact documented byte boundary,
 checks exact readback, and rejects one additional byte without mutation.
+
+The first actual v5 application run stopped at its codec fixture assertion after
+31 completed scenarios (including all 22 variants); aggregate suite status stayed
+failed. A single-case diagnostic proved exact roundtrip/source/receiver/truncation
+guards true, but the legacy `receiving_owner` flag also requires morale set
+`SYNTHETIC`; the unchanged source Formers use `STANDARD`. The test-only probe now
+reports separate actual canonical owner and morale registry identity flags,
+retaining its old combined flag unchanged. The cooperation case asserts both
+canonical identities and all old byte/rollback guards, without altering the unit
+input or claiming a stock morale change. A new native fixture runtime is required
+before retry; this source correction is not a passing gate.

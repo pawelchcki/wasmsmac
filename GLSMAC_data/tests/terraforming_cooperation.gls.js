@@ -123,7 +123,8 @@ behavior.scenario('native job metadata is detached bounded owner-fenced and pres
  const saved = f.former.get_terraforming(); const identity = saved.job.terrain_identity + ''; const before = f.snapshot();
  test.assert(f.former.get_terraforming_schema_version() == 2 && identity != '');
  const probe = f.unit_order_codec_probe(f.former.id);
- test.assert(probe.roundtrip && probe.receiving_owner && probe.source_unchanged && probe.trailing_rejected && probe.truncated_rejected && probe.receiver_unchanged);
+ #print('COOPERATIVE_CODEC_CHECK|' + #json_text_exact({probe:probe,definition:f.former.def + '',morale_set:f.former.get_def().morale + '',owner:f.former.owner + 0}));
+ test.assert(probe.roundtrip && probe.canonical_owner && probe.canonical_morale && probe.source_unchanged && probe.trailing_rejected && probe.truncated_rejected && probe.receiver_unchanged);
  saved.job.terrain_identity = 'changed detached value'; test.assert(f.former.get_terraforming().job.terrain_identity == identity);
  let oversized = 'x'; for (let index = 0; index < 20; index++) { oversized = oversized + oversized; }
  let rejected = 0;
