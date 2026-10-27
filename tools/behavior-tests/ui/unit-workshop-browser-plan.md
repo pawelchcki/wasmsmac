@@ -313,6 +313,54 @@ at `/tmp/unit-workshop-v4-material-mask-proof.json`; it starts no engine/browser
 The old threshold failure remains preserved, and a further application run
 requires separate authorization after independent source review.
 
+## Fifth runtime attempt and every consuming query surface
+
+Execution `558dc371` exited 1 after116.163seconds. The strict known-material
+comparison passed2,923pixels. Pointer Cancel closed Workshop and kept the Scout
+production draft. The next actual CtrlAltP produced raw ingress36 and dispatch
+BEGIN94578/END94579 with handled=true, but query4 never arrived within the
+unchanged60second observation budget. Three world snapshots were retained;
+keyboard Cancel, transfer, confirmation and final cleanup were not reached.
+`/tmp/unit-workshop-browser-v5/outcome.json` preserves the strict failure,
+sealed/partial raw output and unestablished native-exit status. Browser/original
+passes remain zero.
+
+The observer watched only the base and Workshop Windows. Native
+`Container::ProcessEvent` visits relevant children first and returns immediately
+when a child handles the event; `production_selection`'s existing key handler
+returns true for every key. Retained pane n1653 is visible after Cancel, owns
+both CHOOSE PRODUCTION title and production list n1699 (keyboard=false), and is
+a descendant of base Window n208. This source-backed consumer explanation is
+distinct from an observed handler-target ID: native keyboard END currently
+records handled only. That missing observation capability remains a gap.
+
+The test observer now appends its same-true listener to the actual Native
+production pane as well. `Wrappable::Trigger` runs its ordered callback copy to
+completion, so this appends without replacing or changing the existing handler.
+An actual Native role and part relation bind the pane/watch token to its base
+Window. Native pane removal detaches the watch context, and a new pane receives
+a new token. Captures still run only in the owned post-dispatch timer. Pending
+Native handles remain outside a new scalar-only query queue. The queue accepts
+one pending request, coalesces only identical owner metadata, rejects conflicting
+owners, detaches its returned metadata and allocates monotonic query counters.
+The serial browser requires coalesced=0 plus one complete actual SDL ingress per
+fresh query; GSE key callbacks do not independently expose native ingress IDs.
+Every capture validates current base, owner session, live Native frame and phase.
+
+| Active surface | Existing consuming handler | Observer attachment |
+| --- | --- | --- |
+| Base Window, production closed | Base Window returns true | Same actual Window |
+| Production pane, Workshop closed | Pane returns true before parent | Same actual Native pane |
+| Workshop open | Newer Workshop Window returns true | Same actual Workshop Window |
+| Base closed | No supported query consumer | No global fallback or accepted query |
+
+The actual post-Cancel key triple is added to the tracked receipt fixture;
+transport completion and missing-ACK negatives stay separate from fresh world
+capture. Native query protocol coverage is source-prepared alongside existing
+native quote/source-reader cases, pending its own exact-runtime execution.
+No production/focus/ordinary-key/input/geometry change or timeout extension is
+part of this observer repair, and no further application attempt is implied.
+
 ## Concrete graphics and Workshop gaps
 
 | Area | Current bounded support | Unsupported |

@@ -45,3 +45,23 @@ behavior.scenario('native-loaded source linkage follows a shifted Terraforming r
  try { reader.weapon_profile(wrong,document.rows('UNITS'),weapons); } catch { : (failure) => { rejected = true; } }
  test.assert(rejected,'A mismatched actual source row must reject instead of replacing the expected role');
 });
+
+behavior.scenario('serial read-only query metadata coalesces only the same pending owner and fences foreign requests',() => {
+ const queue = #include('./_unit_workshop_query')();
+ const owner = {scope:'base',token:1,base_id:1,owner_session:1,source:''};
+ test.assert(queue.peek() == null && queue.take() == null);
+ test.assert(queue.request(owner));
+ const first = queue.peek(); test.assert(first.query == 1 && first.coalesced == 0 && first.scope == 'base');
+ first.base_id = 9; test.assert(queue.peek().base_id == 1,'A detached observation cannot mutate the pending owner');
+ test.assert(!queue.request(owner) && queue.peek().query == 1 && queue.peek().coalesced == 1);
+ const foreign = #clone(owner); foreign.token = 2; let rejected = false;
+ try { queue.request(foreign); } catch { : (e) => { rejected = true; } }
+ test.assert(rejected && queue.peek().token == 1 && queue.peek().coalesced == 1);
+ const taken = queue.take(); test.assert(taken.query == 1 && taken.coalesced == 1 && queue.peek() == null);
+ const pane = {scope:'production',token:3,base_id:1,owner_session:1,source:'production:3'};
+ test.assert(queue.request(pane) && queue.peek().query == 2 && queue.peek().source == 'production:3');
+ test.assert(queue.take().query == 2 && queue.take() == null);
+ const invalid = #clone(owner); invalid.scope = 'closed'; rejected = false;
+ try { queue.request(invalid); } catch { : (e) => { rejected = true; } }
+ test.assert(rejected && queue.peek() == null,'Closed or unsupported consumer state cannot queue a snapshot');
+});

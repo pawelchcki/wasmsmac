@@ -40,3 +40,10 @@ test('an actual retained observer query with no captured END remains incomplete'
   assert.ok(capture.incomplete_samples.length>0);
   for(const row of capture.incomplete_samples)assert.equal(completedWorkshopKey(row.events,row.fence,row.code,row.modifiers),null);
 });
+
+test('actual post-Cancel query transport completes even though the old observer produced no world snapshot',()=>{
+  const row=capture.samples.find(item=>item.source_head==='558dc3715204874e275c32796819547fa449d29d');assert.ok(row);
+  const receipt=completedWorkshopKey(row.events,row.fence,row.code,row.modifiers);assert.ok(receipt);assert.equal(receipt.end.data.handled,true);
+  assert.equal(receipt.begin.data.ingress,36);assert.equal(receipt.end.seq,94579);
+  assert.equal(completedWorkshopKey(row.events.slice(0,2),row.fence,row.code,row.modifiers),null);
+});

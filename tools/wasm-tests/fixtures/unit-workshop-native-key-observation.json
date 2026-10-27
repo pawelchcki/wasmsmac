@@ -98,6 +98,56 @@
           }
         }
       ]
+    },
+    {
+      "code": "P",
+      "modifiers": 6,
+      "fence": 94576,
+      "source_head": "558dc3715204874e275c32796819547fa449d29d",
+      "source_raw_sha256": "3236fa656a1a38e9216ee6a049fd65250be5f64f8081f24be446041278c58076",
+      "scope": "Actual complete post-Cancel query key with no queued world observation; handled DOM target not exposed",
+      "events": [
+        {
+          "seq": 94577,
+          "kind": "input.ingress",
+          "target": "input",
+          "data": {
+            "ingress": 36,
+            "sdl_type": 768,
+            "action": 1,
+            "type": "keydown",
+            "keycode": 112,
+            "scancode": 19,
+            "modifiers": 320,
+            "repeat": 0
+          }
+        },
+        {
+          "seq": 94578,
+          "kind": "input.dispatch",
+          "target": "input",
+          "data": {
+            "phase": "begin",
+            "ingress": 36,
+            "type": "keydown",
+            "action": 1,
+            "code": "P",
+            "key": 0,
+            "modifiers": 6,
+            "printable": false
+          }
+        },
+        {
+          "seq": 94579,
+          "kind": "input.dispatch",
+          "target": "input",
+          "data": {
+            "phase": "end",
+            "ingress": 36,
+            "handled": true
+          }
+        }
+      ]
     }
   ],
   "incomplete_samples": [

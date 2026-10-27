@@ -35,7 +35,7 @@ test('real Workshop Window browses existing designs and commits only normal prod
   const scripts=Object.fromEntries(readdirSync(`${scriptsRoot}/GLSMAC_data/default`,{recursive:true}).filter(name=>name.endsWith('.gls.js')).sort()
     .map(name=>[`GLSMAC_data/default/${name}`,readFileSync(`${scriptsRoot}/GLSMAC_data/default/${name}`,'utf8')]));
   assert.ok(scripts['GLSMAC_data/default/ui/parts/game/popup/base_screen/workshop.gls.js'],'Requires the reviewed Workshop source');
-  const helperNames=['_state_trace_observer','_terrain_trace_observer','_terraform_cooperation_observer','_unit_workshop_reader'];
+  const helperNames=['_state_trace_observer','_terrain_trace_observer','_terraform_cooperation_observer','_unit_workshop_reader','_unit_workshop_query'];
   const helpers=Object.fromEntries(helperNames.map(name=>[name,readFileSync(`${scriptsRoot}/GLSMAC_data/tests/${name}.gls.js`,'utf8')]));
   const bootstrap=readFileSync(`${build}/bootstrap.js`,'utf8');
   const originalLogSource=bootstrap.match(/function log\(message\) \{\n[^]*?\n\}/)?.[0];assert.ok(originalLogSource);
@@ -51,7 +51,7 @@ test('real Workshop Window browses existing designs and commits only normal prod
     shared_helpers_sha256:Object.fromEntries(['browser-log-cursor.mjs','browser-native-log-hook.mjs','runtime-fetch-barrier.mjs','terraform-browser-geometry.mjs','terraform-browser-pointer.mjs'].map(name=>[name,hash(readFileSync(new URL(name,import.meta.url)))])),
     declared_input:{map:'source-declared16x16-arid',players:7,bases:7,units:8,recipes:'actual source basic and optional Sea Former; explicit fixture inventory'},
     native_log_configuration:{installations:0,hook_source_sha256:hash(installNativeLogHook.toString()),original_log_source_sha256:hash(originalLogSource)},
-    native_snapshots:[],processed_pointers:[],processed_keys:[],captures:[],window_lifecycle:[]};
+    native_snapshots:[],processed_pointers:[],processed_keys:[],captures:[],window_lifecycle:[],pane_lifecycle:[]};
   writeFileSync(`${artifacts}/fixture-main.gls.js`,workshopMain);writeFileSync(`${artifacts}/fixture-world.gls.js`,workshopWorld);
   const server=spawn('python3',['tools/serve-wasm.py',build,'--port','0','--assets',assets],{cwd:root});
   const serverDone=new Promise(resolve=>server.once('exit',(code,signal)=>resolve({code,signal})));
@@ -113,9 +113,10 @@ test('real Workshop Window browses existing designs and commits only normal prod
     for(const line of cursor.text.slice(consumed,complete).split('\n')){
       const match=line.match(/^\s*(?:\[[^\]]+\]\s*)?(WS_[A-Z_]+)\|(.+)$/);if(!match)continue;
       if(match[1]==='WS_TRACE'){const value=JSON.parse(JSON.parse(match[2]));presentation.ingest(value);events.push(...value.events);}
-      else if(['WS_STATE','WS_NATIVE','WS_BASE_POINT','WS_WINDOW','WS_RECEIPT','WS_CONTEXT'].includes(match[1])){
+      else if(['WS_STATE','WS_NATIVE','WS_BASE_POINT','WS_WINDOW','WS_PANE','WS_RECEIPT','WS_CONTEXT'].includes(match[1])){
         const row={kind:match[1],value:JSON.parse(match[2]),observed_node_ms:performance.now()};records.push(row);
         if(row.kind==='WS_WINDOW')report.window_lifecycle.push(row);
+        if(row.kind==='WS_PANE')report.pane_lifecycle.push(row);
       }
     }
     consumed=complete;
@@ -147,7 +148,17 @@ test('real Workshop Window browses existing designs and commits only normal prod
     const before=latest('WS_NATIVE')?.query??0;const receipt=await key('Control+Alt+p','P',6);
     const record=await wait(()=>{const value=latest('WS_NATIVE');return value?.query>before?value:null;});
     assert.equal(record.query,before+1,'One fresh queued snapshot per actual native query key');
-    assert.equal(receipt.end.data.handled,true,'The observer must preserve the actual Window key handling result');
+    assert.equal(receipt.end.data.handled,true,'The observer must preserve the actual consumer key handling result');
+    const owner=record.query_observer;assert.equal(owner.query,record.query);assert.equal(owner.coalesced,0,'One actual serial ingress must produce one pending observation');
+    assert.equal(owner.base_id,record.ui.base_id);assert.equal(owner.owner_session,record.ui.base_bar_scope.session);
+    assert.ok(Number.isSafeInteger(owner.token)&&owner.token>0);
+    const expectedScope=record.ui.workshop_open?'workshop':record.ui.production_open?'production':'base';assert.equal(owner.scope,expectedScope);
+    if(expectedScope==='production'){
+      assert.equal(owner.source,`production:${owner.token}`);
+      const pane=presentation.unique('workshop-observer-pane',owner.source),dialog=presentation.unique('dialog','game.popup.base_screen');
+      assert.ok(presentation.within(pane.id,dialog.id));assert.deepEqual(presentation.parts.get(pane.id),{owner:dialog.id,relation:'workshop-observer-pane'});
+      assert.ok(report.pane_lifecycle.some(row=>row.value.kind==='attached'&&row.value.token===owner.token&&row.value.source===owner.source));
+    }
     report.native_snapshots.push({checkpoint,query_after_native_key:receipt.end.seq,observation:record,lifecycle:presentation.lifecycle()});return record;
   };
   const capture=async(name,preview)=>{

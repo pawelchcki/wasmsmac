@@ -101,26 +101,37 @@ export const workshopMain=String.raw`#main((glsmac) => {
     return result;
    };
    const observer = terrain_observer(proxy,read_ui);
-   let query = 0; let pending_query = null; let exit_requested = false; let refresh_armed = false; let refresh_wait = 0;
-   let watched_base = null; let watched_workshop = null; let tagged_production = null; let watch_serial = 0;
+   const query_queue = #include('../tests/_unit_workshop_query')(); let pending_query_frame = null; let exit_requested = false; let refresh_armed = false; let refresh_wait = 0;
+   let watched_base = null; let watched_workshop = null; let watched_production = null; let tagged_production = null; let watch_serial = 0;
    const watch = (frame,scope) => {
     watch_serial++; const token = watch_serial;
-    #print('WS_WINDOW|' + #json_text_exact({kind:'attached',scope:scope,token:token}));
-    // Both actual Window handlers already return true unconditionally.
-    // Wrappable runs its ordered callback copy to completion. Returning true
-    // here preserves that result for EVERY ordinary key; no callback is replaced.
+    const kind = scope == 'production' ? 'WS_PANE' : 'WS_WINDOW';
+    const source = scope == 'production' ? 'production:' + #to_string(token) : '';
+    if (scope == 'production') {
+     frame.presentation_role('workshop-observer-pane',source);
+     popup.popups.base_screen.el.presentation_part(frame,'workshop-observer-pane');
+    }
+    #print(kind + '|' + #json_text_exact({kind:'attached',scope:scope,token:token,source:source}));
+    // The actual base Window, production pane and Workshop Window handlers
+    // already return true unconditionally. Native child-first dispatch stops at
+    // the consumer; all ordered callbacks on that same node still run. Append
+    // this listener and preserve its true result for every ordinary key.
     frame.on('keydown',(e) => {
      if (e.modifiers == {ctrl:true,alt:true}) {
-      if (e.code == 'P') { query++; pending_query = query; }
+      if (e.code == 'P') {
+       const current_base_id = screen.base_id + 0; const owner_session = base_bar_session;
+       if (query_queue.request({scope:scope,token:token,base_id:current_base_id,owner_session:owner_session,source:source})) { pending_query_frame = frame; }
+      }
       if (e.code == 'J') { refresh_armed = true; #print('WS_ARMED|' + #to_string(token)); }
       if (e.code == 'Q') { exit_requested = true; }
      }
      return true;
     });
     frame.on('remove',() => {
-     #print('WS_WINDOW|' + #json_text_exact({kind:'removed',scope:scope,token:token}));
+     #print(kind + '|' + #json_text_exact({kind:'removed',scope:scope,token:token,source:source}));
      if (scope == 'base' && watched_base == frame) { watched_base = null; }
      if (scope == 'workshop' && watched_workshop == frame) { watched_workshop = null; }
+     if (scope == 'production' && watched_production == frame) { watched_production = null; }
     });
    };
    let focused = false; let focus_attempts = 0; let serial = 0; let last_ui = '';
@@ -144,6 +155,9 @@ export const workshopMain=String.raw`#main((glsmac) => {
     if (screen.is_open && popup.popups.base_screen.el != watched_base) {
      watched_base = popup.popups.base_screen.el; watch(watched_base,'base');
     }
+    if (screen.production_selection != null && screen.production_selection != watched_production) {
+     watched_production = screen.production_selection; watch(watched_production,'production');
+    }
     const workshop = screen.workshop == null ? null : screen.workshop.dialog;
     if (workshop != null && workshop.frame != watched_workshop) {
      watched_workshop = workshop.frame; watch(watched_workshop,'workshop');
@@ -154,11 +168,17 @@ export const workshopMain=String.raw`#main((glsmac) => {
     }
     const ui = read_ui(); const ui_text = #json_text_exact(ui);
     if (ui_text != last_ui) { serial++; last_ui = ui_text; #print('WS_STATE|' + #json_text_exact({serial:serial,ui:ui})); }
-    if (pending_query != null) {
-     const requested = pending_query; pending_query = null;
-     // This owned timer executes after the query key callback/dispatch returns.
-     // Read the live world now; never reuse a snapshot taken before mouseup.
-     #print('WS_NATIVE|' + #json_text_exact({query:requested,serial:serial,ui:ui,world:observer.read()}));
+    const requested = query_queue.take();
+    if (requested != null) {
+     const observed_frame = pending_query_frame; pending_query_frame = null;
+     const expected_scope = ui.workshop_open ? 'workshop' : (ui.production_open ? 'production' : 'base');
+     if (!ui.base_open || requested.base_id != ui.base_id || requested.owner_session != base_bar_session || requested.scope != expected_scope) { throw Error('Queued Workshop query context changed before capture'); }
+     if ((requested.scope == 'base' && observed_frame != watched_base) ||
+      (requested.scope == 'production' && (observed_frame != watched_production || observed_frame != screen.production_selection)) ||
+      (requested.scope == 'workshop' && (observed_frame != watched_workshop || workshop == null || observed_frame != workshop.frame))) { throw Error('Queued Workshop query Native frame retired before capture'); }
+     // This owned timer executes after dispatch. Native handles were kept out
+     // of the scalar queue; one native ingress is correlated by the browser.
+     #print('WS_NATIVE|' + #json_text_exact({query:requested.query,query_observer:requested,serial:serial,ui:ui,world:observer.read()}));
     }
     if (refresh_armed && workshop != null) {
      refresh_wait++;
