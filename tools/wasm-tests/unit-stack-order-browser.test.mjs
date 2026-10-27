@@ -87,7 +87,7 @@ test('actual native Hold and tile reselection preserve current HUD priority',{
       assert.equal(report.native_raw_exit_code,0,'Actual native exit zero is required before any visible mismatch claim');
       const config=report.native_log_configuration;assert.equal(config.installations,1);assert.equal(config.barrier.continued,true);
       assert.ok(config.worker_requests?.length>0);for(const worker of config.worker_requests)assert.equal(worker.continued,true);assert.ok(config.callbacks?.first_callback);
-      assert.equal(config.callbacks.first_callback.runtime_out_bound,true);assert.equal(config.callbacks.first_callback.runtime_err_bound,true);
+      assert.equal(config.callbacks.first_callback.runtime_out_bound,true);assert.equal(config.callbacks.first_callback.runtime_err_bound,true);assert.equal(config.callbacks.first_callback.runtime_callMain_present,true);
       assert.doesNotMatch(sealed.text,/Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i);
       const record=parseUnitStackOrderLog(sealed.text);report.observation_parsed=true;
       writeFileSync(`${artifacts}/native-observation.json`,JSON.stringify(record,null,2)+'\n');
