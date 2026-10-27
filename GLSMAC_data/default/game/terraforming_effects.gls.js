@@ -40,11 +40,16 @@ const aquifer_route = (game,unit) => {
 		index++;
 	}
 	if (outlet < 0) { return null; }
-	const result = []; let cursor = queue[outlet].previous_index;
-	while (cursor >= 0) {
-		const point = queue[cursor]; const features = #clone(tm.get_tile(point.x,point.y).features); features.river = true;
+	// Backtrack coordinates before allocating complete feature patches. The same
+	// native transaction limit governs both this pure preflight and publication.
+	const path = []; let cursor = queue[outlet].previous_index;
+	while (cursor >= 0) { path :+ cursor; cursor = queue[cursor].previous_index; }
+	const geometry = read(origin.x,origin.y);
+	if (#sizeof(path) > geometry[5]) { return {reason:'River route exceeds the supported terrain transaction capacity'}; }
+	const result = [];
+	for (position of path) {
+		const point = queue[position]; const features = #clone(tm.get_tile(point.x,point.y).features); features.river = true;
 		result :+ {x:point.x + 0,y:point.y + 0,features:features};
-		cursor = point.previous_index;
 	}
 	return result;
 };
@@ -54,7 +59,18 @@ const validate = (game,unit,action) => {
 	if (tile.get_base() != null) { return 'Terraforming a base tile is not supported'; }
 	if (tile.is_water != unit.is_water) { return 'Worker must occupy its compatible terrain'; }
 	if (tile.is_water && (action == 'farm' || action == 'mine' || action == 'solar') && data.elevation.center < (0-1000)) { return 'Sea improvements require an ocean shelf'; }
-	if (action == 'aquifer') { if (data.features.river) { return 'A river already exists'; } if (aquifer_route(game,unit) == null) { return 'No nonascending river outlet is available'; } return; }
+	if (action == 'aquifer') {
+		if (data.features.river) { return 'A river already exists'; }
+		const route = aquifer_route(game,unit);
+		if (route == null) { return 'No nonascending river outlet is available'; }
+		if (#typeof(route) == 'Object') { return route.reason; }
+		// Check the complete supported plan against authoritative native terrain
+		// guards before accepting work; this validation does not mutate the world.
+		let reason = undefined;
+		try { game.get_tm().validate_terrain(route,[unit.id + 0]); }
+		catch { : (error) => { reason = error.reason + ''; } }
+		return reason;
+	}
 	if (action == 'remove_fungus') { if (!data.features.xenofungus) { return 'There is no fungus to remove'; } return; }
 	if (action == 'plant_fungus') { if (data.features.xenofungus) { return 'Fungus already exists'; } return; }
 	if (action == 'level') { if (tile.rockiness <= 1) { return 'Terrain is already level'; } return; }
