@@ -6,7 +6,7 @@ return (game) => {
  // the strict economy observer deliberately rejects empty project identity.
  let project = null;
  for (rule of game.get('starting_unit_rules')) {
-  if (rule.weapon_mode == 9) { if (project != null) { throw Error('Ambiguous source worker project'); } project = rule; }
+  if (rule.weapon_mode == 9 && rule.prerequisite != 'Disable' && (!#is_defined(rule.movement_type) || rule.movement_type == 'land')) { if (project != null) { throw Error('Ambiguous source worker project'); } project = rule; }
  }
  if (project == null) { throw Error('Missing installed worker production rule'); }
  game.get_bm().on('base_spawn',(e) => { if (e.base.get_size() == 0) { e.base.create_pop({type:'DOCTOR'}); } });

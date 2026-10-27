@@ -27,6 +27,23 @@
    glsmac.ui.presentation_trace_start(); glsmac.ui.presentation_trace_inputs_start();
    for (unit of game.get_tm().get_tile(8,8).get_units()) { if (unit.owner == game.get_player().id && unit.get_def().can_terraform) { actor = unit; } }
    if (actor == null || !actor.get_def().can_terraform) { throw Error('Missing source-capable worker'); }
+   let declared_project = null;
+   for (rule of game.get('starting_unit_rules')) {
+    if (rule.weapon_mode == 9 && rule.prerequisite != 'Disable' && (!#is_defined(rule.movement_type) || rule.movement_type == 'land')) {
+     if (declared_project != null) { throw Error('Ambiguous declared land worker project'); } declared_project = rule;
+    }
+   }
+   if (declared_project == null) { throw Error('Missing declared land worker project'); }
+   const native_projects = [];
+   for (player of game.get_players()) {
+    let registered = null;
+    for (choice of player.get_production_choices()) { if (choice.id == declared_project.choice) { registered = choice; } }
+    if (registered == null || registered.type != 'unit' || registered.unit_id != declared_project.id || registered.population_cost != declared_project.population) {
+     throw Error('Source worker project is not registered in the actual native player');
+    }
+    const row = {owner:player.id + 0}; row.choice = registered; native_projects :+ row;
+   }
+   #print('TF_PROJECTS|' + #json_text_exact(native_projects));
    const observer = terrain_observer(proxy,() => {
     return {selected:preview.selected_unit_id,pending:preview.order_pending == null ? null : #clone(preview.order_pending),order_label:preview.order_label == null ? null : preview.order_label.text + '',
      movement_label:preview.movement_label == null ? null : preview.movement_label.text + '',work_progress:preview.work_progress_label == null ? null : preview.work_progress_label.text + '',target:preview.terraforming_target.snapshot(),modal:popup.is_shown()};
