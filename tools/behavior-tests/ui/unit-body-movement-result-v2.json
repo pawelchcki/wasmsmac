@@ -38,7 +38,17 @@
     "verdict": "CLEAN"
   },
   "independent_retained_raw_audit": {
-    "status": "pending Delivery audit at documentation freeze"
+    "status": "confirmed-incomplete-sampling; no passing movement comparison",
+    "path": "/tmp/unit-body-movement-browser-v2/independent-delivery-audit.json",
+    "sha256": "d8f3295f70fa7a4dc75c81a7d3e4f85a9b32f30cbcb0f0039df60baee4493d8a",
+    "reproducer": "/tmp/unit-body-movement-independent-audit-v2.py",
+    "reproducer_sha256": "fbc0113d74fb8dd7dd4548f039e898a9a72c00c9094fa70b83fcfa7875443c66",
+    "census_F32_descriptors_verified": 1812,
+    "movement_passing_cases": 0,
+    "complete_browser_passing_cases": 0,
+    "final_report_partial": true,
+    "pre_evaluator_receipt_partial": false,
+    "all7_effect_comparison_accepted": false
   },
   "artifacts": {
     "directory": "/tmp/unit-body-movement-browser-v2",
