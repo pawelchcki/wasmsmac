@@ -136,5 +136,27 @@ effective seconds and the selected source. Strict parser and real wrapper/CLI
 tests cover these boundaries; packet worker deadlines and partial failures
 remain strict. The case source SHA stays `70056250da9314593e04fa2be65536eea60b76284b28bf1d14a8f59e96732b81`.
 
-The new declared deadline still requires its own actual full-case completion
-and fresh mandatory CI; prior local passes do not establish that gate.
+The new profile was checked once through the official CLI on immutable host
+`4c59973615966bfc56ea25042d4a4dc3d12c96c5`: `--lane hot --jobs 2
+--default-timeout 120`, with no user `--timeout` override. It passed **1/11**
+with native success footer and raw exit zero in 79.389 seconds (79.808 seconds
+including orchestration). The report records requested `null`, declared `240`,
+fallback `120`, effective `240`, source `catalog`, requested workers 2 and actual
+suite limit 1. Every prelaunch input hash matched after completion, and the
+footprint/identity bytes matched the failed CI exactly. Full raw output SHA-256
+is `05210434bf1fb9db8439953628aebd89ae9bf9c9268e1606ba63ebf85664a3fe`.
+The worker was reaped before the exclusive lease was released.
+
+The [compact immutable proof](capacity-deadline-proof-v1.json) binds the actual
+report and source/runtime hashes. Retained full report, raw log, prelaunch
+binding and independent audit are in
+`/tmp/terraform-pr35-capacity-deadline-focused`. Eight new budget/wrapper tests
+passed in independent review. The bounded full harness run passed 50 tests;
+three existing local NativeLoader tests were skipped because that checkout
+has no default build artifact. Those three actual-native probes separately
+passed in mandatory exact-head `7ee4e80b` CI, alongside both expected-negative
+cleanup probes, without skips. They remain mandatory on the new head.
+
+Fresh mandatory CI and an actual clean review of the final head are still
+required. This focused pass does not erase the 120-second CI failure or prove
+that the new profile has passed on a CI host.
