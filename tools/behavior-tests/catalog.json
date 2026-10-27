@@ -1,6 +1,9 @@
 {
   "version": 1,
   "suites": [
+    {"id":"unit-automation-state","script":"GLSMAC_data/tests/unit_automation_state.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
+    {"id":"former-level","script":"GLSMAC_data/tests/former_level.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
+    {"id":"terraforming-primitives","script":"GLSMAC_data/tests/terraforming_primitives.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"trace-float-transport","script":"GLSMAC_data/tests/trace_float_transport.gls.js","domains":["gameplay","ui"],"evidence":"glsmac-regression"},
     {"id":"base-operations","script":"GLSMAC_data/tests/base_operations.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
     {"id":"base-operations-lifecycle","script":"GLSMAC_data/tests/base_operations_lifecycle.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
