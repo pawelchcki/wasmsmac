@@ -52,7 +52,43 @@
     {"id":"unit-recycling-controls","script":"GLSMAC_data/tests/unit_recycling_controls.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
     {"id":"unit-disband-native","script":"GLSMAC_data/tests/unit_disband_native.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
     {"id":"unit-disband-authority","script":"GLSMAC_data/tests/unit_disband_authority.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
-    {"id":"unit-disband-controls","script":"GLSMAC_data/tests/unit_disband_controls.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
+    {
+      "id": "unit-disband-controls",
+      "script": "GLSMAC_data/tests/unit_disband_controls.gls.js",
+      "domains": [
+        "gameplay",
+        "ui",
+        "ux"
+      ],
+      "evidence": "glsmac-regression",
+      "packets": {
+        "parts": [
+          {
+            "script": "GLSMAC_data/tests/_unit_disband_controls_packet_dialog.gls.js",
+            "scenario_names": [
+              "actual source9 uses common source caption body and choices despite expansion decoy",
+              "Escape default confirmation and reopening preserve units and reset actual draft",
+              "actual arrow drafts clamp and third choice cannot dispatch ordinary disband"
+            ]
+          },
+          {
+            "script": "GLSMAC_data/tests/_unit_disband_controls_packet_authority.gls.js",
+            "scenario_names": [
+              "real ordinary confirmation removes only selected Former through native authority",
+              "old choice and confirmation callbacks cannot change a reopened draft"
+            ]
+          },
+          {
+            "script": "GLSMAC_data/tests/_unit_disband_controls_packet_context.gls.js",
+            "scenario_names": [
+              "missing focus foreign unit and blocked readiness cannot open a retained Disband row",
+              "common unit-type token renders the actual selected native definition name"
+            ]
+          }
+        ],
+        "assertions": 47
+      }
+    },
     {"id":"colony-near-controls","script":"GLSMAC_data/tests/colony_near_controls.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
     {"id":"colony-near-native","script":"GLSMAC_data/tests/colony_near_native.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
     {"id":"colony-found-menu-controls","script":"GLSMAC_data/tests/colony_found_menu_controls.gls.js","domains":["gameplay","ui","ux"],"evidence":"glsmac-regression"},
