@@ -74,6 +74,12 @@ check; it cannot silently fall back to one accumulation or omit trace fields.
 The packet schema, order, case-specific observation counts, requested initial
 seed and actual startup receipt remain unchanged.
 
+Current functional execution uses immutable runtime v6, native tree
+`115032ffc7f53ff7f0c3a9f997da12674e25e643`, with cooperative, normal-map and
+capacity proofs linked in [the current smoke runbook](terraforming-pr2-smoke.md).
+The specific staged-lifetime and fixed-input memory comparison below retains
+its original v4 source/runtime identities.
+
 The staged producer is verified on the immutable private runtime v4, native source
 `99976bc17b8218e7c1de18c57887df11ac097e9e`, against source `ade25925`
 (the initial delivery checkpoint `9b549646` has the identical complete tree).
@@ -101,9 +107,13 @@ baseline. Capacity and process RSS are distinct measurements, not live-object
 size or a general large-map bound. Raw baseline failure remains outside passing
 totals. Artifacts: `/tmp/terraform-pr2-staged-memory-v4`.
 
-The complete 36-case batch on that frozen source/runtime is a separate gate;
-its running or partial manifest is not a completed matrix. Nonheight cooperation,
-normal-size road/Tube routing, actual produced SeaFormer home/port behavior and
-real browser coverage remain separate acceptance work. Original passing action
-cases remain zero. Parser tests cannot substitute for native execution or clean
-process shutdown.
+The complete matrix on that frozen v4 source/runtime subsequently passed all
+36 cases / 680 assertions, 166 observations, 1,162 owner snapshots and 21,248
+tile rows; every native process exited zero. The manifest is retained at
+`/tmp/terraform-pr2-full36-staged-v4/manifest.json`. This is the declared 16×16
+fixture, not original agreement. Final v6 source must repeat that matrix after
+cooperation/shared-progress/aquifer-reuse changes. Native normal road/Tube,
+produced SeaFormer home/ports, cooperative work, observation and mounted progress
+have separate passing source-bound results in the current smoke runbook. Real
+browser checks and final CI/review remain separate. Original passing action
+cases remain zero; parser tests cannot replace native execution or strict shutdown.

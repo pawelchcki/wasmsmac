@@ -1,15 +1,15 @@
 # Terraform controls and complete-action acceptance
 
-Use a frozen full GSE host with a matching immutable native runtime. The current
-verified staging baseline is source `ade25925`, native tree
-`99976bc17b8218e7c1de18c57887df11ac097e9e`, runtime
-`/tmp/wasmsmac-terraform-pr2-runtime-v4/GLSMAC.js`. JS SHA-256:
-`48b70b1a4eb834687755850b3df54293701382dc81bfa6312e751200d401ec8c`;
+Use a frozen full GSE host with a matching immutable native runtime. Current
+functional proof uses runtime `/tmp/wasmsmac-terraform-pr2-runtime-v6/GLSMAC.js`,
+native tree `115032ffc7f53ff7f0c3a9f997da12674e25e643`. JS SHA-256:
+`e71036c9365a3ac87bf818e7eb49fb2344077a15aa6836371a436572cedf7f82`;
 WASM SHA-256:
-`62406811649411ff044183fe0b7d491f489443557939ffffda97cf27c52dd775`.
-The delivery checkpoint rooted in merged main has the same complete tree.
-Record a new full-host digest for every later change; supporting older results
-must retain their actual source and runtime identities.
+`b2c7fa273042f2407335169eb4fca51f131f1f30656301d7b7573a201b28f5b7`.
+Cooperative capacity is verified on full source `38e7917a`; subsequent browser
+fixture changes preserve its production GSE tree
+`25ef18d3222f553507291d412330262169b2e418`. Record every actual later host and
+fixture digest separately. Older supporting proofs retain their actual versions.
 
 The catalog already registers `terraforming-controls-all`, `terraforming-dialog`,
 `former-controls` and `native-input-state` in active hot coverage. Mounted
@@ -25,11 +25,14 @@ python3 tools/behavior-tests/fast.py \
   --report /tmp/terraform-pr2-ui-smoke.json
 ```
 
-The staged native runner, live-world script and targeted terrain/automation/work
-compatibility now pass. Matched height traces preserve all 138,158 typed fields
-and exact Float bits while the staged worker exits cleanly with flat sampled
-481 MB WASM capacity. The complete 36-action run remains independently gated by
-its final manifest; do not infer it from the one-case memory result.
+The supporting staged v4 native runner, live-world script and targeted
+terrain/automation/work checks pass. Matched height traces preserve all 138,158
+typed fields and exact Float bits with a clean exit and flat sampled 481 MB
+WASM capacity. The frozen `ade25925` / v4 matrix then passed all 36 cases / 680
+assertions, 166 observations, 1,162 owner snapshots and 21,248 tile rows, all raw
+exit zero. Its artifacts are `/tmp/terraform-pr2-full36-staged-v4`. This remains
+a supporting baseline: the complete matrix must run again on final v6 source
+after cooperation, shared-progress and aquifer-reuse integration.
 
 ```sh
 python3 tools/behavior-tests/state_trace/terraform_actions.py \
@@ -67,12 +70,21 @@ owners and the map across pure controls. Rows are not domain variants or 36
 completed actions. This browser proof remains pending on the complete current
 host. Native traces cannot set `browser_verified`.
 
-Separate functional acceptance still covers nonheight cooperation, two fresh
-40×80 road and Tube worlds, actual source-produced SeaFormer production/port/home,
-height payment and mesh refresh, progress presentation and keyboard context.
-Real work-animation action binding, original fees/height/contour/climate,
-original traversal timing and priorities, complete audio and typography remain
-explicit fidelity gaps. Every action report retains zero original passing cases.
+Native nonheight cooperation now passes 35/248, seven-owner binding 1/151,
+4,096-tile capacity 1/11, full cooperative observation 1/532 and mock-mounted
+shared progress 1/62, with applicable 62/297 compatibility. Independent normal
+40×80 road and Tube checks and actual produced SeaFormer production/port/home
+also pass; see [normal-map acceptance](normal-worker-acceptance.md),
+[cooperation policy](terraforming-cooperation-policy.md) and
+[aquifer reuse](aquifer-plan-reuse.md) for exact versions and failures.
+
+Real current-host browser controls, height payment/mesh refresh and naval browser
+flows remain separate gates. The browser fixture now uses native managers at
+`start_ui`, actual source-backed city projects, SDL/pointer delivery and complete
+raw snapshots. Its retained initial fixture/protocol failures are not passes.
+Real work-animation binding, recorded original fee/height/contour/climate
+mismatches, unmeasured general original formulas/priorities, full audio and
+typography remain explicit fidelity gaps. Original passing action cases stay zero.
 
 The producer requests the preregistered native initial RNG state
 `1651011033:1377505029:3019448108:3247278135` through real quickstart seed flags.
