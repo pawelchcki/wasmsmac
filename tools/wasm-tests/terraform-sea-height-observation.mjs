@@ -74,6 +74,8 @@ export function verifySeaBootstrap(records,setup){
   assert.ok(accounting[0].index<turns[0].index&&turns[0].index<births[0].index&&births[0].index<productions[0].index);
   const states=(list)=>{assert.equal(list.length,7);assert.equal(new Set(list.map(row=>row.base_id)).size,7);assert.deepEqual(list.map(row=>row.owner).sort((a,b)=>a-b),[0,1,2,3,4,5,6]);};
   assert.equal(preturn.version,2);assert.equal(preturn.turn,1);assert.equal(preturn.home_id,setup.home_id);states(preturn.bases);states(setup.base_states);
+  const identities=list=>list.map(({base_id,owner})=>({base_id,owner})).sort((a,b)=>a.base_id-b.base_id);
+  assert.deepEqual(identities(setup.base_states),identities(preturn.bases),'Production preserves each actual base ID and owner');
   assert.equal(Math.min(...preturn.bases.map(row=>row.base_id)),setup.home_id);
   for(const row of preturn.bases){
     const local=row.base_id===setup.home_id;assert.equal(row.owner===0,local);assert.equal(row.population,1);
