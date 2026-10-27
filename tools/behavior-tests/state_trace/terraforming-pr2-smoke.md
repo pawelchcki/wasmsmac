@@ -1,104 +1,91 @@
-# Terraform controls bring-up
+# Terraform controls and complete-action acceptance
 
-These commands are staged, not passing evidence. Run them from the assembled
-PR2 checkout after its source and runtime identities are frozen and the heavy
-resource slot is granted. Native runtime v1 is
-`/tmp/wasmsmac-terraform-pr2-runtime-v1/GLSMAC.js`, built from `5fae2f90`;
-its provenance file must accompany each result. The production GSE host must
-include the height, automation, shared movement and controller checkpoints.
-An older native runtime cannot establish the optional paid-work, terrain-epoch
-and pending-action capabilities.
+Use a frozen full GSE host with a matching immutable native runtime. The current
+verified staging baseline is source `ade25925`, native tree
+`99976bc17b8218e7c1de18c57887df11ac097e9e`, runtime
+`/tmp/wasmsmac-terraform-pr2-runtime-v4/GLSMAC.js`. JS SHA-256:
+`48b70b1a4eb834687755850b3df54293701382dc81bfa6312e751200d401ec8c`;
+WASM SHA-256:
+`62406811649411ff044183fe0b7d491f489443557939ffffda97cf27c52dd775`.
+The delivery checkpoint rooted in merged main has the same complete tree.
+Record a new full-host digest for every later change; supporting older results
+must retain their actual source and runtime identities.
 
-First register the existing staged script
-`GLSMAC_data/tests/terraforming_controls_all.gls.js` under the exact catalog ID
-`terraforming-controls-all` with domains `gameplay,ui,ux` and evidence
-`glsmac-regression`. Final lane membership is an integration decision. Do not
-rename an existing suite or substitute a mock native implementation.
+The catalog already registers `terraforming-controls-all`, `terraforming-dialog`,
+`former-controls` and `native-input-state` in active hot coverage. Mounted
+handlers and input guards have supporting native passes; they do not establish
+real browser rendering or input delivery. Run the applicable suites again after
+controller, work or authority changes:
 
 ```sh
 python3 tools/behavior-tests/fast.py \
-  --runtime /tmp/wasmsmac-terraform-pr2-runtime-v1/GLSMAC.js \
-  --jobs 1 --timeout 120 \
+  --runtime /path/to/immutable/GLSMAC.js --jobs 1 --timeout 120 \
   --suite terraforming-controls-all --suite terraforming-dialog \
   --suite former-controls --suite native-input-state \
   --report /tmp/terraform-pr2-ui-smoke.json
-
-python3 tools/behavior-tests/state_trace/terraform_actions.py \
-  --runtime /tmp/wasmsmac-terraform-pr2-runtime-v1/GLSMAC.js \
-  --case land:farm --artifacts /tmp/terraform-pr2-action-smoke
 ```
 
-The first command exercises mounted control handlers with real native effects;
-it does not establish browser input or rendering. The second must emit the
-ordered before/queued/acknowledged/after manifests, all seven owners, complete
-native inventories and every tile. Its JSON must say `status: passed` and
-`candidate_executed: true`, retain exact host/runtime/fixture identities, and
-retain zero original passing cases. Missing chunks, stale API errors and no-op
-acknowledgements are failures. Preserve their logs before any correction.
+The staged native runner, live-world script and targeted terrain/automation/work
+compatibility now pass. Matched height traces preserve all 138,158 typed fields
+and exact Float bits while the staged worker exits cleanly with flat sampled
+481 MB WASM capacity. The complete 36-action run remains independently gated by
+its final manifest; do not infer it from the one-case memory result.
 
-Once these pass, run the existing actual pointer lifecycle browser smoke in an
-exclusive browser window. `WASM_APP_DIR` must identify a complete web shell
-containing the pinned native runtime; `WASM_SCRIPTS_ROOT` selects the assembled
-production host independently from this harness checkout.
+```sh
+python3 tools/behavior-tests/state_trace/terraform_actions.py \
+  --runtime /path/to/immutable/GLSMAC.js \
+  --artifacts /tmp/terraform-pr2-all-actions
+```
+
+This executes 19 land variants, seven sea variants and ten commands in isolated
+workers. Every selected case must report `passed`, native execution, complete
+ordered observations, all seven owners and all 128 map tiles, actual effects or
+steps, complete identities and raw exit zero. Preserve failed and unexecuted
+rows separately. Height has seven observations, including pure quote, Cancel
+and draft payment followed by real confirmation. Commands exercise real work
+or movement and then cancel; the separate all-ten completion suite establishes
+completion rather than map exhaustion in these bounded traces.
+
+Run the actual pointer lifecycle browser smoke only with an exclusive browser
+slot. `WASM_APP_DIR` identifies a complete web shell containing the pinned native
+runtime; `WASM_SCRIPTS_ROOT` selects the frozen production host independently
+from the browser harness checkout.
 
 ```sh
 env FONTCONFIG_FILE=/tmp/glsmac-fonts.conf \
   PLAYWRIGHT_BROWSERS_PATH=/var/home/pawel/.cache/ms-playwright \
   SMAC_ASSETS_DIR=/var/home/pawel/reimplementation/smac-wasm/smac-assets \
   WASM_APP_DIR=/path/to/pinned/full-web-shell \
-  WASM_SCRIPTS_ROOT=/path/to/assembled-pr2-checkout \
+  WASM_SCRIPTS_ROOT=/path/to/frozen-pr2-checkout \
   TERRAFORM_CONTROLS_ARTIFACTS_DIR=/tmp/terraform-pr2-pointer-smoke \
   node --test tools/wasm-tests/terraform-controls.test.mjs
 ```
 
-That smoke has 29 distinct source menu rows, an actual non-base click, Escape
-and Tab cancellation, and an actual owned-base pointer dispatch. It preserves
-all-seven-owner/full-map state across pure controls. It does not count 29 rows
-as 36 executed cases, prove height payment, or prove a complete autonomous plan.
+The smoke checks 29 distinct source rows, an actual non-base click, Escape and
+Tab cancellation, and owned-base pointer dispatch while preserving all seven
+owners and the map across pure controls. Rows are not domain variants or 36
+completed actions. This browser proof remains pending on the complete current
+host. Native traces cannot set `browser_verified`.
 
-After the smoke, execute all 36 native action captures with fresh workers:
-19 land variants, seven sea variants and ten commands. Start with `sea:farm`,
-`land:raise` and `command:road_to`; omit `--case` only after these first domain
-and API checks pass. Commands exercise real work/movement followed by explicit
-cancellation; link the separate completion suites rather than reporting this
-bounded trace as map exhaustion. Height captures must include pure quote,
-Cancel and draft choice, followed by actual confirmed payment and completion.
+Separate functional acceptance still covers nonheight cooperation, two fresh
+40×80 road and Tube worlds, actual source-produced SeaFormer production/port/home,
+height payment and mesh refresh, progress presentation and keyboard context.
+Real work-animation action binding, original fees/height/contour/climate,
+original traversal timing and priorities, complete audio and typography remain
+explicit fidelity gaps. Every action report retains zero original passing cases.
 
-The wider browser matrix remains pending: all domain/action routes, source
-SeaFormer production, height quote/payment and mesh/class-change refresh,
-work/progress presentation and keyboard context. Mock handler coverage and
-native capture cannot set `browser_verified`. Original effect/fee/animation,
-audio and naval model composition gaps remain outside passing totals.
+The producer requests the preregistered native initial RNG state
+`1651011033:1377505029:3019448108:3247278135` through real quickstart seed flags.
+A native pre-world probe confirms its first three draws. Input binding v2 keeps
+the requested initial state separate from the actual post-startup native receipt.
+The authored 16×16 map path uses LoadFromBuffer and RunNaturalStartup, bypassing
+Map::Generate and the frontend; this is not procedural generation evidence.
+The historical failed unseeded receipt remains post-startup data, not a known
+initial seed. No seed search or selection by memory outcome is permitted.
 
-
-### Reproducible action trace inputs and snapshot lifetime
-
-The all-action producer requests native initial RNG state
-`1651011033:1377505029:3019448108:3247278135`, the existing Config example,
-chosen before its first seeded replay. The worker passes the real
-`--quickstart --quickstart-seed` flags. `Game::Start` applies that state before
-fixture map creation; `Map::GetRandom` and gameplay use the same native RNG.
-This fixture supplies an authored 16×16 flat-arid map with `LoadFromBuffer` and
-runs `RunNaturalStartup`; it never calls `Map::Generate` or mounts the frontend.
-Thus quickstart's generated-map/environment overrides and frontend branches are
-outside this declared path. This is not proof of procedural map generation.
-
-The input binding v2 records both the requested initial state and the actual
-post-startup, before-action native RNG receipt. They are separate fields; the
-latter must equal the `before` native inventory. Legacy input binding v1 logs
-remain readable with their original unseeded scope. In particular, the failing
-v6 receipt `826145919:3571325180:111502455:207424645` is post-startup, not a known
-initial seed. Its full original map and output remain preserved outside pass
-counts.
-
-The UI reader lends references only until `observer.read` immediately deep
-clones the complete UI record. Each resulting checkpoint owns detached values.
-The emitter serializes those already-detached fields directly instead of
-cloning them again. Actual Cancel/confirm transitions assert that earlier UI
-checkpoints retain their prior stage; after work, the initial native Float
-movement bits must still match the captured pre-command value. No native field,
-checkpoint, participant, map tile, or read-purity assertion is removed.
-
-Memory savings and strict shutdown require a fixed-input before/after native
-measurement. Source inspection and pure transport tests alone are not a native
-memory pass, and the existing 2 GB runtime limit is unchanged.
+Each observation immediately detaches the complete UI record once. Temporary
+quote/draft state remains rooted only through the next real isolation assertion.
+The staged runner uses explicit top-level accumulation boundaries without game,
+RNG, timer or turn advancement. Cleanup precedes Finish and final native checks;
+END and PASS are emitted only after those succeed. Full fields, stages and exact
+native floats remain mandatory, and the 2 GB runtime limit is unchanged.

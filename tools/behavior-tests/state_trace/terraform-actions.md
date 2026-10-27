@@ -74,9 +74,36 @@ check; it cannot silently fall back to one accumulation or omit trace fields.
 The packet schema, order, case-specific observation counts, requested initial
 seed and actual startup receipt remain unchanged.
 
-This staged producer source still requires the combined runner/height/automation
-runtime proof. Previous single-accumulation height captures reached all seven
-observations but exhausted the heap during shutdown; they remain strict failures.
-Parser tests validate corrupt transport rejection and must not be reported as
-native execution. Actual execution and memory improvement require a new pinned
-runtime, exact fixed-input field/Float parity, complete packets and raw exit zero.
+The staged producer is verified on the immutable private runtime v4, native source
+`99976bc17b8218e7c1de18c57887df11ac097e9e`, against source `ade25925`
+(the initial delivery checkpoint `9b549646` has the identical complete tree).
+Runtime JS SHA-256 is
+`48b70b1a4eb834687755850b3df54293701382dc81bfa6312e751200d401ec8c`;
+WASM SHA-256 is
+`62406811649411ff044183fe0b7d491f489443557939ffffda97cf27c52dd775`.
+The runtime provenance file distinguishes compiled native source from the full
+GSE snapshot supplied to each worker.
+
+Actual native safety tests pass 23 cases, including the five staged lifetime,
+cleanup and failure cases. The live-world staging script passes 1 scenario / 15
+assertions; terrain, automation, work codec and asynchronous compatibility pass
+110 scenarios / 383 assertions across five suites.
+
+A matched fixed-input height comparison restores only the old producer in the
+baseline. All 138,158 typed fields, including 2,916 exact floating-point fields,
+match across the same seven observations. The old producer completes its body
+then fails shutdown with process exit 1 at 2 GB. The staged producer completes
+all seven observations, cleanup, Finish, native invariants, END and the normal
+passing footer with process exit 0 (1 scenario / 28 assertions). Sampled WASM
+capacity remains 481,165,312 bytes at every observation; measured peak process
+RSS is 1,046,376,448 bytes, compared with 2,712,276,992 bytes for the failing
+baseline. Capacity and process RSS are distinct measurements, not live-object
+size or a general large-map bound. Raw baseline failure remains outside passing
+totals. Artifacts: `/tmp/terraform-pr2-staged-memory-v4`.
+
+The complete 36-case batch on that frozen source/runtime is a separate gate;
+its running or partial manifest is not a completed matrix. Nonheight cooperation,
+normal-size road/Tube routing, actual produced SeaFormer home/port behavior and
+real browser coverage remain separate acceptance work. Original passing action
+cases remain zero. Parser tests cannot substitute for native execution or clean
+process shutdown.
