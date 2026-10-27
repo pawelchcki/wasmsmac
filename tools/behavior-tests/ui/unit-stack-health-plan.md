@@ -1,7 +1,7 @@
 # Candidate unit health ranking and movement observations
 
 This is a source-only follow-up to the verified Hold cache repair at
-`b6a80a056cee421e7c6a1bb727664939052c7c2f`. It adds four new files on a separate
+`b6a80a056cee421e7c6a1bb727664939052c7c2f`. It adds six new files on a separate
 branch. It changes no production Default, C++, existing witness, expected
 selection policy, shared browser helper or current PR delivery head. No engine,
 browser, build or original game has executed this new health case.
@@ -13,11 +13,13 @@ existing seven-owner, seven-base, nine-unit, 128-tile stack world) and a new
 `stackHealthMain`. The initial two Scouts remain healthy, active and without
 orders at the base-free (8,8) tile. A has morale 2; B has morale 1.
 
-The fixture registers the isolated event `fixture_stack_health_half_v1` through
+The shared test helper `_unit_stack_health_control.gls.js` registers the isolated
+event `fixture_stack_health_half_v1` through
 the native `game.register_event` API. Its validator requires the live scalar
 actor ID, native caller/current owner, unfinished current turn, declared nonce,
 full prior Float bits, exact new Float half-health, unchanged source definition,
-morale, moves, orders, position and unlocked tile. Apply revalidates, writes only
+morale, moves, orders, position and unlocked tile. It rejects unknown fields
+outside the six declared scalar inputs. Apply revalidates, writes only
 the backend native `unit.health` setter, reacquires the actor and verifies the
 new bits. Scalar apply and rollback counts independently require one application
 and zero rollbacks in the successful case. Rollback validates the native live
@@ -77,7 +79,8 @@ rejects missing/duplicate results, native failures and unsupported prefixes.
 `evaluateUnitStackHealthLog` additionally requires actual native exit zero,
 sealed nonpartial raw bytes, matching SHA-256 for retained raw/joined chunks,
 one main/eight worker hook acknowledgements and canonical out/err/callMain flags
-before evaluating the HUD. The future launcher must derive those prerequisites
+before evaluating the HUD. The future launcher must install the shared control
+helper alongside the existing observers and derive those prerequisites
 from actual execution and canonical helper receipts; supplied synthetic test
 metadata is not evidence of a game run. Evaluation always reports zero executed
 candidate/original cases of its own.
@@ -88,6 +91,17 @@ Widget agreement, full inventory, unrelated mutations, Float bits, one-shot
 application, raw boundary order, checkpoint drift, exit/seal and native failure
 classification. They execute no game or native engine. Node syntax checks do not
 parse the GSE string.
+
+`unit_stack_health_native.gls.js` prepares the smallest actual backend sanity:
+two native scenarios, 31 assertions, one accepted registered event per fixture,
+exact actual receipt types/owner/actor/Float bits and one-shot rejection, plus
+unknown-field, owner, actor-type, health-type and nonce rejection with complete
+fixture snapshot/inspection purity and a subsequent valid event. Its nested
+control and setup import no behavior module; the canonical worker owns the sole
+finish/summary. These expected counts are not executed native coverage until the
+strict native footer, sole summary and raw process zero are retained. This small
+fixture has two participant slots and no frontend; it is not the all-seven
+browser world or a rendering proof.
 
 Before a live case: independent source review, native fixture scalar/event sanity
 where supported, exact source/Default/runtime/asset/helper pins and an exclusive
