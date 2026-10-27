@@ -11,7 +11,9 @@ const counted = (native_tm) => {
 };
 behavior.scenario('short aquifer planning preserves exact native features Float bits graph and true undo with fewer repeated reads',() => {
  const f = #include('./_terraform_primitives_fixture')('aquifer',false); const tm = f.game.get_tm();
- f.with_write(() => { f.former.movement = 1.0 / 3.0; });
+ // Author inputs through a fresh native wrapper; keep the observed wrapper
+ // read-only so assignment's cached scalar cannot hide later native debit.
+ f.with_write(() => { const edit = f.game.get_um().get_unit(f.former.id); edit.movement = 1.0 / 3.0; });
  const before = f.snapshot(); const terrain = f.terrain_snapshot(); const bits = #float_bits(f.former.movement);
  const proxy = counted(tm); const original = tm.get_terrain_state(2,2); original.features.river = true;
  const expected = [{x:2,y:2,features:#clone(original.features)}];
@@ -21,7 +23,7 @@ behavior.scenario('short aquifer planning preserves exact native features Float 
  test.assert(proxy.reads['2:2'] == 3 && proxy.reads['0:2'] == 2 && read_count == 2,
   'Each of the two pure route calls reads each native coordinate once; eligibility also reads its origin');
  test.assert(f.snapshot() == before && f.terrain_snapshot() == terrain && #float_bits(f.former.movement) == bits);
- f.with_write(() => { f.former.movement = 1.0; });
+ f.with_write(() => { const edit = f.game.get_um().get_unit(f.former.id); edit.movement = 1.0; });
  const ready = f.snapshot(); const receipt = f.command('aquifer');
  test.assert(tm.get_terrain_state(2,2).features.river && f.former.movement == 0.0 && !f.former.get_terraforming().active);
  f.with_write(() => { #include('../default/game/event/unit_terraform').rollback(receipt); });
