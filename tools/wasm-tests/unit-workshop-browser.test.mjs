@@ -9,7 +9,8 @@ import {test} from 'node:test';
 import {chromium} from 'playwright';
 import {PNG} from 'pngjs';
 import {BrowserLogCursor} from './browser-log-cursor.mjs';
-import {installNativeLogHook,runtimeLogRequestKind} from './browser-native-log-hook.mjs';
+import {installNativeLogHook} from './browser-native-log-hook.mjs';
+import {attachRuntimeLogBarrier} from './runtime-fetch-barrier.mjs';
 import {nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
 import {declaredTerrain} from './terraform-browser-inputs.mjs';
@@ -44,7 +45,7 @@ test('real Workshop Window browses existing designs and commits only normal prod
     production_default_sha256:hash(JSON.stringify(scripts)),runtime_js_sha256:hash(runtime),runtime_wasm_sha256:hash(readFileSync(`${build}/GLSMAC.wasm`)),
     observer_sha256:hash(workshopMain),world_input_sha256:hash(workshopWorld),observer_helpers_sha256:hash(JSON.stringify(helpers)),seed_requested:seed,
     web_sha256:Object.fromEntries(['index.html','bootstrap.js','asset-store.js'].map(name=>[name,hash(readFileSync(`${build}/${name}`))])),
-    shared_helpers_sha256:Object.fromEntries(['browser-log-cursor.mjs','browser-native-log-hook.mjs','terraform-browser-geometry.mjs','terraform-browser-pointer.mjs'].map(name=>[name,hash(readFileSync(new URL(name,import.meta.url)))])),
+    shared_helpers_sha256:Object.fromEntries(['browser-log-cursor.mjs','browser-native-log-hook.mjs','runtime-fetch-barrier.mjs','terraform-browser-geometry.mjs','terraform-browser-pointer.mjs'].map(name=>[name,hash(readFileSync(new URL(name,import.meta.url)))])),
     declared_input:{map:'source-declared16x16-arid',players:7,bases:7,units:8,recipes:'actual source basic and optional Sea Former; explicit fixture inventory'},
     native_log_configuration:{installations:0,hook_source_sha256:hash(installNativeLogHook.toString()),original_log_source_sha256:hash(originalLogSource)},
     native_snapshots:[],processed_pointers:[],processed_keys:[],captures:[],window_lifecycle:[]};
@@ -69,6 +70,7 @@ test('real Workshop Window browses existing designs and commits only normal prod
   const errors=[];page.on('pageerror',error=>errors.push(error.stack||String(error)));page.on('crash',()=>errors.push('Chromium crashed'));
   const chunksPath=`${artifacts}/application-log-chunks.jsonl`;writeFileSync(chunksPath,'');
   const cursor=new BrowserLogCursor(page,packet=>{if(packet.text)appendFileSync(chunksPath,JSON.stringify({start_utf16:packet.start,end_utf16:packet.end,text:packet.text})+'\n');});
+  let runtimeBarrier=null;
   t.after(async()=>{
     if(report.status!=='passed')report.status='failed-or-incomplete';
     cursor.beginClose();
@@ -77,26 +79,29 @@ test('real Workshop Window browses existing designs and commits only normal prod
     try{report.native_log_configuration.callbacks=await page.evaluate(()=>globalThis.__terraformNativeLogHook);}catch(error){report.hook_capture_error=String(error);}
     if(report.status!=='passed'){try{await page.locator('#canvas').screenshot({path:`${artifacts}/failed-frame.png`,timeout:1000});}catch(error){report.frame_error=String(error);}}
     try{await browser.close();}catch(error){report.browser_close_error=String(error);report.status='failed-or-incomplete';}
+    runtimeBarrier?.stop();
     const producerClosed=!browser.isConnected();
     const sealed=producerClosed?await cursor.seal():{text:cursor.text,reads:structuredClone(cursor.reads),failure:'Producer close failed; retained prefix only'};
     const chunks=readFileSync(chunksPath,'utf8').split('\n').filter(Boolean).map(line=>JSON.parse(line));
     const joined=chunks.map(chunk=>chunk.text).join('');if(producerClosed)assert.equal(joined,sealed.text);
     writeFileSync(`${artifacts}/application.log`,sealed.text);report.browser_errors=errors;
     report.log_transport={sealed:producerClosed,partial:report.status!=='passed'||!!report.log_capture_error||!producerClosed,raw_sha256:hash(sealed.text),joined_chunk_sha256:hash(joined),retained_utf16:sealed.text.length,retained_utf8:Buffer.byteLength(sealed.text),reads:sealed.reads,settled_failure:sealed.failure};
-    writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');
-    assert.equal(report.log_capture_error,undefined);assert.equal(report.hook_capture_error,undefined);assert.ok(producerClosed);
-  });
-  await page.route('**/GLSMAC.js',async route=>{
+    let finalFailure=null;
     try{
-      const request=route.request();const headers=await request.allHeaders();
-      const destination=Object.entries(headers).find(([key])=>key.toLowerCase()==='sec-fetch-dest')?.[1];
-      const kind=runtimeLogRequestKind(destination,request.resourceType());
-      if(kind==='worker'){await route.continue();return;}
-      assert.equal(request.frame(),page.mainFrame());assert.equal(report.native_log_configuration.installations,0);
-      report.native_log_configuration.barrier=await page.evaluate(installNativeLogHook,{expectedOriginalSource:originalLogSource});
-      report.native_log_configuration.installations++;await route.continue();
-    }catch(error){errors.push(String(error));await route.abort('failed');}
+      assert.equal(report.log_capture_error,undefined);assert.equal(report.hook_capture_error,undefined);assert.equal(report.browser_close_error,undefined);assert.ok(producerClosed);
+      if(report.status==='passed'){
+        assert.deepEqual(errors,[]);assert.equal(report.native_log_configuration.installations,1);
+        assert.equal(report.native_log_configuration.barrier.continued,true,'Main runtime continuation must acknowledge success');
+        assert.ok(report.native_log_configuration.worker_requests?.some(row=>row.continued===true),'An actual pthread runtime continuation must acknowledge success');
+        assert.ok(report.native_log_configuration.callbacks?.first_callback);
+        assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_out_bound,true);
+        assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_err_bound,true);
+      }
+    }catch(error){finalFailure=error;report.final_artifact_error=String(error);report.status='failed-or-incomplete';}
+    writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');
+    if(finalFailure)throw finalFailure;
   });
+  runtimeBarrier=await attachRuntimeLogBarrier(page,browser,{runtimeURL:`${address}/GLSMAC.js`,bootstrapURL:`${address}/bootstrap.js`,originalLogSource,metadata:report.native_log_configuration,onError:error=>errors.push(String(error))});
   const presentation=new WorkshopPresentation();const records=[];const events=[];let consumed=0;let fatalTail='';
   const fatal=/WS_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i;
   const read=async()=>{
