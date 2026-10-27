@@ -185,8 +185,8 @@ parses or numerically normalizes. The whole new flow was audited separately:
 | Presentation node ID | Native presentation String | Exact lookup; no arithmetic or source-ordinal substitution |
 | Query/watch/Workshop tokens | Separate script lifecycle Int counters | Fence their own sessions only |
 
-The corrected embedded GSE fixture remains unexecuted until a newly granted,
-separately frozen attempt. The historical failed execution source is unchanged.
+The first failed execution source remains unchanged. A separately frozen
+second attempt and its distinct observer failure are recorded below.
 
 Independent review also caught a pre-run keyboard matcher defect: raw SDL ingress
 contains keycode/scancode/SDL modifier bits, while dispatch BEGIN contains the
@@ -200,6 +200,38 @@ rejected as incomplete. This missing observer completion is outside passing
 input totals. The independently queued Workshop snapshot protocol is designed
 to drain after dispatch, and still needs its actual first successful execution.
 
+## Second runtime attempt and quote/source-domain repair
+
+The second attempt at execution head `ad0ad724` exited 1 after 21.527 seconds,
+before any Workshop controls or native snapshots. It proved native receipt
+scalar types, then the observer called `get_production_switch_loss` for the
+inland city's globally visible Sea Former recipe. The native guard correctly
+rejected that quote. The observer incorrectly assumed every global inventory
+entry had a valid quote at every city. Sealed/partial raw output, exact source
+and runtime identities remain at `/tmp/unit-workshop-browser-v2/outcome.json`;
+zero Workshop/original passes and no established native exit-zero are retained.
+
+The test-only shared reader now preserves every global owner unit recipe and
+records each city's actual native quote as `{accepted,loss,reason}`. Rejections
+retain the native reason and do not filter rows or imply broader buildability.
+Meaningful post-catch validation/collection lets iteration reach a later land
+recipe. Normal production OK continues to use the actual authoritative API;
+only the selected land Former's accepted quote supplies the loss assertion.
+The dedicated `workshop_observation_native.gls.js` probe is prepared to exercise
+real inland land → rejected Sea → land collection and immutable world/update
+state, the same Sea quote on a real native coastal fixture, and source linkage
+with a Native-parsed synthetic weapon table whose Terraforming row is shifted.
+Its passing status requires an actual separately recorded native execution.
+
+The old browser-only `weapon:2` expectation came from the compact three-row
+synthetic source table. Production's existing VT guard never pins that ordinal.
+The observer now uses the game's actual `load_smac_text('alphax.txt','rules')`
+API to link the Former's actual UNITS weapon token to the indexed WEAPONS token
+and role. The bounded prototype/chassis/armor/reactor/movement/combat guard and
+Terraforming role9 remain unchanged. No installed ordinal is invented, no
+production guard or artwork changes, and actual installed-source/initial-query
+browser validation remains pending.
+
 ## Concrete graphics and Workshop gaps
 
 | Area | Current bounded support | Unsupported |
@@ -208,4 +240,4 @@ to drain after dispatch, and still needs its actual first successful execution.
 | Movement | Existing body interpolation and badge blink | Original facing, trajectory/cadence and intermediate-frame agreement |
 | Work/animation | Existing PSI attack/death clips; resource metadata only for Former tools | Farm/Raise/etc. clip binding, limbs, transforms, visibility and timing |
 | Workshop | Existing source designs, stats, guarded preview, production draft handoff | Authoring/customization, save/obsolete/upgrade, rotation and original UI layout |
-| Browser proof | Source-prepared native Window/SDL/state/pixel acceptance; first actual native startup failure retained | Workshop controls/pixels still unverified after observer type failure; original passing cases remain zero |
+| Browser proof | Source-prepared native Window/SDL/state/pixel acceptance; two actual native startup failures retained | Workshop controls/pixels still unverified after observer type/quote failures; original passing cases remain zero |

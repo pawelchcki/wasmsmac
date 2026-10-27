@@ -32,6 +32,7 @@ export const workshopMain=String.raw`#main((glsmac) => {
  const screen = #include('ui/parts/game/popup/base_screen');
  const popup = #include('ui/parts/game/popup/popup');
  const terrain_observer = #include('../tests/_terrain_trace_observer');
+ const source_reader = #include('../tests/_unit_workshop_reader');
  glsmac.on('configure_game',(configured) => {
   const game = configured.game; const receipts = [];
   game.on('event_result',(e) => {
@@ -61,12 +62,23 @@ export const workshopMain=String.raw`#main((glsmac) => {
    for (base of game.get_bm().get_bases()) { if (base.get_owner().id == game.get_player().id) { if (base_id != null) { throw Error('Expected exactly one local browser city'); } base_id = base.id + 0; } }
    if (base_id == null) { throw Error('Missing local browser city'); }
    const find_base = () => { for (base of game.get_bm().get_bases()) { if (base.id == base_id) { return base; } } throw Error('Browser city retired'); };
+   // Normal installed-source loader, identical API/domain as game setup.
+   // Weapon table positions belong to this input, not a compact test fixture.
+   const document = glsmac.load_smac_text('alphax.txt','rules');
+   let former_weapon_source = null;
+   for (rule of game.get('starting_unit_rules')) {
+    if (rule.id == 'Formers') {
+     if (former_weapon_source != null) { throw Error('Ambiguous source Former rule'); }
+     former_weapon_source = source_reader.weapon_profile(rule,document.rows('UNITS'),document.rows('WEAPONS'));
+    }
+   }
+   if (former_weapon_source == null) { throw Error('Missing source Former rule'); }
    const read_ui = () => {
     const result = {base_open:screen.is_open,base_id:screen.base_id,production_open:screen.production_selection != null,
      popup_sliding:popup.sliding_timer != null,popup_hiding:popup.popup_hiding,
      draft:screen.production_choices == null ? null : screen.production_choices.value + '',
      workshop_open:screen.workshop != null && screen.workshop.dialog != null,workshop_selected:null,workshop_token:null,
-     viewport:{width:glsmac.ui.get_width(),height:glsmac.ui.get_height()},receipts:#sizeof(receipts),choices:[],rules:[],switch_losses:{}};
+     viewport:{width:glsmac.ui.get_width(),height:glsmac.ui.get_height()},receipts:#sizeof(receipts),choices:[],rules:[],native_quotes:{},quote_ids:[],former_weapon_source:#clone(former_weapon_source)};
     if (result.workshop_open) {
      const dialog = screen.workshop.dialog;
      result.workshop_selected = dialog.choices == null ? null : dialog.choices.value + '';
@@ -76,9 +88,12 @@ export const workshopMain=String.raw`#main((glsmac) => {
     for (choice of owner.get_production_choices()) {
      if (choice.type == 'unit') {
       result.choices :+ {id:choice.id + '',unit_id:choice.unit_id + '',name:choice.name + '',cost:choice.cost + 0};
-      result.switch_losses[choice.id] = base.get_production_switch_loss(choice.id);
      }
     }
+    // Global owner inventory is retained. A native per-city rejection is
+    // observed separately, including its reason, without filtering any row.
+    const quotes = source_reader.quote_choices(base,result.choices);
+    result.native_quotes = quotes.by_id; result.quote_ids = quotes.ids;
     for (rule of game.get('starting_unit_rules')) { result.rules :+ #clone(rule); }
     const sea = game.get('sea_former_rule'); if (sea != null) { result.rules :+ #clone(sea); }
     return result;

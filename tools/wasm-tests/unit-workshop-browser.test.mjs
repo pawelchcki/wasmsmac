@@ -34,7 +34,7 @@ test('real Workshop Window browses existing designs and commits only normal prod
   const scripts=Object.fromEntries(readdirSync(`${scriptsRoot}/GLSMAC_data/default`,{recursive:true}).filter(name=>name.endsWith('.gls.js')).sort()
     .map(name=>[`GLSMAC_data/default/${name}`,readFileSync(`${scriptsRoot}/GLSMAC_data/default/${name}`,'utf8')]));
   assert.ok(scripts['GLSMAC_data/default/ui/parts/game/popup/base_screen/workshop.gls.js'],'Requires the reviewed Workshop source');
-  const helperNames=['_state_trace_observer','_terrain_trace_observer','_terraform_cooperation_observer'];
+  const helperNames=['_state_trace_observer','_terrain_trace_observer','_terraform_cooperation_observer','_unit_workshop_reader'];
   const helpers=Object.fromEntries(helperNames.map(name=>[name,readFileSync(`${scriptsRoot}/GLSMAC_data/tests/${name}.gls.js`,'utf8')]));
   const bootstrap=readFileSync(`${build}/bootstrap.js`,'utf8');
   const originalLogSource=bootstrap.match(/function log\(message\) \{\n[^]*?\n\}/)?.[0];assert.ok(originalLogSource);
@@ -161,7 +161,11 @@ test('real Workshop Window browses existing designs and commits only normal prod
   const stockFormer=ui=>{
     const choices=ui.choices.filter(choice=>choice.unit_id==='Formers');assert.equal(choices.length,1);
     const rules=ui.rules.filter(rule=>rule.id==='Formers');assert.equal(rules.length,1);const rule=rules[0];
-    assert.deepEqual(rule.source_components,{prototype:1,chassis:0,weapon:2,armor:0,reactor:0},'Only the bounded stock Former component profile is covered');
+    const source=ui.former_weapon_source;assert.ok(source);
+    assert.deepEqual(rule.source_components,{prototype:1,chassis:0,weapon:source.weapon_index,armor:0,reactor:0},'Only the bounded stock Former component profile is covered');
+    assert.ok(Number.isSafeInteger(source.weapon_index)&&source.weapon_index>=0);assert.equal(source.prototype,1);
+    assert.ok(typeof source.unit_weapon==='string'&&source.unit_weapon.length>0);assert.equal(source.unit_weapon,source.weapon_shortname);
+    assert.equal(source.weapon_mode,9,'Actual Native-loaded UNITS and WEAPONS linkage must retain the Terraforming module role');
     assert.equal(rule.movement,1);assert.equal(rule.weapon_mode,9);assert.deepEqual(rule.combat,{kind:'civilian',offense:0,defense:1,reactor:1});return choices[0];
   };
   await page.goto(address);await page.waitForFunction(()=>document.body.dataset.state==='ready');
@@ -222,7 +226,9 @@ test('real Workshop Window browses existing designs and commits only normal prod
   const committed=await observe('normal-production-OK');assert.equal(committed.ui.production_open,false);noProductionAfter(initialProductionReceipts+1);
   const adjusted=nativeOnly(committed);const city=adjusted.bases.find(base=>base.raw_id===initial.ui.base_id);assert.ok(city);
   const oldCity=baseline.bases.find(base=>base.raw_id===city.raw_id);const detail=adjusted.terrain_trace.base_details[city.id];const oldDetail=baseline.terrain_trace.base_details[city.id];
-  assert.equal(detail.production.choice_id,former.id);assert.equal(detail.production.minerals,oldDetail.production.minerals-selected.ui.switch_losses[former.id]);assert.equal(detail.production.last_processed_turn,baseline.turn);
+  const quote=selected.ui.native_quotes[former.id];assert.equal(quote.accepted,true);assert.equal(quote.reason,null);
+  assert.ok(Number.isSafeInteger(quote.loss)&&quote.loss>=0,'Chosen land Former needs an actual accepted native quote');
+  assert.equal(detail.production.choice_id,former.id);assert.equal(detail.production.minerals,oldDetail.production.minerals-quote.loss);assert.equal(detail.production.last_processed_turn,baseline.turn);
   city.project=oldCity.project;city.resources.minerals=oldCity.resources.minerals;detail.production=structuredClone(oldDetail.production);
   assert.deepEqual(adjusted,baseline,'Only the source-selected base production fields may change');
   await key('Control+Alt+j','J',6);await click(baseButton('CHANGE'));const staleFence=presentation.sequence;await click(baseButton('WORKSHOP'));
