@@ -69,9 +69,17 @@ const needs_confirmation = (game, unit, action) => { return #sizeof(effects.repl
 const can_resume_exhausted = (game, unit, action) => {
 	const state = unit.get_terraforming(); const tile = unit.get_tile();
 	const rule = describe(game,unit,action);
-	return unit.movement == 0.0 && unit.moved_this_turn && !state.active && state.action == action && state.work_units > 0 &&
+	const ready = unit.movement == 0.0 && unit.moved_this_turn && !state.active && state.action == action && state.work_units > 0 &&
 		state.tile_x == tile.x && state.tile_y == tile.y && state.required_work == rule.turns * 2 &&
 		state.previous_movement > 0.0 && state.previous_movement <= unit.get_def().movement_per_turn;
+	if (!ready) { return false; }
+	if (#is_defined(state.job)) {
+		let same = false;
+		try { same = cooperation.prepare(game,unit,action,rule.turns * 2).job == state.job; }
+		catch { : (error) => { same = false; } }
+		return same;
+	}
+	return true;
 };
 // Read-only selection preflight. Actual replacement/fee/target consent remains
 // a separate commit validation step, never synthesized by menu availability.

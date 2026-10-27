@@ -39,9 +39,10 @@ const prepare = (game,unit,action,required) => {
  result.patches = patches; return result;
 };
 const capture = (unit) => {
- const tile = unit.get_tile(); const state = {owner:unit.owner + 0,x:tile.x + 0,y:tile.y + 0,order:unit.get_order(),work:unit.get_terraforming(),
-  recovery:unit.get_terraforming_recovery(),movement:unit.movement + 0.0,moved:unit.moved_this_turn == true,
-  health:unit.health + 0.0,morale:unit.morale + 0,definition:unit.def + '',
+ const tile = unit.get_tile(); const movement = unit.movement; const health = unit.health;
+ const state = {owner:unit.owner + 0,x:tile.x + 0,y:tile.y + 0,order:unit.get_order(),work:unit.get_terraforming(),
+  recovery:unit.get_terraforming_recovery(),movement:movement,moved:unit.moved_this_turn == true,
+  health:health,morale:unit.morale + 0,definition:unit.def + '',
   plan:unit.get_automation(),home:unit.get_terraform_home()}; state.unit = unit; return state;
 };
 const matches = (unit,state,action,required,job,x,y,water) => {

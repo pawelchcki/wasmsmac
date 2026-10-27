@@ -120,3 +120,12 @@ codec bounds, and one live seven-owner local/opponent capture with pure reads.
 All remain unverified at this source checkpoint. Native busy fences, paid height,
 legacy solo work and actual rendering/selection remain separate compatibility
 checks. No new graphics, sound or work-tool animation is claimed.
+
+Source cross-review corrections are retained as a separate checkpoint: effect
+planning clones a cached terrain record before mutating its patch dictionaries,
+so common identity retains actual pre-effect owners. Cached raw/scalar guards
+were not mutated, and the full record now stays immutable for future fields too.
+Same-action exhausted resume requires the actual current job identity; a stale
+paused order rejects before activation. Peer receipt capture materializes the
+native Float without arithmetic normalization, preserving negative-zero bits
+through true completion undo. New regression inputs exercise all three cases.

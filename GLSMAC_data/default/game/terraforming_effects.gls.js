@@ -110,7 +110,9 @@ return {
 	plan:(game,unit,action,read_state) => {
 		const reason = validate(game,unit,action,read_state); if (#is_defined(reason)) { throw Error(reason); }
 		if (action == 'aquifer') { return aquifer_route(game,unit); }
-		const tile = unit.get_tile(); const data = #is_defined(read_state) ? read_state(tile.x,tile.y) : game.get_tm().get_terrain_state(tile.x,tile.y);
+		// Planning owns its mutable enhancement dictionaries. A supplied cached
+		// record is the immutable pre-effect identity baseline, never a patch.
+		const tile = unit.get_tile(); const data = #is_defined(read_state) ? #clone(read_state(tile.x,tile.y)) : game.get_tm().get_terrain_state(tile.x,tile.y);
 		const patch = {x:tile.x + 0,y:tile.y + 0};
 		if (action == 'level') { patch.rockiness = tile.rockiness - 1; }
 		else if (action == 'remove_fungus') { data.features.xenofungus = false; patch.features = data.features; }

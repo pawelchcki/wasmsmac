@@ -15,8 +15,14 @@ for (water of [false,true]) {
     const first = f.order(f.former,action); test.assert(f.former.get_terraforming().work_units == 2 && f.former.movement == 0.0);
     // This behavioral assertion comes before any new native capability read.
     // A frozen old host/runtime must fail here on the actual cooperation guard.
-    const request = f.request(f.peer,action);
-    test.assert(!#is_defined(command.validate(request)),'A same-owner same-job second worker can contribute');
+    const request = f.request(f.peer,action); const reason = command.validate(request);
+    if (#is_defined(reason)) {
+     const am = f.former.movement; const bm = f.peer.movement;
+     #print('COOPERATIVE_GUARD_REJECTION|' + #json_text_exact({reason:reason,action:action,owner:f.owner.id + 0,turn:f.game.get_turn() + 0,
+      first:{unit_id:f.former.id + 0,work:f.former.get_terraforming(),movement:am},second:{unit_id:f.peer.id + 0,work:f.peer.get_terraforming(),movement:bm},
+      x:f.former.get_tile().x + 0,y:f.former.get_tile().y + 0}));
+    }
+    test.assert(!#is_defined(reason),'A same-owner same-job second worker can contribute');
     test.assert(f.former.get_terraforming_schema_version() == 2);
     const group = work.cohort_state(f.game,f.former);
     test.assert(group.own_work_units == 2 && group.cohort_work_units == 2 && #sizeof(group.participants) == 1);
@@ -130,4 +136,41 @@ behavior.scenario('native job metadata is detached bounded owner-fenced and pres
  const extra = f.former.get_terraforming(); extra.job.extra = true;
  try { f.with_write(() => { f.former.set_terraforming(extra); }); } catch { : (error) => { rejected++; } }
  test.assert(rejected == 8 && f.snapshot() == before);
+});
+behavior.scenario('cached guards preserve the real construction owner across same-epoch physical worlds and actual reception',() => {
+ const a = fixture('mine',false,5); const b = fixture('mine',false,5);
+ for (input of [{which:0,owner:0},{which:1,owner:1}]) {
+  const f = input.which == 0 ? a : b; const tm = f.game.get_tm(); const state = tm.get_terrain_state(2,2);
+  state.terraforming.solar = true; state.terraforming_owners.solar = input.owner;
+  f.with_write(() => { tm.apply_terrain([{x:2,y:2,terraforming:state.terraforming,terraforming_owners:state.terraforming_owners}],[]); });
+ }
+ const as = a.game.get_tm().get_terrain_state(2,2); const bs = b.game.get_tm().get_terrain_state(2,2);
+ test.assert(as.terrain_epoch == bs.terrain_epoch && as.terraforming_raw == bs.terraforming_raw && as.features_raw == bs.features_raw && as.terraforming_owners.solar != bs.terraforming_owners.solar);
+ const before_a = a.snapshot(); const before_b = b.snapshot(); const ai = a.inspect(); const bi = b.inspect();
+ const aj = coop.prepare(a.game,a.former,'mine',10); const bj = coop.prepare(b.game,b.former,'mine',10);
+ test.assert(aj.job.terrain_identity != bj.job.terrain_identity,'Planning must seal original owners, not mutated replacement-patch owners');
+ test.assert(a.snapshot() == before_a && b.snapshot() == before_b && a.inspect() == ai && b.inspect() == bi);
+ a.order(a.former,'mine'); const foreign_baseline = a.former.get_terraforming();
+ // Author a logically received job on the second actual physical map, then
+ // exercise the real receiving-world codec before checking live eligibility.
+ const id = b.former.id + 0; const rules = b.game.get('terraforming_rules');
+ b.with_write(() => { b.former.set_terraforming(foreign_baseline); }); b.receive_height_world(); b.game.set('terraforming_rules',rules);
+ b.former = b.game.get_um().get_unit(id);
+ test.assert(b.former.get_terraforming().job == foreign_baseline.job && work.cohort_state(b.game,b.former) == null);
+});
+behavior.scenario('an exhausted paused actor cannot reactivate stale work after target ABA',() => {
+ const f = fixture('farm',false,5); f.order(f.former,'farm'); f.pause(f.former);
+ const tm = f.game.get_tm(); const state = tm.get_terrain_state(2,2);
+ f.with_write(() => { tm.apply_terrain([{x:2,y:2,moisture:state.moisture == 1 ? 2 : 1}],[]); tm.apply_terrain([{x:2,y:2,moisture:state.moisture}],[]); });
+ test.assert(f.former.movement == 0.0 && !f.former.get_terraforming().active);
+ denied(f,f.request(f.former,'farm'));
+});
+behavior.scenario('a paused cohort peer keeps exact negative-zero movement through true completion undo',() => {
+ const f = fixture('farm',false,2); f.order(f.former,'farm'); f.pause(f.former);
+ f.with_write(() => { f.former.movement = 0.0 * (0.0-1.0); }); f.former = f.game.get_um().get_unit(f.former.id);
+ const original = f.former.movement; test.assert(#float_bits(original) == 2147483648);
+ const before = f.snapshot(); const terrain = f.terrain_snapshot(); const second = f.order(f.peer,'farm');
+ f.with_write(() => { command.rollback(second); });
+ const actual = f.game.get_um().get_unit(f.former.id).movement;
+ test.assert(#float_bits(actual) == #float_bits(original) && f.snapshot() == before && f.terrain_snapshot() == terrain);
 });
