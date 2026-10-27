@@ -11,7 +11,7 @@ const setup = () => {
 };
 const prepare = () => {
  const f = scene.f; const tm = f.game.get_tm();
- const counted = {get_tile:tm.get_tile,get_terrain_geometry:tm.get_terrain_geometry,get_distance:tm.get_distance};
+ const counted = {get_tile:tm.get_tile,get_terrain_geometry:tm.get_terrain_geometry,get_distance:tm.get_distance,validate_terrain:tm.validate_terrain};
  counted.get_terrain_state = (x,y) => { scene.reads = scene.reads + 1; return tm.get_terrain_state(x,y); };
  const facade = {get_tm:() => { return counted; }};
  const plan = coop.prepare(facade,f.former,'aquifer',2);
