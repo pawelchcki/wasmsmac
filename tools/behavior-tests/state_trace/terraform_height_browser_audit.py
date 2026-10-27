@@ -43,7 +43,7 @@ def node_projection(value):
 def parse_records(raw):
     records = []
     for line_number, line in enumerate(raw.decode('utf8').splitlines()):
-        for kind in ('TH_NATIVE', 'TH_RECEIPT', 'TH_INPUTS', 'TH_TRACE'):
+        for kind in ('TH_NATIVE', 'TH_RECEIPT', 'TH_INPUTS', 'TH_TRACE', 'TH_HEADERS', 'TH_ROWS'):
             marker = kind + '|'
             if marker in line:
                 value = json.loads(line.split(marker, 1)[1])  # malformed packets fail closed
@@ -90,6 +90,8 @@ def validate_coverage(state):
     trace = state['terrain_trace']
     for name, detail in [('players', 'player_details'), ('units', 'unit_details'), ('bases', 'base_details')]:
         assert set(trace[detail]) == ids[name], (name, 'incomplete native details')
+    for detail in trace['player_details'].values():
+        assert type(detail['energy_revision']) is int and detail['energy_revision'] >= 0, 'Native energy revision must be an Int, never Bool'
     tiles = trace['tiles']
     expected = {f'{x},{y}' for y in range(16) for x in range(y % 2, 16, 2)}
     assert set(tiles) == expected, 'Incomplete native map coordinates'
@@ -98,6 +100,25 @@ def validate_coverage(state):
         assert key == f"{tile['x']},{tile['y']}"
     counts['tiles'] = len(tiles)
     return counts
+
+
+def validate_trace(records):
+    """One uninterrupted native journal: Drain clears events, not sequence."""
+    events, carriers = [], {}
+    prior = 0
+    packets = [row for row in records if row[0] == 'TH_TRACE']
+    assert packets, 'Missing native presentation journal'
+    for _, packet, line in packets:
+        assert packet['enabled'] is True
+        assert type(packet['dropped']) is int and packet['dropped'] == 0, 'Lossy native presentation journal'
+        assert type(packet['events']) is list
+        for event in packet['events']:
+            assert type(event['seq']) is int and event['seq'] == prior + 1, 'Duplicate, missing or reordered native event'
+            assert type(event['kind']) is str and type(event['data']) is dict
+            prior = event['seq']
+            carriers[prior] = line
+            events.append(event)
+    return events, carriers
 
 
 def validate_sequence(records, report):
@@ -109,7 +130,8 @@ def validate_sequence(records, report):
     assert len(native) == len(CHECKPOINTS)
     reported = report['native_snapshots']
     assert len(reported) == len(CHECKPOINTS)
-    events = {event['seq']: event for kind, value, _ in records if kind == 'TH_TRACE' for event in value['events']}
+    trace, _ = validate_trace(records)
+    events = {event['seq']: event for event in trace}
     packets = []
     actor, owner, turn = native[0][0]['ui']['actor'], native[0][0]['ui']['owner'], native[0][0]['ui']['turn']
     assert all(type(v) is int for v in (actor, owner, turn))
@@ -442,9 +464,13 @@ def validate_finalization(report, raw, chunks, records):
     first = callbacks['first_callback']
     assert first['sequence'] == 1 and type(first['sequence']) is int
     assert first['runtime_out_bound'] is True and first['runtime_err_bound'] is True and first['runtime_callMain_present'] is True
-    assert callbacks['initial_utf16'] == utf16_length(callbacks['initial_text'])
-    assert text.startswith(callbacks['initial_text'])
-    position = utf16_length(callbacks['initial_text'])
+    # This pinned successful bootstrap has no direct-log bypass: initial text
+    # is empty, onExit only updates status, and every received character is
+    # covered by an actual recorded Module.print/printErr append. A future
+    # genuine bypass needs a separately supported contract, not fake callbacks.
+    assert type(callbacks['initial_utf16']) is int and callbacks['initial_utf16'] == 0
+    assert callbacks['initial_text'] == ''
+    position = 0
     text16 = text.encode('utf-16-le')
     assert callbacks['calls']
     for i, call in enumerate(callbacks['calls']):
@@ -452,9 +478,11 @@ def validate_finalization(report, raw, chunks, records):
         assert call['channel'] in ('stdout', 'stderr')
         assert call['runtime_out_bound'] is True and call['runtime_err_bound'] is True and call['runtime_callMain_present'] is True
         assert type(call['before_utf16']) is int and type(call['after_utf16']) is int
-        assert position <= call['before_utf16'] < call['after_utf16'] <= offset
-        assert call['message_utf16'] == call['after_utf16'] - call['before_utf16'] - 1
+        assert position == call['before_utf16'] < call['after_utf16'] <= offset, 'Uncovered native callback interval'
+        assert type(call['message_utf16']) is int and call['message_utf16'] == call['after_utf16'] - call['before_utf16'] - 1
+        assert text16[(call['after_utf16'] - 1) * 2:call['after_utf16'] * 2] == b'\n\0'
         position = call['after_utf16']
+    assert position == offset, 'Uncovered final callback suffix'
     assert all(equal(first[key], value) for key, value in callbacks['calls'][0].items())
     assert first['message'] == text16[first['before_utf16'] * 2:(first['after_utf16'] - 1) * 2].decode('utf-16-le')
     workers = config['worker_requests']
@@ -470,22 +498,29 @@ def validate_finalization(report, raw, chunks, records):
         acknowledgements = [event for event in config['protocol_events'] if event['kind'] == 'continue-acknowledged'
                             and all(event['role'].get(key) == role[key] for key in ('kind', 'fetch_id', 'network_id', 'frame_id'))]
         assert len(acknowledgements) == 1, 'No exact actual CDP continuation ACK'
-    events = [event for kind, value, _ in records if kind == 'TH_TRACE' for event in value['events']]
+    events, carriers = validate_trace(records)
     last_query = report['native_snapshots'][-1]['query_after_native_key']
     qbegins = [event for event in events if event['seq'] > last_query and event['kind'] == 'input.dispatch'
                and event['data'].get('phase') == 'begin' and event['data'].get('type') == 'keydown'
                and event['data'].get('code') == 'Q' and event['data'].get('modifiers') == 6]
     assert len(qbegins) == 1
     begin = qbegins[0]
-    assert any(event['seq'] > last_query and event['seq'] < begin['seq'] and event['kind'] == 'input.ingress'
-               and event['data'].get('type') == 'keydown' and event['data'].get('ingress') == begin['data']['ingress'] for event in events)
-    assert any(event['seq'] > begin['seq'] and event['kind'] == 'input.dispatch' and event['data'].get('phase') == 'end'
-               and event['data'].get('ingress') == begin['data']['ingress'] and event['data'].get('handled') is True for event in events)
+    ingresses = [event for event in events if last_query < event['seq'] < begin['seq'] and event['kind'] == 'input.ingress'
+                 and event['data'].get('type') == 'keydown' and event['data'].get('ingress') == begin['data']['ingress']]
+    ends = [event for event in events if event['seq'] > begin['seq'] and event['kind'] == 'input.dispatch' and event['data'].get('phase') == 'end'
+            and event['data'].get('ingress') == begin['data']['ingress'] and event['data'].get('handled') is True]
+    assert len(ingresses) == len(ends) == 1
     exit_lines = [i for i, line in enumerate(text.splitlines()) if 'TH_EXIT_REQUEST' in line]
     last_native_line = max(line for kind, _, line in records if kind == 'TH_NATIVE')
     assert len(exit_lines) == 1 and exit_lines[0] > last_native_line
+    # Fixture-specific: its owned timer drains on line131, then prints the
+    # exit marker on132. This is not a universal dispatch-vs-exit guarantee.
+    assert all(last_native_line < carriers[event['seq']] < exit_lines[0] for event in [ingresses[0], begin, ends[0]])
     return {'sealed_complete': True, 'native_exit_verified': True, 'actual_main_ack': True,
-            'actual_worker_acks': len(workers), 'actual_exit_key_and_request': True, 'full_raw_fatal_scan': 'clean'}
+            'actual_worker_acks': len(workers), 'actual_exit_key_and_request': True, 'full_raw_fatal_scan': 'clean',
+            'continuous_native_callbacks': len(callbacks['calls']), 'callback_utf16_covered': position,
+            'lossless_trace_packets': sum(kind == 'TH_TRACE' for kind, _, _ in records), 'unique_contiguous_trace_events': len(events),
+            'exit_order_scope': 'this fixture drains Q ingress/begin/end before its owned-timer TH_EXIT_REQUEST'}
 
 
 LEGACY_OUTER_SHA256 = '6ab902e12ee6a6d0f3a4a4f52868a0bf5232a00ea408475ddbba1afd2850673d'
@@ -495,6 +530,119 @@ LEGACY_CAPTURE_BINDINGS = {
     'preflight_sha256': LEGACY_PREFLIGHT_SHA256,
     'host_head': 'bc8a3e4a113456cce2ada80e7a56d0872911d8a0',
 }
+
+
+def validate_pointer_route(records, report):
+    """Replay the producer's eight physical clicks, not just resulting worlds."""
+    events, carriers = validate_trace(records)
+    event_map = {event['seq']: event for event in events}
+    packets = [value for kind, value, _ in records if kind == 'TH_NATIVE']
+    pointers = report['processed_pointers']
+    assert len(pointers) == 8, 'The bounded menu/Cancel/reopen/draft/confirm route requires eight actual clicks'
+    headers = [value for kind, value, _ in records if kind == 'TH_HEADERS']
+    assert len(headers) == 1
+    header = [row for row in headers[0] if row['id'] == 'left_menu_terraform']
+    assert len(header) == 1 and header[0]['label'] == 'TERRAFORM'
+    command = report['native_input']['raise_rule']['order']
+    assert command == 'Terraform UP', 'Different installed command template for this pinned profile'
+    draft_label = packets[4]['ui']['dialog']['choices'][1]
+    assert packets[4]['ui']['dialog']['source_choices'] == ['Cancel action.', 'Expend $NUM0 credits.']
+    assert draft_label == f"Expend {packets[4]['ui']['height_presentation']['quote']['fee']} credits."
+    expected = [(None, None, 'MENU', 0), ('terraform-header', 'left_menu_terraform', header[0]['label'], 0),
+                ('terraform-row', 'raise', command, 0), ('terraform-height-ok', 'confirm', 'OK', 1),
+                ('terraform-header', 'left_menu_terraform', header[0]['label'], 2), ('terraform-row', 'raise', command, 2),
+                ('terraform-height-choice', '1', draft_label, 3), ('terraform-height-ok', 'confirm', 'OK', 4)]
+    nodes, index, prior_end = {}, 0, 0
+
+    def ingest(event):
+        target, kind, data = event.get('target'), event['kind'], event['data']
+        if type(target) is not str:
+            return
+        if kind == 'node.destroy':
+            nodes.pop(target, None)
+            return
+        node = nodes.setdefault(target, {'properties': {}})
+        if kind == 'node.create':
+            node.update(tag=data['tag'], parent=data['parent'], visible=False)
+        if kind == 'node.attach': node['parent'] = data['parent']
+        if kind == 'semantic.role': node.update(role=data['role'], source=data['source'])
+        if kind == 'node.property': node['properties'][data['key']] = data['value']
+        if kind == 'semantic.geometry' and data['area'] == 'effective': node['effective'] = data
+        if kind == 'node.show': node['visible'] = True
+        if kind == 'node.hide': node['visible'] = False
+
+    def ancestors(target):
+        seen = set()
+        while target is not None:
+            assert target not in seen and target in nodes, 'Stale/cyclic native widget ancestry'
+            seen.add(target)
+            yield target
+            target = nodes[target].get('parent')
+
+    def visible(target):
+        return all(nodes[item].get('visible') is not False for item in ancestors(target))
+
+    def inside(point, bounds):
+        return all(finite_number(point[key]) for key in ('x', 'y')) and bounds['left'] <= point['x'] < bounds['right'] and bounds['top'] <= point['y'] < bounds['bottom']
+
+    for receipt, (role, source, label, checkpoint) in zip(pointers, expected):
+        fence = receipt['fence']
+        assert type(fence) is int and fence >= report['native_snapshots'][checkpoint]['query_after_native_key'] and fence >= prior_end
+        while index < len(events) and events[index]['seq'] <= fence:
+            ingest(events[index]); index += 1
+        target = receipt['target']
+        assert target.get('role') == role and target.get('source') == source and target['label'] == label
+        candidates = [key for key, node in nodes.items() if node.get('tag') == '$button' and
+                      ((node.get('role') == role and node.get('source') == source) if role else (node['properties'].get('text') == label and visible(key)))]
+        assert candidates == [target['id']], 'Different/ambiguous actual semantic widget'
+        node = nodes[target['id']]
+        assert node['properties']['text'] == label and visible(target['id'])
+        if role == 'terraform-row': assert type(node['properties']['color']) is str and node['properties']['color'] != 'black'
+        bounds = node['effective']
+        assert equal(target['bounds'], node_projection(bounds)), 'Pointer target is not the retained native effective geometry'
+        viewport = receipt['viewport']
+        assert equal(viewport, node_projection(packets[checkpoint]['ui']['viewport']))
+        assert all(finite_number(bounds[key]) for key in ('left', 'top', 'right', 'bottom'))
+        assert 0 <= bounds['left'] < bounds['right'] <= viewport['width'] and 0 <= bounds['top'] < bounds['bottom'] <= viewport['height']
+        assert finite_number(target['x']) and target['x'] == (bounds['left'] + bounds['right']) / 2
+        assert finite_number(target['y']) and target['y'] == (bounds['top'] + bounds['bottom']) / 2
+        box = receipt['canvas_css_rect']
+        assert all(finite_number(box[key]) for key in ('x', 'y', 'width', 'height')) and box['width'] > 0 and box['height'] > 0
+        for axis, dimension in [('x', 'width'), ('y', 'height')]:
+            assert finite_number(receipt['css'][axis]) and receipt['css'][axis] == box[axis] + box[dimension] * target[axis] / viewport[dimension]
+        matched = {}
+        order = ['hover', 'down_ingress', 'down', 'down_end', 'up_ingress', 'up', 'end']
+        prior = fence
+        for name in order:
+            recorded = receipt[name]
+            assert type(recorded['seq']) is int and recorded['seq'] > prior
+            actual = event_map[recorded['seq']]
+            assert equal(recorded, node_projection(actual)), 'Reported pointer receipt is not its actual native journal event'
+            matched[name] = actual; prior = actual['seq']
+        hover = matched['hover']
+        assert hover['kind'] == 'input.ui-transition' and hover['data']['type'] == 'mouseover'
+        assert target['id'] in ancestors(hover['target']) and inside(hover['data'], bounds)
+        for stem, event_type in [('down', 'mousedown'), ('up', 'mouseup')]:
+            ingress, begin, end = matched[stem + '_ingress'], matched[stem], matched['down_end' if stem == 'down' else 'end']
+            assert ingress['kind'] == 'input.ingress' and ingress['data']['type'] == event_type
+            assert begin['kind'] == 'input.dispatch' and begin['data']['phase'] == 'begin' and begin['data']['type'] == event_type
+            assert end['kind'] == 'input.dispatch' and end['data']['phase'] == 'end' and end['data']['handled'] is True
+            assert type(ingress['data']['ingress']) is int and ingress['data']['ingress'] == begin['data']['ingress'] == end['data']['ingress']
+            assert ingress['data']['button'] == begin['data']['button'] == 1
+            assert inside(begin['data'], bounds)
+            assert (ingress['data']['x'], ingress['data']['y']) == (begin['data']['x'], begin['data']['y'])
+        assert (matched['down']['data']['x'], matched['down']['data']['y']) == (matched['up']['data']['x'], matched['up']['data']['y'])
+        next_query = report['native_snapshots'][checkpoint + 1]['query_after_native_key']
+        query_ingress = event_map[next_query]['data']['ingress']
+        next_ingress = [event for event in events if event['kind'] == 'input.ingress' and event['data'].get('ingress') == query_ingress]
+        assert len(next_ingress) == 1 and matched['end']['seq'] < next_ingress[0]['seq'], 'Click did not complete before its fresh query input'
+        prior_end = matched['end']['seq']
+        if role == 'terraform-row':
+            rows = [value for kind, value, line in records if kind == 'TH_ROWS' and line <= carriers[fence]]
+            assert rows
+            row = [item for item in rows[-1] if item['id'] == 'raise']
+            assert len(row) == 1 and row[0]['enabled'] is True and row[0]['label'] == label
+    return {'physical_clicks_verified': len(pointers), 'scope': 'MENU/terraform/raise/Cancel/reopen/Expend/confirm; actual native geometry and input receipts'}
 
 
 def validate_external_exit(path, native_exit, capture_bindings):
@@ -534,6 +682,7 @@ def audit_artifacts(directory, outer_outcome=None):
     schema = validate_preflight(directory, preflight, preflight_bytes, report, native_input)
     chunks = [json.loads(line) for line in (directory / 'application-log-chunks.jsonl').read_text().splitlines() if line]
     finalization = validate_finalization(report, raw, chunks, records)
+    pointer_route = validate_pointer_route(records, report)
     bindings = {'raw_sha256': hashlib.sha256(raw).hexdigest(), 'report_sha256': hashlib.sha256(report_bytes).hexdigest(),
                 'preflight_sha256': hashlib.sha256(preflight_bytes).hexdigest(), 'host_head': report['host_head']}
     external = validate_external_exit(Path(outer_outcome) if outer_outcome else directory / 'raw-outcome.json', report['native_exit'], bindings)
@@ -541,7 +690,7 @@ def audit_artifacts(directory, outer_outcome=None):
     result['browser_cases_audited'] = 1
     result.update(raw_sha256=hashlib.sha256(raw).hexdigest(), raw_bytes=len(raw), report_sha256=hashlib.sha256(report_bytes).hexdigest(),
                   preflight_sha256=hashlib.sha256(preflight_bytes).hexdigest(), source_audit_script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                  preflight_schema=schema, finalization=finalization, external_node_exit=external)
+                  preflight_schema=schema, finalization=finalization, pointer_route=pointer_route, external_node_exit=external)
     return result
 
 

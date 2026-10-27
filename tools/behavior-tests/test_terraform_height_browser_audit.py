@@ -76,7 +76,7 @@ def protocol_fixture():
         events.extend([{'seq': fence - 2, 'kind': 'input.ingress', 'data': {'ingress': i, 'type': 'keydown'}},
                        {'seq': fence - 1, 'kind': 'input.dispatch', 'data': {'ingress': i, 'phase': 'begin', 'type': 'keydown', 'code': 'P', 'modifiers': 6}},
                        {'seq': fence, 'kind': 'input.dispatch', 'data': {'ingress': i, 'phase': 'end', 'handled': True}}])
-    records = [('TH_INPUTS', inputs, 0), ('TH_TRACE', {'events': events}, 1)]
+    records = [('TH_INPUTS', inputs, 0), ('TH_TRACE', {'enabled': True, 'dropped': 0, 'events': events}, 1)]
     records.extend(('TH_NATIVE', row, (i + 1) * 10) for i, row in enumerate(packets))
     records.append(('TH_RECEIPT', receipt, 55))
     report = {'native_input': copy.deepcopy(inputs), 'height_receipt': copy.deepcopy(receipt),
@@ -142,6 +142,32 @@ class AuditMutations:
                 if begins:
                     begins[0]['data']['code'] = 'Q'
                     break
+        self.reject()
+
+    def test_reject_disabled_lossy_or_wrong_type_trace(self):
+        for field, value in [('enabled', False), ('dropped', 1), ('dropped', False)]:
+            self.setUp()
+            next(v for k, v, _ in self.records if k == 'TH_TRACE')[field] = value
+            self.reject()
+
+    def test_reject_duplicate_reordered_and_gapped_trace_without_dict_overwrite(self):
+        for change in ('duplicate', 'reorder', 'gap'):
+            self.setUp(); events = next(v for k, v, _ in self.records if k == 'TH_TRACE')['events']
+            if change == 'duplicate': events.insert(1, copy.deepcopy(events[0]))
+            if change == 'reorder': events[0], events[1] = events[1], events[0]
+            if change == 'gap': events.append({'seq': events[-1]['seq'] + 2, 'kind': 'model-gap', 'data': {}})
+            self.reject()
+
+    def test_reject_bool_payer_revision_before_arithmetic(self):
+        for row in self.packets()[:5]:
+            payer = next(p['id'] for p in row['world']['players'] if p['raw_id'] == 0)
+            row['world']['terrain_trace']['player_details'][payer]['energy_revision'] = True
+        self.reject()
+
+    def test_reject_nonint_foreign_revision_even_when_unchanged(self):
+        for row in self.packets():
+            foreign = next(p['id'] for p in row['world']['players'] if p['raw_id'] == 1)
+            row['world']['terrain_trace']['player_details'][foreign]['energy_revision'] = 1.0
         self.reject()
 
     def test_reject_missing_world_policy(self):
@@ -279,9 +305,10 @@ def finalization_fixture():
     """Synthetic metadata envelope; never claimed to be a real engine run."""
     records, report = protocol_fixture()
     events = next(value['events'] for kind, value, _ in records if kind == 'TH_TRACE')
-    events.extend([{'seq': 19, 'kind': 'input.ingress', 'data': {'ingress': 7, 'type': 'keydown'}},
+    exit_events = [{'seq': 19, 'kind': 'input.ingress', 'data': {'ingress': 7, 'type': 'keydown'}},
                    {'seq': 20, 'kind': 'input.dispatch', 'data': {'ingress': 7, 'phase': 'begin', 'type': 'keydown', 'code': 'Q', 'modifiers': 6}},
-                   {'seq': 21, 'kind': 'input.dispatch', 'data': {'ingress': 7, 'phase': 'end', 'handled': True}}])
+                   {'seq': 21, 'kind': 'input.dispatch', 'data': {'ingress': 7, 'phase': 'end', 'handled': True}}]
+    records.append(('TH_TRACE', {'enabled': True, 'dropped': 0, 'events': exit_events}, 65))
     lines = []
     for kind, value, _ in sorted(records, key=lambda row: row[2]):
         encoded = json.dumps(json.dumps(value)) if kind == 'TH_TRACE' else json.dumps(value)
@@ -290,11 +317,15 @@ def finalization_fixture():
     raw = text.encode()
     records = audit.parse_records(raw)
     length = audit.utf16_length(text)
-    call = {'sequence': 1, 'channel': 'stdout', 'before_utf16': 0, 'after_utf16': length,
-            'message_utf16': length - 1, 'observed_ms': 1.0, 'runtime_out_bound': True,
-            'runtime_err_bound': True, 'runtime_callMain_present': True}
+    calls, offset = [], 0
+    for line in text.splitlines(keepends=True):
+        size = audit.utf16_length(line)
+        calls.append({'sequence': len(calls) + 1, 'channel': 'stdout', 'before_utf16': offset, 'after_utf16': offset + size,
+                      'message_utf16': size - 1, 'observed_ms': 1.0, 'runtime_out_bound': True,
+                      'runtime_err_bound': True, 'runtime_callMain_present': True})
+        offset += size
     callback = {'installed_before_runtime_capture': True, 'initial_text': '', 'initial_utf16': 0,
-                'calls': [call], 'first_callback': {**call, 'message': text[:-1]},
+                'calls': calls, 'first_callback': {**calls[0], 'message': text.splitlines()[0]},
                 'original_source': 'protocol log function', 'stdout_source': 'protocol stdout', 'stderr_source': 'protocol stderr'}
     barrier = {'kind': 'main', 'fetch_id': 'main-fetch', 'network_id': 'main-network', 'frame_id': 'frame',
                'continued': True, 'before_unmodified_runtime_response': True, 'continuation_acknowledged_node_ms': 2.0,
@@ -376,6 +407,22 @@ class FinalizationMutations:
         self.chunks[-1]['end_utf16'] += 1; self.reject()
         self.setUp(); self.report['log_transport']['retained_utf8'] += 1; self.reject()
 
+    def test_reject_missing_middle_callback_even_after_resequencing(self):
+        calls = self.report['native_log_configuration']['callbacks']['calls']
+        calls.pop(len(calls) // 2)
+        for i, call in enumerate(calls): call['sequence'] = i + 1
+        self.reject()
+
+    def test_reject_uncovered_callback_tail(self):
+        self.report['native_log_configuration']['callbacks']['calls'].pop()
+        self.reject()
+
+    def test_reject_exit_trace_carrier_after_fixture_exit_marker(self):
+        exit_line = next(i for i, line in enumerate(self.raw.decode().splitlines()) if 'TH_EXIT_REQUEST' in line)
+        self.records = [(kind, value, exit_line + 1 if kind == 'TH_TRACE' and any(e['data'].get('code') == 'Q' for e in value['events']) else line)
+                        for kind, value, line in self.records]
+        self.reject()
+
     def test_reject_missing_actual_q_dispatch(self):
         for kind, value, _ in self.records:
             if kind == 'TH_TRACE':
@@ -444,6 +491,149 @@ class ExternalOutcomeTests(unittest.TestCase):
                            lambda d: d.pop('tool_completion_result'), lambda d: d.update(browser_server_driver_reaped=False)):
                 mutated = copy.deepcopy(data); change(mutated); path.write_text(json.dumps(mutated))
                 with self.assertRaises((AssertionError, KeyError, TypeError)): audit.validate_external_exit(path, native, bindings)
+
+def pointer_route_fixture():
+    """Asset-free model of the same eight native widget/input protocol steps."""
+    records, report = protocol_fixture()
+    records = [row for row in records if row[0] != 'TH_TRACE']
+    report['native_input']['raise_rule']['order'] = 'Terraform UP'
+    for kind, value, _ in records:
+        if kind == 'TH_INPUTS': value['raise_rule']['order'] = 'Terraform UP'
+        if kind == 'TH_NATIVE':
+            value['ui']['viewport'] = {'width': 1024, 'height': 768}
+            if value['ui']['dialog'] is not None:
+                value['ui']['dialog'].update(choices=['Cancel action.', 'Expend 4 credits.'], source_choices=['Cancel action.', 'Expend $NUM0 credits.'])
+    events, pointers, allocated = [], [], set()
+    ingress = 0
+    bounds = {'area': 'effective', 'left': 20, 'top': 10, 'right': 100, 'bottom': 30, 'zindex': 0.5}
+
+    def emit(kind, target, data):
+        event = {'seq': len(events) + 1, 'kind': kind, 'target': target, 'data': data}
+        events.append(event)
+        return copy.deepcopy(event)
+
+    def query(checkpoint):
+        nonlocal ingress
+        ingress += 1
+        emit('input.ingress', 'input', {'type': 'keydown', 'ingress': ingress})
+        emit('input.dispatch', 'input', {'phase': 'begin', 'type': 'keydown', 'code': 'P', 'modifiers': 6, 'ingress': ingress})
+        end = emit('input.dispatch', 'input', {'phase': 'end', 'handled': True, 'ingress': ingress})
+        report['native_snapshots'][checkpoint]['query_after_native_key'] = end['seq']
+
+    def click(target, role, source, label):
+        nonlocal ingress
+        if target not in allocated:
+            emit('node.create', target, {'tag': '$button', 'parent': None})
+            emit('node.property', target, {'key': 'text', 'value': label})
+            emit('node.property', target, {'key': 'color', 'value': 'enabled-color'})
+            if role: emit('semantic.role', target, {'role': role, 'source': source})
+            emit('semantic.geometry', target, copy.deepcopy(bounds))
+            emit('node.show', target, {})
+            allocated.add(target)
+        fence = events[-1]['seq']
+        item = {'id': target, 'label': label, 'bounds': copy.deepcopy(bounds), 'x': 60, 'y': 20}
+        if role: item.update(role=role, source=source)
+        receipt = {'fence': fence, 'target': item, 'viewport': {'width': 1024, 'height': 768},
+                   'canvas_css_rect': {'x': 0, 'y': 0, 'width': 1024, 'height': 768}, 'css': {'x': 60, 'y': 20}}
+        receipt['hover'] = emit('input.ui-transition', target, {'type': 'mouseover', 'x': 60, 'y': 20})
+        for stem, event_type in [('down', 'mousedown'), ('up', 'mouseup')]:
+            ingress += 1
+            data = {'type': event_type, 'ingress': ingress, 'button': 1, 'x': 60, 'y': 20}
+            receipt[stem + '_ingress'] = emit('input.ingress', 'input', copy.deepcopy(data))
+            receipt[stem] = emit('input.dispatch', 'input', {**data, 'phase': 'begin'})
+            receipt['down_end' if stem == 'down' else 'end'] = emit('input.dispatch', 'input', {'phase': 'end', 'ingress': ingress, 'handled': True})
+        pointers.append(receipt)
+
+    query(0)
+    click('menu', None, None, 'MENU'); click('header', 'terraform-header', 'left_menu_terraform', 'TERRAFORM')
+    click('raise', 'terraform-row', 'raise', 'Terraform UP'); query(1)
+    click('cancel-ok', 'terraform-height-ok', 'confirm', 'OK'); query(2)
+    emit('node.destroy', 'cancel-ok', {})
+    click('header', 'terraform-header', 'left_menu_terraform', 'TERRAFORM'); click('raise', 'terraform-row', 'raise', 'Terraform UP'); query(3)
+    click('expend', 'terraform-height-choice', '1', 'Expend 4 credits.'); query(4)
+    click('confirm-ok', 'terraform-height-ok', 'confirm', 'OK'); query(5)
+    records.extend([('TH_HEADERS', [{'id': 'left_menu_terraform', 'label': 'TERRAFORM'}], 0),
+                    ('TH_ROWS', [{'id': 'raise', 'label': 'Terraform UP', 'enabled': True}], 0),
+                    ('TH_TRACE', {'enabled': True, 'dropped': 0, 'events': events}, 1)])
+    report['processed_pointers'] = pointers
+    return records, report
+
+
+class PointerRouteMutations:
+    def setUp(self):
+        self.records, self.report = copy.deepcopy(self.original_route)
+
+    def reject(self):
+        with self.assertRaises((AssertionError, KeyError, TypeError)):
+            audit.validate_pointer_route(self.records, self.report)
+
+    def mutate_actual_receipt(self, index, key, field, value):
+        row = self.report['processed_pointers'][index][key]
+        row['data'][field] = value
+        actual = next(event for kind, packet, _ in self.records if kind == 'TH_TRACE' for event in packet['events'] if event['seq'] == row['seq'])
+        actual['data'][field] = value
+
+    def test_valid_exact_physical_route_is_readonly(self):
+        before = copy.deepcopy((self.records, self.report))
+        self.assertEqual(audit.validate_pointer_route(self.records, self.report)['physical_clicks_verified'], 8)
+        self.assertTrue(audit.equal(before, (self.records, self.report)))
+
+    def test_reject_missing_empty_or_reordered_physical_route(self):
+        self.report['processed_pointers'] = []; self.reject()
+        self.setUp(); self.report['processed_pointers'].pop(); self.reject()
+        self.setUp(); rows = self.report['processed_pointers']; rows[2], rows[3] = rows[3], rows[2]; self.reject()
+
+    def test_reject_same_label_wrong_action_and_wrong_effective_bounds(self):
+        self.report['processed_pointers'][2]['target']['source'] = 'lower'; self.reject()
+        self.setUp(); self.report['processed_pointers'][2]['target']['bounds']['left'] += 1; self.reject()
+
+    def test_reject_mouseout_or_wrong_hover_node_with_report_and_raw_rebound(self):
+        self.mutate_actual_receipt(2, 'hover', 'type', 'mouseout'); self.reject()
+        self.setUp()
+        hover = self.report['processed_pointers'][2]['hover']; seq = hover['seq']; hover['target'] = self.report['processed_pointers'][0]['target']['id']
+        next(e for k, p, _ in self.records if k == 'TH_TRACE' for e in p['events'] if e['seq'] == seq)['target'] = hover['target']
+        self.reject()
+
+    def test_reject_wrong_ingress_point_or_incomplete_mouseup_even_with_raw_rebound(self):
+        self.mutate_actual_receipt(2, 'up_ingress', 'ingress', 999999); self.reject()
+        self.setUp(); self.mutate_actual_receipt(2, 'end', 'handled', False); self.reject()
+        self.setUp(); self.mutate_actual_receipt(2, 'up', 'x', -10); self.reject()
+
+    def test_reject_css_conversion_wrong_phase_and_query_window(self):
+        self.report['processed_pointers'][0]['css']['x'] += 1; self.reject()
+        self.setUp(); self.mutate_actual_receipt(2, 'up', 'type', 'mousedown'); self.reject()
+        self.setUp(); self.report['processed_pointers'][3]['fence'] = 0; self.reject()
+
+    def test_reject_wrong_expend_choice_or_disabled_source_row(self):
+        self.report['processed_pointers'][6]['target']['source'] = '0'; self.reject()
+        self.setUp()
+        for kind, rows, _ in self.records:
+            if kind == 'TH_ROWS':
+                for row in rows:
+                    if row['id'] == 'raise': row['enabled'] = False
+        self.reject()
+
+    def test_reject_native_disabled_widget_despite_enabled_source_packet(self):
+        target = self.report['processed_pointers'][2]['target']['id']
+        for kind, packet, _ in self.records:
+            if kind == 'TH_TRACE':
+                for event in packet['events']:
+                    if event.get('target') == target and event['kind'] == 'node.property' and event['data']['key'] == 'color': event['data']['value'] = 'black'
+        self.reject()
+
+
+class ProtocolPointerRouteTests(PointerRouteMutations, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls): cls.original_route = pointer_route_fixture()
+
+
+@unittest.skipUnless(os.environ.get('TERRAFORM_HEIGHT_CAPTURE'), 'Set capture for actual native pointer-route mutations')
+class ActualPointerRouteTests(PointerRouteMutations, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        directory = Path(os.environ['TERRAFORM_HEIGHT_CAPTURE'])
+        cls.original_route = (audit.parse_records((directory / 'application.log').read_bytes()), json.loads((directory / 'report.json').read_bytes()))
+
 
 class PreflightSchemaTests(unittest.TestCase):
     def setUp(self):
