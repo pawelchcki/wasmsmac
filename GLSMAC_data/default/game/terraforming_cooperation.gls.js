@@ -34,7 +34,9 @@ const prepare = (game,unit,action,required) => {
  }
  const identity = #json_text_exact({policy:policy,owner:unit.owner + 0,action:action,domain:unit.is_water ? 'water' : 'land',
   x:origin.x + 0,y:origin.y + 0,required_work:required,tiles:guards});
- if (#sizeof(identity) > 524288) { throw Error('Cooperative terrain identity exceeds the supported capacity'); }
+ // GSE #sizeof supports arrays, not Strings. The fixed <=4096 compact
+ // tuples are source-bounded below 512KiB; Native ValidWork enforces bytes
+ // authoritatively before storing metadata. No guessed string length API.
  const result = {job:{version:1,policy:policy,owner:unit.owner + 0,terrain_identity:identity}};
  result.patches = patches; return result;
 };

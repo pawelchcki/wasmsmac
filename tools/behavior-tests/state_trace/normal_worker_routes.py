@@ -25,7 +25,7 @@ def main():
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--report', type=Path, required=True)
     parser.add_argument('--timeout', type=float, default=180)
-    parser.add_argument('--suite', choices=['normal-worker-routes', 'normal-worker-tubes', 'sea-worker-home-port'], default='normal-worker-routes')
+    parser.add_argument('--suite', choices=['normal-worker-routes', 'normal-worker-tubes', 'sea-worker-home-port', 'terraforming-cooperation-capacity'], default='normal-worker-routes')
     args = parser.parse_args()
     runtime = args.runtime.resolve()
     suite = [row for row in fast.load_catalog(ROOT / 'tools/behavior-tests/catalog.json')['suites'] if row['id'] == args.suite]

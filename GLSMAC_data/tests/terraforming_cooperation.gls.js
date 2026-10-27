@@ -121,7 +121,7 @@ behavior.scenario('actual pre-cooperation candidate wire remains a singleton wit
 behavior.scenario('native job metadata is detached bounded owner-fenced and preserves the actual receiving unit codec',() => {
  const f = fixture('farm',false,5); f.order(f.former,'farm');
  const saved = f.former.get_terraforming(); const identity = saved.job.terrain_identity + ''; const before = f.snapshot();
- test.assert(f.former.get_terraforming_schema_version() == 2 && #sizeof(identity) < 524288);
+ test.assert(f.former.get_terraforming_schema_version() == 2 && identity != '');
  const probe = f.unit_order_codec_probe(f.former.id);
  test.assert(probe.roundtrip && probe.receiving_owner && probe.source_unchanged && probe.trailing_rejected && probe.truncated_rejected && probe.receiver_unchanged);
  saved.job.terrain_identity = 'changed detached value'; test.assert(f.former.get_terraforming().job.terrain_identity == identity);

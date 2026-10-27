@@ -129,3 +129,13 @@ Same-action exhausted resume requires the actual current job identity; a stale
 paused order rejects before activation. Peer receipt capture materializes the
 native Float without arithmetic normalization, preserving negative-zero bits
 through true completion undo. New regression inputs exercise all three cases.
+
+The actual GSE `#sizeof` accepts arrays only. No production string-size call or
+new global builtin is introduced. Native `ValidWork` enforces the actual byte
+limit; the fixed tuple shape and native patch/dimension/type limits bound pure
+preflight. The capacity test retains its exact native JSON identity string for
+independent Python UTF-8 byte measurement in the full raw log. The existing
+measurement runner accepts the real `terraforming-cooperation-capacity` catalog
+ID and preserves that complete log/runtime/source/RSS binding. Its typed native
+transport test pads the actual identity to the exact documented byte boundary,
+checks exact readback, and rejects one additional byte without mutation.
