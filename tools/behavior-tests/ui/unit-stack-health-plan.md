@@ -4,8 +4,9 @@ This is a source-only follow-up to the verified Hold cache repair at
 `b6a80a056cee421e7c6a1bb727664939052c7c2f`. It adds test-only files on a separate
 branch. It changes no production Default, C++, existing witness, expected
 selection policy, shared browser helper or current PR delivery head. The small
-backend sanity below has executed. No browser, new build or original game has
-executed this health-ranking case.
+backend sanity and first controlled frontend case have now executed; their
+bounded results and retained driver/optional-frame failures are recorded in the
+[proof](unit-stack-health-proof-v1.md). No new build or original health case ran.
 
 ## Health fixture and acceptance
 
@@ -128,7 +129,7 @@ Retained provenance and corrected audit are under
 `/tmp/unit-stack-health-native-v1/`. No combat or frontend result follows from
 this bounded backend evidence.
 
-`unit-stack-health-browser.test.mjs` is the new pending launcher. It mounts the
+`unit-stack-health-browser.test.mjs` is the dedicated launcher. It mounts the
 exact shared control, fixture and existing observers and reuses the canonical
 CDP/log/cursor helpers unchanged. It requires actual normal APP exit0, one main
 and eight worker acknowledgements, canonical out/err/callMain binding, closed
@@ -137,8 +138,11 @@ and evaluating a complete HUD result. It preserves complete guarded matches and
 mismatches separately from setup/guard failures. The overall Node budget is
 180s, with the same bounded 120s native observation window. Inputs are native
 tile selection, the declared registered health event and native reselection;
-there are zero physical game inputs or combat actions. No browser execution is
-claimed by the native sanity or pure tests.
+there are zero physical game inputs or combat actions. Its first actual run on
+`a07652c8` passed Node0/APP0 with exact guarded HUD B9 agreement in100.394s.
+An optional post-exit screenshot timed out on the hidden canvas; that diagnostic
+failure remains explicit and no frame/pixel agreement is claimed. The native
+sanity and pure tests add no browser execution credit of their own.
 
 Before a live case: independent source review, native fixture scalar/event sanity
 where supported, exact source/Default/runtime/asset/helper pins and an exclusive
@@ -174,6 +178,14 @@ monotonic observation timestamp. A completion packet should distinguish final
 coordinate update, frontend tile membership update, animation-finished send and
 backend acknowledgement. Do not read the world while mutation/dispatch is in
 progress; keep complete native state checkpoints independent of render packets.
+
+Use the existing moving record/native animation ID for the action association
+through the final coordinate update. `Scroller::HasTicked` stops its timer on
+the last tick before `Unit::Iterate` calls `SetRenderCoords`, so `IsMoving()`
+alone would misclassify that last movement position. `UnitManager` still owns
+the record until the later tile-membership/finish-send boundary. This is a
+source-only instrumentation constraint, not an observed trajectory defect or
+permission to change movement handling.
 
 This is a telemetry proposal only. Its instrumentation seam, overhead, lifetime,
 native source compatibility and exact event causality still require separate
