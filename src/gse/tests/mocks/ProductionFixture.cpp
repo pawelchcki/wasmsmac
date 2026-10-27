@@ -1240,6 +1240,8 @@ struct ProductionFixture : gc::Object {
 		const bool held = received && received->GetOrder() == backend::unit::order_t::HOLD && !received->NeedsOrders();
 		const bool sentry = received && received->GetOrder() == backend::unit::order_t::SENTRY && !received->NeedsOrders();
 		const bool receiving_owner = received && received->m_owner == receiving->owner->GetSlot() && received->m_def->m_moraleset == receiving->game.m_um->GetMoraleSet( "SYNTHETIC" );
+		const bool canonical_owner = received && received->m_owner == &receiving->state->m_slots->GetSlot( source->m_owner->GetIndex() );
+		const bool canonical_morale = received && received->m_def->m_moraleset == receiving->game.m_um->GetMoraleSet( source->m_def->m_moraleset->m_id );
 		const bool combat_received = received && received->m_def->GetCombat() == source->m_def->GetCombat();
 		// This is the exact pre-order candidate Unit payload, not an original
 		// savefile. The enclosing manager length-delimits each such payload.
@@ -1287,6 +1289,7 @@ struct ProductionFixture : gc::Object {
 			{ "roundtrip", VALUE( value::Bool,, roundtrip ) }, { "held", VALUE( value::Bool,, held ) }, { "sentry", VALUE( value::Bool,, sentry ) },
 			{ "receiving_owner", VALUE( value::Bool,, receiving_owner ) }, { "legacy_default", VALUE( value::Bool,, legacy_default ) },
 			{ "combat_received", VALUE( value::Bool,, combat_received ) },
+			{ "canonical_owner", VALUE( value::Bool,, canonical_owner ) }, { "canonical_morale", VALUE( value::Bool,, canonical_morale ) },
 			{ "invalid_rejected", VALUE( value::Bool,, invalid_rejected ) }, { "trailing_rejected", VALUE( value::Bool,, trailing_rejected ) },
 			{ "truncated_rejected", VALUE( value::Bool,, truncated_rejected ) }, { "receiver_unchanged", VALUE( value::Bool,, receiver_unchanged ) },
 			{ "invalid_work_rejected", VALUE( value::Bool,, invalid_work_rejected ) },
