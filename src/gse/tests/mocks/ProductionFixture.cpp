@@ -855,17 +855,22 @@ struct ProductionFixture : gc::Object {
 		auto valid = backend::map::Map::LoadWorldTerrain( &game, valid_input, false );
 		const bool preserved = valid && valid->GetTilesPtr()->Serialize().ToString() == valid_bytes;
 		bool raw_preserved = true, rejected = true;
-		for ( const int64_t absent : { int64_t( 0 ), int64_t( 7 ) } ) {
+		// Economy fixtures register both slots 0 and 1. Neither 2 nor 7
+		// belongs to that roster, and both rejection paths must execute.
+		for ( const int64_t absent : { int64_t( 2 ), int64_t( 7 ) } ) {
 			const auto bytes = wire( absent ).ToString(); auto input = types::Buffer( bytes );
 			auto detached = std::unique_ptr< backend::map::Map >( new backend::map::Map( &game, false ) );
 			raw_preserved = raw_preserved && detached->LoadFromBuffer( input ) == backend::map::Map::EC_NONE && detached->GetTilesPtr()->Serialize().ToString() == bytes;
 			auto live_input = types::Buffer( bytes );
-			rejected = rejected && !backend::map::Map::LoadWorldTerrain( &game, live_input, false );
+			const bool rejected_owner = !backend::map::Map::LoadWorldTerrain( &game, live_input, false );
+			rejected = rejected_owner && rejected;
 		}
 		auto legacy_input = types::Buffer( before );
 		auto legacy = backend::map::Map::LoadWorldTerrain( &game, legacy_input, false );
 		const bool unknown_preserved = legacy && legacy->GetTilesPtr()->Serialize().ToString() == before;
-		auto malformed = types::Buffer( valid_bytes.substr( 0, valid_bytes.size() - 1 ) );
+		// Truncate inside a tile, rather than removing only the legacy
+		// validation footer which Tiles::Deserialize deliberately ignores.
+		auto malformed = types::Buffer( valid_bytes.substr( 0, valid_bytes.size() / 2 ) );
 		const bool malformed_rejected = !backend::map::Map::LoadWorldTerrain( &game, malformed, false );
 		const auto prefix = g_engine->GetConfig()->GetPrefix(); util::FS::CreateDirectoryIfNotExists( prefix );
 		const auto path = prefix + "/fixture-construction-owner-import.gsm";
