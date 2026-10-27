@@ -242,3 +242,14 @@ application suite passes 24/136, resource-source checks 17/48. These are bounded
 controlled-world checks. Independent seven-owner whole-world observation passed
 ten stages using exact native JSON, resolving the earlier GSE encoding OOM; that
 observer proof does not itself establish the new actions' all-owner parity.
+
+Construction-owner transport has two distinct application modes. A reusable
+`.gsm` terrain import (including map-only debug startup) has no saved roster
+mapping, so every construction owner becomes Unknown (`-1`); all physical
+terrain and enhancement flags are retained. Detached tile/map decoding and
+in-memory clones preserve the encoded owners. A full world snapshot uses
+`Map::LoadWorldTerrain` after its canonical player slots have been restored:
+unknown owners remain unknown, registered player owners are retained, and an
+empty or absent referenced slot rejects the candidate before the active map is
+published. This is an application ownership policy, not original-game border or
+conquest agreement.
