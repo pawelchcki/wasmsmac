@@ -59,11 +59,23 @@
     "full_pass_claim": false
   },
   "unresolved": [
-    "Hot UI and regression failures require a fresh corrected-head CI run",
-    "Disband strict shutdown failure despite completed body assertions",
-    "Capacity timeout after stage3 END, without cleanup/completion footer",
-    "Height and Sea real-browser visual acceptance",
+    "Focused disband packet7/47 and exclusive capacity1/11 repairs require fresh final-head mandatory CI",
+    "Height and Sea wider real-browser visual acceptance remain outside passing scope",
     "Clean final-head review and all applicable fresh-head gates"
   ],
-  "original_passing_cases": 0
+  "original_passing_cases": 0,
+  "subsequent_verified_run": {
+    "head": "9f97267194ea898452a4da59865dd5b5cfb65e3d",
+    "run": 40528235153,
+    "job": 122273785189,
+    "artifact_id": 12748482221,
+    "artifact_sha256": "8f1211f15393bb78f8f8fe679bba0fa1daf9a2a01ee61e1f510b8f5f7c264dd9",
+    "independently_replayed": "36/680 and cooperative1/532; every raw native exit0/footer/fulltypedfields",
+    "audit_paths": [
+      "/tmp/terraform-pr35-cloud-full36-audit-9f972671.json",
+      "/tmp/terraform-pr35-cloud-cooperative-audit-9f972671.json"
+    ],
+    "hot_ui": "completeSUCCESS44/44",
+    "hot_regression": "74/76 passed; disband/capacity failures retained"
+  }
 }

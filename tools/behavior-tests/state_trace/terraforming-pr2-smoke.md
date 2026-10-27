@@ -97,10 +97,19 @@ Height payment/mesh refresh and naval browser flows remain separate gates from
 the passing controls check. The browser fixture uses native managers at
 `start_ui`, actual source-backed city projects, SDL/pointer delivery and complete
 raw snapshots. Its retained initial fixture/protocol failures are not passes.
-Current Hot CI still exposes strict disband shutdown and capacity cleanup
-failures. Completed body assertions or stage END messages do not establish a
-passing process/footer. A private-v6 capacity pass does not replace a failing
-cloud-runtime check; fresh final-head CI and clean review remain required.
+The retained `9f972671` Hot run passed 74/76 regressions and the complete UI lane;
+its disband shutdown and capacity timeout failures remain recorded. The final
+focused repairs now pass against that exact cloud binary. Disband keeps its
+original seven bodies and 47 assertions, requires all three independently
+completed packets and retains each raw footer/exit; see
+[the packet contract and proof](grouped-disband-lifecycle.md). Capacity keeps the
+same world, 4,096-patch plan, exact 512 KiB boundary checks, 120-second worker
+limit and 2 GiB heap, while declared exclusive scheduling drains peer workers.
+Its official `--jobs 2 --timeout 120` check passes 1/11 with raw exit zero and
+the requested/effective worker policy recorded; see
+[the resource proof](capacity-shutdown-observation.md). Historical CI timing
+causation is not established. Fresh final-head CI and clean review remain
+required; completed body assertions alone never count as a passing process.
 Real work-animation binding, recorded original fee/height/contour/climate
 mismatches, unmeasured general original formulas/priorities, full audio and
 typography remain explicit fidelity gaps. Original passing action cases stay zero.
