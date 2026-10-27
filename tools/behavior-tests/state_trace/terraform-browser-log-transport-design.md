@@ -166,3 +166,14 @@ executes. Twenty-five pure tests pass, including delayed acknowledgement,
 stop-during-installation and bounded rejection of unknown requests; no actual CDP Fetch or candidate proof
 is claimed yet. `runtime-fetch-barrier-diagnostic.mjs` stages the next NO-WASM
 proof using only a tiny configuration/worker model, never the runtime bytes.
+
+The first actual Fetch proof established and acknowledged main installation,
+then correctly remained failed: worker Fetch reports `Other` while its linked
+Network event reports `Script`. The saved actual records in
+`fixtures/runtime-fetch-observations.json` bind that failed report's SHA256.
+The correction checks Fetch `Script` only on the positively identified main
+role and Fetch `Other` only after exact live worker Target/parent linkage.
+Unknown `Other` alone still waits and rejects. Twenty-six pure tests now cover
+these actual records, mismatched role types and stale/wrong-loader negatives.
+The failed NO-WASM report remains `/tmp/terraform-runtime-fetch-proof`; a
+separate reproof is required before any candidate run.

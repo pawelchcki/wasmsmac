@@ -14,13 +14,14 @@ export class RuntimeFetchEvidence{
   assert.ok(paused.networkId,'Runtime request lacks exact CDP networkId');
   assert.ok(!this.used.has(paused.requestId),'Runtime Fetch pause was already consumed');
   assert.ok(!this.usedNetwork.has(paused.networkId),'Runtime network request was already consumed');
-  assert.equal(paused.request.url,this.runtimeURL);assert.equal(paused.resourceType,'Script');
+  assert.equal(paused.request.url,this.runtimeURL);
   const net=this.network.get(paused.networkId);if(!net||!this.frame)return null;
   assert.equal(net.request.url,paused.request.url);assert.equal(net.type,'Script');
   assert.equal(net.frameId,paused.frameId);assert.equal(paused.frameId,this.frame.id,'Runtime fetch must belong to the current main document');
   if(this.destroyed.has(paused.networkId))throw Error('Runtime worker target was destroyed');
   const target=this.targets.get(paused.networkId);
   if(target){
+   assert.equal(paused.resourceType,'Other','Pinned Chromium identifies dedicated-worker Fetch pauses as Other');
    assert.equal(target.type,'worker','Only a live dedicated-worker target may bypass main installation');
    assert.equal(target.parentFrameId,this.frame.id);assert.ok(!target.url||target.url===paused.request.url);
    assert.ok(this.mainInstalled,'Worker runtime cannot precede the acknowledged main installation');
@@ -30,6 +31,7 @@ export class RuntimeFetchEvidence{
   const frames=net.initiator?.stack?.callFrames??[];
   const bootstrap=frames.some(f=>f.url===this.bootstrapURL&&f.functionName==='loadApplication');
   if(bootstrap){
+   assert.equal(paused.resourceType,'Script','Main bootstrap runtime Fetch pause must be Script');
    if(net.loaderId!==this.frame.loaderId)return null;
    assert.ok(!this.mainInstalled,'Main runtime may be installed only once');
    return{kind:'main',fetch_id:paused.requestId,network_id:paused.networkId,frame_id:paused.frameId,loader_id:net.loaderId,bootstrap_initiator:net.initiator};
