@@ -108,7 +108,7 @@ def run_packets(suite, runtime, snapshot, temporary, timeout, node, worker):
     started = time.perf_counter()
     result = {key: suite[key] for key in ("id", "script", "domains", "evidence")}
     result.update(status="failed", packets=[], per_packet_timeout_s=timeout,
-                  logical_timeout_ceiling_s=timeout * len(suite["packets"]["parts"]))
+                  worker_timeout_budget_s=timeout * len(suite["packets"]["parts"]))
     logs = []
     try:
         paths = {"runtime_js_sha256": Path(runtime), "runtime_wasm_sha256": Path(runtime).with_suffix(".wasm"),
@@ -177,7 +177,9 @@ def run_suite(suite, runtime, snapshot, temporary, timeout, node="node", worker=
         result.update(parse_output(output), status="passed")
     except subprocess.TimeoutExpired as error:
         result["timed_out"] = True
-        output = (error.stdout or b"").decode("utf-8", errors="replace") if isinstance(error.stdout, bytes) else (error.stdout or "")
+        def captured(value):
+            return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else (value or "")
+        output = captured(error.stdout) + captured(error.stderr)
         result["reason"] = f"timeout after {timeout} seconds"
     except (OSError, ProtocolError) as error:
         result["reason"] = str(error)

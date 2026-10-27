@@ -77,7 +77,8 @@ class PacketWorkerTests(unittest.TestCase):
                 'r=json.load(sys.stdin)\n'
                 "with (Path(r['snapshot']).parent/'started.jsonl').open('a') as f: f.write(json.dumps(r)+'\\n')\n"
                 f'outputs={outputs!r}\nmode={mode!r}\n'
-                "if mode=='timeout' and r['script'].endswith('_next.gls.js'): time.sleep(2)\n"
+                "if mode=='timeout' and r['script'].endswith('_next.gls.js'):\n"
+                "    print('timeout-stderr-sentinel',file=sys.stderr,flush=True); time.sleep(2)\n"
                 "if mode=='mutate': Path(r['runtime']).write_text('changed')\n"
                 "print(outputs[r['script']],end='',flush=True)\n"
                 "if mode=='crash' and r['script'].endswith('_next.gls.js'): raise SystemExit(3)\n")
@@ -95,7 +96,7 @@ class PacketWorkerTests(unittest.TestCase):
         self.assertEqual((result['scenarios'], result['assertions']), (4, 4))
         self.assertEqual([start['script'] for start in starts], [part['script'] for part in contract()['packets']['parts']])
         self.assertEqual(result['per_packet_timeout_s'], 0.2)
-        self.assertAlmostEqual(result['logical_timeout_ceiling_s'], 0.6)
+        self.assertAlmostEqual(result['worker_timeout_budget_s'], 0.6)
         for packet in result['packets']:
             self.assertEqual(packet['process_returncode'], 0)
             self.assertEqual(packet['raw_log_sha256'], hashlib.sha256(packet['log'].encode()).hexdigest())
@@ -140,6 +141,7 @@ class PacketWorkerTests(unittest.TestCase):
                 if mode == 'timeout':
                     self.assertTrue(result['packets'][-1]['timed_out'])
                     self.assertIsNone(result['packets'][-1]['process_returncode'])
+                    self.assertIn('timeout-stderr-sentinel', result['packets'][-1]['log'])
         result, starts = self.run_packets(missing=contract()['packets']['parts'][1]['script'])
         self.assertEqual(result['status'], 'failed', result)
         self.assertEqual(len(starts), 1)
