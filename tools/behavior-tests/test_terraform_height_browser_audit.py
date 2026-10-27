@@ -621,6 +621,21 @@ class PointerRouteMutations:
                     if event.get('target') == target and event['kind'] == 'node.property' and event['data']['key'] == 'color': event['data']['value'] = 'black'
         self.reject()
 
+    def test_reject_bool_buttons_and_dispatch_ingress_despite_numeric_equality(self):
+        for stem in ('down', 'up'):
+            self.setUp()
+            self.mutate_actual_receipt(2, stem + '_ingress', 'button', True)
+            self.mutate_actual_receipt(2, stem, 'button', True)
+            self.reject()
+            self.setUp()
+            # Keep the actual/report copies coherent: the Int ingress1 and
+            # Bool dispatch IDs compare equal in Python but have distinct
+            # native types. Equality must not accept that counterexample.
+            self.mutate_actual_receipt(2, stem + '_ingress', 'ingress', 1)
+            self.mutate_actual_receipt(2, stem, 'ingress', True)
+            self.mutate_actual_receipt(2, 'down_end' if stem == 'down' else 'end', 'ingress', True)
+            self.reject()
+
 
 class ProtocolPointerRouteTests(PointerRouteMutations, unittest.TestCase):
     @classmethod

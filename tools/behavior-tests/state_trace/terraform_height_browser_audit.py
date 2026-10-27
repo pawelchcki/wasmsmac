@@ -627,7 +627,9 @@ def validate_pointer_route(records, report):
             assert ingress['kind'] == 'input.ingress' and ingress['data']['type'] == event_type
             assert begin['kind'] == 'input.dispatch' and begin['data']['phase'] == 'begin' and begin['data']['type'] == event_type
             assert end['kind'] == 'input.dispatch' and end['data']['phase'] == 'end' and end['data']['handled'] is True
-            assert type(ingress['data']['ingress']) is int and ingress['data']['ingress'] == begin['data']['ingress'] == end['data']['ingress']
+            assert all(type(event['data']['ingress']) is int for event in [ingress, begin, end])
+            assert ingress['data']['ingress'] == begin['data']['ingress'] == end['data']['ingress']
+            assert type(ingress['data']['button']) is int and type(begin['data']['button']) is int
             assert ingress['data']['button'] == begin['data']['button'] == 1
             assert inside(begin['data'], bounds)
             assert (ingress['data']['x'], ingress['data']['y']) == (begin['data']['x'], begin['data']['y'])
