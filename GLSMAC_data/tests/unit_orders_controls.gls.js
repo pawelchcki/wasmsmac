@@ -7,6 +7,9 @@ const preview = #include('../default/ui/parts/game/bottom_bar/object_preview');
 const fixture = () => {
 	const f = {};
 	f.native = test.founding_fixture();
+	// Normal configure_game supplies these rules before mounting the panel.
+	// Preserve the real native nonworker definitions and authoritative policy.
+	f.native.game.set('terraforming_rules', #include('../default/game/terraforming_rules').parse(test.parse_smac_text(#include('./_terraform_action_source'), 'rules')));
 	f.native.with_write(() => {
 		f.native.game.um.despawn_unit(f.native.unit_id);
 		const data = { def: 'Scout', health: 1.0, morale: 2 };
@@ -21,6 +24,10 @@ const fixture = () => {
 	f.game.get_player = () => { return f.native.owner; };
 	f.game.get_settings = () => { return f.native.game.get_settings(); };
 	f.game.get_turn = () => { return f.native.game.get_turn(); };
+	f.game.is_started = () => { return f.native.game.is_started(); };
+	f.game.is_turn_complete = (caller) => { return f.native.game.is_turn_complete(caller); };
+	f.game.get = (key) => { return f.native.game.get(key); };
+	f.game.get_players = () => { return f.native.game.get_players(); };
 	f.game.event = (name, data) => {
 		const request = { name: name }; request.data = data;
 		f.state.queued :+ request;
