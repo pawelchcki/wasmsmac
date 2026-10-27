@@ -4,6 +4,7 @@
 const behavior = #include('./_behavior');
 const effects = #include('../default/game/terraforming_effects');
 const cooperation = #include('../default/game/terraforming_cooperation');
+const efficiencies = [];
 const measured = (tm) => {
  const counters = {geometry:0,tiles:0,full:0,validation:0,validated:null};
  const reads = {
@@ -37,8 +38,7 @@ for (outlet of ['west','north']) {
   test.assert(#json_text_exact(job.patches) == expected_patches && group.counts.validation == 1);
   #print('AQUIFER_PLAN_PARITY|' + #json_text_exact({version:1,outlet:outlet,validation_patch_json:expected_patches,plan_patch_json:actual_patches,job_identity:job.job.terrain_identity,
    baseline_geometry:baseline.counts.geometry,baseline_features:baseline.counts.tiles,plan_geometry:current.counts.geometry,plan_features:current.counts.tiles,plan_validations:current.counts.validation}));
-  test.assert(current.counts.geometry == baseline.counts.geometry && current.counts.tiles == baseline.counts.tiles,
-   'Planning performs the same one route search and feature materialization as standalone native validation');
+  efficiencies :+ {outlet:outlet,baseline_geometry:baseline.counts.geometry,baseline_features:baseline.counts.tiles,plan_geometry:current.counts.geometry,plan_features:current.counts.tiles};
   test.assert(f.snapshot() == before && f.terrain_snapshot() == terrain && #json_text_exact(f.inspect()) == inventory);
   const state = tm.get_terrain_state(2,2); state.features.river = true;
   f.with_write(() => { tm.apply_terrain([{x:2,y:2,features:state.features}],[]); });
@@ -49,3 +49,11 @@ for (outlet of ['west','north']) {
   test.assert(denied && f.snapshot() == invalid_before && rejected.counts.validation == 0);
  });
 }
+// Keep both actual old/new byte records before the efficiency failure boundary.
+behavior.scenario('planning never repeats the route already checked by native validation',() => {
+ test.assert(#sizeof(efficiencies) == 2);
+ for (result of efficiencies) {
+  test.assert(result.plan_geometry == result.baseline_geometry && result.plan_features == result.baseline_features,
+   'Planning performs the same one route search and feature materialization as standalone native validation');
+ }
+});
