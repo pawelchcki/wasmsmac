@@ -21,6 +21,7 @@
 #include "gse/tests/Tests.h"
 #include "gse/ExecutionPointer.h"
 #include "game/backend/Game.h"
+#include "game/backend/Player.h"
 #include "game/backend/settings/Settings.h"
 #include "game/backend/technology/Bindings.h"
 #include "game/backend/technology/Serialization.h"
@@ -94,7 +95,15 @@ static Value* MakeRulesFixture( GSE_CALLABLE, const std::shared_ptr< RulesFixtur
 void Test::AddMocks( gc::Space* const gc_space, context::GlobalContext* ctx, const test_info_t& test_info ) {
 	const auto rules_fixtures = std::make_shared< std::vector< std::shared_ptr< RulesFixture > > >();
 	auto* production_roots = VALUE( value::Array,, value::array_elements_t{} );
+	const auto legacy_players = std::make_shared< std::vector< std::shared_ptr< game::backend::Player > > >();
 	value::object_properties_t mocks = {
+		{ "legacy_energy_player", NATIVE_CALL( legacy_players ) {
+			N_EXPECT_ARGS( 0 ); types::Buffer wire;
+			wire.WriteString( "Legacy viewer" ); wire.WriteInt( game::backend::Player::PR_SINGLE );
+			wire.WriteBool( false ); wire.WriteString( "Citizen" ); wire.WriteInt( 0 );
+			auto player = std::make_shared< game::backend::Player >( wire ); legacy_players->push_back( player );
+			return player->Wrap( GSE_CALL );
+		} ) },
 		{ "json_codec_inputs", NATIVE_CALL() {
 			N_EXPECT_ARGS( 0 );
 			std::string controls; for ( int index = 0; index < 32; ++index ) { controls.push_back( char( index ) ); }

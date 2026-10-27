@@ -78,6 +78,7 @@ CLASS2( Player, types::Serializable, gse::Wrappable )
 	bool IsEnergyInitialized() const { return m_energy_initialized; }
 	int64_t GetEnergyCredits() const { return m_energy_credits; }
 	int64_t GetEnergyIncomeTurn() const { return m_energy_income_turn; }
+	int64_t GetEnergyRevision() const { return m_energy_revision; }
 	int64_t ChangeEnergy( GSE_CALLABLE, int64_t delta, int64_t expected, int64_t turn, bool income = false );
 	void RollbackEnergy( GSE_CALLABLE, int64_t receipt );
 

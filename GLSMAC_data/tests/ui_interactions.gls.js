@@ -667,4 +667,5 @@ scenario('native faction rejection preserves an edited name through error back n
 	expect(f.state.attempts == [['CONSCIOUSNESS', 'Orbit Pilot'], ['CONSCIOUSNESS', 'Orbit Pilot']], 'retry uses retained choice and name');
 });
 
-expect(cases == 61, 'all interaction scenarios executed');
+#include('./_energy_hud_native')(scenario);
+expect(cases == 64, 'all interaction scenarios executed');

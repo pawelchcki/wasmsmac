@@ -19,7 +19,7 @@ void Game::FlushEnergyChanges() {
 	State* state; uint64_t generation;
 	{ std::lock_guard guard( m_startup_mutex ); state = m_state; generation = m_startup_generation; }
 	if ( pending.empty() || !state ) { return; }
-	state->WithGSE( state, [ game = this, state, generation, pending = std::move( pending ) ]( GSE_CALLABLE ) {
+	state->WithGSE( this, [ game = this, state, generation, pending = std::move( pending ) ]( GSE_CALLABLE ) {
 		{ std::lock_guard guard( game->m_startup_mutex ); if ( game->m_state != state || game->m_startup_generation != generation ) { return; } }
 		if ( state->GetGame() != game ) { return; }
 		// Delivery happens after the authoritative receipt has been sealed.
@@ -35,12 +35,14 @@ void Game::FlushEnergyChanges() {
 			const auto id = static_cast< int64_t >( entry.first );
 			const auto credits = player->GetEnergyCredits(), income_turn = player->GetEnergyIncomeTurn();
 			const auto initialized = player->IsEnergyInitialized();
+			const auto revision = player->GetEnergyRevision();
 			try {
-				game->Trigger( GSE_CALL, "energy_changed", ARGS_F( id, credits, income_turn, initialized ) {
+				game->Trigger( GSE_CALL, "energy_changed", ARGS_F( id, credits, income_turn, initialized, revision ) {
 					{ "player_id", VALUE( gse::value::Int,, id ) },
 					{ "credits", VALUE( gse::value::Int,, credits ) },
 					{ "last_income_turn", VALUE( gse::value::Int,, income_turn ) },
 					{ "initialized", VALUE( gse::value::Bool,, initialized ) },
+					{ "revision", VALUE( gse::value::Int,, revision ) },
 				}; } );
 			} catch ( const std::exception& error ) {
 				game->MTModule::Log( "Energy view listener failed: " + std::string( error.what() ) );

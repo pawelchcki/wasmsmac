@@ -377,6 +377,11 @@ WRAPIMPL_BEGIN( Player )
 		return VALUE( gse::value::Undefined );
 	};
 	WRAPIMPL_PROPS
+			{ "get_energy_revision", NATIVE_CALL( handle = m_energy_handle ) {
+				N_EXPECT_ARGS( 0 ); auto* player = *handle;
+				if ( !player ) { GSE_ERROR( gse::EC.INVALID_CALL, "Player no longer exists" ); }
+				return VALUE( gse::value::Int,, player->GetEnergyRevision() );
+			} ) },
 			{ "validate_energy_rollback_sequence", NATIVE_CALL( energy_sequence ) {
 				N_EXPECT_ARGS( 1 ); N_GETVALUE( tokens, 0, Array ); return energy_sequence( GSE_CALL, tokens, false );
 			} ) },
