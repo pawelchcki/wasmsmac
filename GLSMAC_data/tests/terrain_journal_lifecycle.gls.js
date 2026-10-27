@@ -3,6 +3,16 @@ const behavior = #include('./_behavior');
 const shipped = #include('../default/game/event/unit_terraform');
 const fixture = (rate) => {
  const f = #include('./_former_work_fixture')('arid');
+ // EnableEconomy deliberately selects native player0, while the inherited
+ // manual-work fixture's actor belongs to player1. Author this event actor
+ // for the actual controlled owner; never bypass the shipped owner guard.
+ const actor_tile = f.former.get_tile(); const old_id = f.former.id + 0;
+ f.owner = f.game.get_player();
+ f.with_write(() => {
+  f.game.get_um().despawn_unit(old_id);
+  const data = {def:'Formers',health:1.0,morale:2}; data.owner = f.owner; data.tile = actor_tile;
+  f.former = f.game.get_um().spawn_unit(data);
+ });
  f.game.get_settings().global.rules.set_terraforming_ignore_technologies(true);
  const rows = test.parse_smac_text(#include('./_terraform_action_source'),'rules').rows('TERRAIN');
  for (row of rows) { row[4] = #to_string(rate); }
