@@ -1,0 +1,118 @@
+# First coastal SeaFormer height browser case (source preparation)
+
+Status: **source-only; no engine/browser execution and zero passing cases**.
+This follow-on adds new files on `test/terraform-sea-height-browser`, based on
+land proof35ab8e71. It changes no production, shared browser helper, catalog,
+workflow, reference observation or existing land proof. Delivery owns subsequent
+clean port/registration/PR; a live run requires a separate exclusive grant.
+
+The minimum case is actual **Raise Sea Floor while the square remains sea**.
+It does not attempt flooding, emergence, stranded-worker recovery or victim
+handling. Those scenarios have distinct safety contracts and remain pending.
+A generic civilian portrait is not naval art/facing fidelity.
+
+## Declared inputs and source authorities
+
+The intended baseline is local immutable v6: native tree
+`115032ffc7f53ff7f0c3a9f997da12674e25e643`, Default tree
+`25ef18d3222f553507291d412330262169b2e418`, JS
+`e71036c9365a3ac87bf818e7eb49fb2344077a15aa6836371a436572cedf7f82`, WASM
+`b2c7fa273042f2407335169eb4fca51f131f1f30656301d7b7573a201b28f5b7`.
+Graphics native829/v7 is separate and is not implicitly substituted.
+
+The requested real quickstart seed stays
+`1651011033:1377505029:3019448108:3247278135`. It is a requested seed, not a live
+RNG-state getter. No seed search or manual post-start reseeding occurs.
+The 16×16 imported candidate map contains128 tiles. Starting from the passing
+arid input, exactly two bytes change on8,8: altitude byte32 and contour byte30.
+All other bytes stay unchanged. The local land port is10,8, with8,8 as its only
+adjacent water launch square; the other six cities keep their source-declared
+land locations. All seven owners retain a Scout, city and complete observations.
+The resulting imported native height is read from the engine, never from a
+second implementation of the importer. Map bytes and SHA are saved before run.
+
+`unit_rules.gls.js::parse/materialize_sea_former` composes the actual Foil
+(chassis index3/water triad) with the installed basic Terraforming weapon mode9,
+armor and reactor. It does **not** enable the installed disabled Sea Formers
+UNITS template. Normal `units/defs` registers the real definition. The setup
+checks the actual materialized recipe and native production choice rather than
+providing a fake facade or granting technologies. This follows the explicit
+`foil-terraform-module-v1` application recipe, not a prototype-unlock claim.
+
+`Base::ValidateInitialProduction` (Base.cpp105–120) supports **land only**.
+This fixture never sends a sea recipe through that restricted opening API.
+Instead, its existing RW `base_spawn` callback authors one real Doctor and calls
+native `restore_production` with the actual source-backed sea choice, its native
+price plus3 mineral stock, and last_processed_turn0 **before FirstTurn**.
+That mineral stock is a declared test input, not earned income or free normal
+production. The shipped `bases.gls.js` turn listener queues
+`process_base_production` using actual native intake. Native completion charges
+the actual recipe cost, launches via `Base::GetUnitProductionTile`, and persists
+the real producing base as home. There is no direct spawn of the SeaFormer.
+The test waits for the actual produced unit, populated producer, real production
+ACK and normal subsequent `set_base_production` ACK. The latter selects the
+source land project only after completion so the existing strict observer's
+verified project vocabulary remains valid; no empty project is relabeled.
+The whole production setup precedes the first height baseline.
+
+Funding uses shipped once-only source energy initialization, including actual
+faction bonuses, with no treasury grants. The input transformer is the unchanged
+`rateOneSource`: installed source SHA
+`bb01e3ac23793da0a46713f4851d65e63b599c24aef8300ffe45e7e57b332c42`, executed
+rate-one SHA `7abf62aa4f4f562aaa86c785b67b7af2320e122cbda7901287ee3ed0ab4c5bd0`.
+Exactly20 shared TERRAIN `turns` fields at index4 become1, affecting **both land
+and sea metadata**. Names, prerequisites and other fields remain unchanged.
+The driver records all20 old/new/name/domain rows and both actual source hashes.
+This is not an installed-stock duration or original timing comparison.
+
+## Actual input and acceptance sequence
+
+The source-prepared driver retains the proven180-second overall deadline and
+actual CDPFetch mainScript/workerOther exact Network+Target binding, all ACKs,
+first actual print/printErr capture identity, unchanged DOM text sink, sealed
+cursor and semantic native geometry/input fences. Production/default/runtime
+bytes are unchanged. Only debug-log forced autoscroll remains unsupported.
+
+1. Wait for actual production/launch and settled normal project, then use the
+   real selection key and render-readiness predicate. Capture before-height:
+   all7 players, all8 units, all7 cities, every128 full native tile records,
+   energy/revision, own work/payment/home/recovery, policies, resources, types,
+   native movement quotes, epochs and owners. Retain a fixed-viewport frame.
+2. Real pointer MENU→Terraform→actual source sea Raise row. Require its live sea
+   label and enabled state; open the actual fee dialog and capture the live
+   quote/default Cancel, full world and frame. Require sea→sea, upward canonical
+   change, named approximate policies and payable actual source-funded fee.
+3. Actual OK while Cancel is selected; require matching processed mouseup,
+   real node.hide and settled dialog state. Capture full unchanged world/frame.
+4. Ordinary menu reopen, capture pure reopened quote, actual Expend selection,
+   capture pure draft/full world/frame. All five pre-confirm worlds are exact
+   apart from separately captured UI state. No synthetic popup invocation.
+5. One real OK/confirm, scalar native unit_terraform ACK, settled pending/lock
+   state, six final full-world capture and fifth frame. Require one actual fee,
+   payer revision increment, exhausted actor MP/work completion, exact canonical
+   quote effects/epochs and full unknown-field noninterference. All seven owners'
+   resource and terrain owner dictionaries remain checked. Shared corner values
+   are observed only within actual affected native adjacency, not a mesh oracle.
+6. Real Q/native exit0, complete raw/chunk equality, no final fatal/late errors,
+   callMain and every worker continuation ACK. Browser/server/driver must reap;
+   outer Node exit is retained separately. A timeout/unknown suffix is a failure.
+
+Movement coverage here is **pure native eight-neighbor/owned-port quotes**, plus
+actual work movement expenditure; no physical traversal is claimed. Production
+is real engine production from authored stock, not city UI recipe selection or
+normal multi-turn earned completion. Fixed viewport is not fixed camera: automatic
+next-unit selection can shift focus. Raw GSE JSON is authority for Int/Float and
+Float32/64 bit audits; Node JSON numbers alone do not establish native types.
+
+## Pending beyond this case
+
+No current result exists. Actual source-native sea production2/136 is supporting
+coverage only, retained independently at
+`/tmp/terraform-sea-home-port-v6-population-fixed.json`; it is not browser evidence.
+After a bounded strict pass and independent audit, separately plan actual Lower
+Sea Floor, emergence/recovery or coastal/domain transition cases with source
+safety guards intact. Protected bases, unrelated residents, pressure domes,
+climate/victim displacement and stranding restrictions must not be removed to
+make a fixture pass. Original algorithms/contours/fees, naval art/assembly,
+numeric mesh vertices/corners, resident render-Z, facing/tool frames, original
+animation/audio/music, live RNG and fixed camera pose remain unsupported.
