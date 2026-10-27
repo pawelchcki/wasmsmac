@@ -51,3 +51,38 @@ export function auditPaidSeaHeight(beforeRecord,afterRecord,quote){
   return{quoted_tiles:[...patches.keys()],adjacent_geometry_tiles:geometryChanges,payer:payer.id,actor:actor.id,scope:'exact full-world noninterference; shared corner values observed, no mesh-fidelity claim'};
 }
 
+
+// The birth witness reads the actual native production publication; receipts
+// stay scalar-only. No nested base/unit echo is invented in event_result.
+export function verifySeaBootstrap(records,setup){
+  const births=records.map((row,index)=>({...row,index})).filter(row=>row.kind==='TH_SEA_BIRTH');
+  const productions=records.map((row,index)=>({...row,index})).filter(row=>row.kind==='TH_RECEIPT'&&row.value.name==='process_base_production');
+  const resumed=records.map((row,index)=>({...row,index})).filter(row=>row.kind==='TH_RECEIPT'&&row.value.name==='set_base_production');
+  assert.equal(births.length,1);assert.equal(productions.length,7);assert.equal(resumed.length,1);
+  const birth=births[0].value,recipe=setup.declared.recipe,restored=setup.declared.restored,resume=resumed[0].value;
+  assert.equal(recipe.id,'SeaFormers');assert.equal(recipe.application_recipe,'foil-terraform-module-v1');
+  assert.equal(recipe.weapon_mode,9);assert.equal(recipe.movement_type,'water');assert.equal(recipe.rows,8);
+  assert.equal(recipe.source_components.chassis,3);assert.equal(recipe.source_components.prototype,null);
+  assert.equal(restored.cost,80);assert.equal(restored.minerals,83);assert.equal(restored.last_processed_turn,0);assert.equal(restored.population,1);
+  assert.ok(births[0].index<productions[0].index,'Actual production publication precedes its accepted result');
+  for(const row of productions){
+    assert.ok(row.index<resumed[0].index,'Every ordinary production ACK precedes project resumption');
+    assert.equal(row.value.success,true);assert.equal(row.value.caller,0);assert.equal(row.value.data.turn_id,1);
+    assert.equal(typeof row.value.event_id,'string');assert.ok(row.value.event_id.length>0);
+  }
+  // Native BM iterates ordered base IDs; the authored local producer must be
+  // the first base. Its actual first-turn mineral input is a required witness,
+  // not silently added to or subtracted from the declared83 stock.
+  assert.equal(productions[0].value.data.minerals,0);
+  assert.equal(resume.success,true);assert.equal(resume.caller,0);assert.equal(resume.data.choice_id,setup.declared.resumed_choice);
+  assert.equal(typeof resume.event_id,'string');assert.ok(resume.event_id.length>0);
+  assert.equal(new Set([...productions.map(row=>row.value.event_id),resume.event_id]).size,8);
+  assert.equal(birth.owner,0);assert.equal(birth.unit_id,setup.actor);assert.equal(birth.definition,recipe.id);
+  assert.equal(birth.is_water,true);assert.equal(birth.can_terraform,true);assert.equal(birth.turn,1);
+  assert.equal(birth.home_id,setup.home_id);assert.equal(birth.home_population,1);
+  assert.equal(birth.x,8);assert.equal(birth.y,8);assert.equal(birth.movement,recipe.movement);assert.equal(birth.health,1);
+  assert.deepEqual(birth.production,{choice_id:'',minerals:3,last_processed_turn:1});
+  assert.deepEqual(setup.production,{choice_id:setup.declared.resumed_choice,minerals:3,last_processed_turn:1});
+  return{birth:structuredClone(birth),production_acknowledgements:productions.map(row=>structuredClone(row.value)),
+    resumption_acknowledgement:structuredClone(resume),scope:'real production from authored83 stock; cost80/overflow3; no earned-income or city production UI claim'};
+}

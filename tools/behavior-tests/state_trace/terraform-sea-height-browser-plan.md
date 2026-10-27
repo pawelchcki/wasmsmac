@@ -45,12 +45,29 @@ Instead, its existing RW `base_spawn` callback authors one real Doctor and calls
 native `restore_production` with the actual source-backed sea choice, its native
 price plus3 mineral stock, and last_processed_turn0 **before FirstTurn**.
 That mineral stock is a declared test input, not earned income or free normal
-production. The shipped `bases.gls.js` turn listener queues
+production. The first source freeze679ee6ad incorrectly registered resumption during
+`create_world`, before the shipped production listener is installed by its later
+`start` callback. Independent source review caught that error;679 has **zero
+engine executions**, not a native failure or passing case. The corrected fixture
+registers its own turn listener inside a later `start` callback, after the existing
+`bases.gls.js` start callback has installed production. Game.cpp300→308→315 and
+`InitComplete`'s start trigger bind this lifecycle order.
+
+The shipped `bases.gls.js` turn listener queues
 `process_base_production` using actual native intake. Native completion charges
 the actual recipe cost, launches via `Base::GetUnitProductionTile`, and persists
 the real producing base as home. There is no direct spawn of the SeaFormer.
-The test waits for the actual produced unit, populated producer, real production
-ACK and normal subsequent `set_base_production` ACK. The latter selects the
+A read-only `unit_spawn` witness inside actual native publication records the
+real unit/home/launch/MP/health and the already-charged native city project. It
+performs no native write or child event under the production mutation guard.
+The test waits for seven actual current-turn production ACKs in source order,
+then the one normal `set_base_production` ACK. It requires the local producer to
+be the first native base ID, actual first production credit0, cost80 from the
+installed recipe, authored83 stock and actual3 overflow both at birth and after
+project resumption. These are requirements pending execution: any different
+actual income/overflow is a strict failure, not permission to rewrite stock or
+claim the world ready. The populated producer, persisted home and sea launch
+are all required before the first height baseline. The latter selects the
 source land project only after completion so the existing strict observer's
 verified project vocabulary remains valid; no empty project is relabeled.
 The whole production setup precedes the first height baseline.
