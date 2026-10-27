@@ -112,5 +112,22 @@
     "historical CI collector/backend stacks",
     "identical normal-gameplay join cycle",
     "original-game agreement"
-  ]
+  ],
+  "ci_trigger_regression": {
+    "reason": "Prior complete-GSE PR paths excluded the actual GC C++ implementation and native regression; manual branch dispatch would skip all guarded GSE jobs.",
+    "added_paths": [
+      "src/gc/**",
+      "src/gse/**",
+      "src/common/Mutex.*"
+    ],
+    "unchanged_existing_triggers": true,
+    "old_filters_pure_tests_passed": 7,
+    "old_filters_pure_tests_failed": 1,
+    "only_old_failure": "actual src/gc/Space.cpp was not selected",
+    "fixed_filters_pure_tests_passed": 8,
+    "fixed_filters_pure_tests_failed": 0,
+    "old_filter_log_sha256": "502f8c3b61e154d107278a9f890bfa33b823b0c29c1b6eb03ab72c6acc9e7000",
+    "fixed_filter_log_sha256": "9326725bf3cdbe45e1e2347cadf40845cc198d36c1e5f6b93c90cb5a4776c17a",
+    "native_executions_in_filter_check": 0
+  }
 }
