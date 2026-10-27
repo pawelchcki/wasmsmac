@@ -273,6 +273,46 @@ closed state clears all cached handles so a fresh session is linked on reopening
 pure cases are explicitly synthetic. Actual emission of the new annotation and
 Workshop interaction remain unverified until a separately granted execution.
 
+## Fourth runtime attempt and exact component material mask
+
+The fourth frozen execution `aa6874bb` exited 1 after 89.601 seconds. It proved
+actual base-bar role emission for base1/session1 and the actual Native part owner
+Window ID before the real CHANGE click. WORKSHOP and Former-row clicks worked;
+three fresh queued snapshots, source stats and `VT.cvr:crop(0,0,99,74)` binding
+were observed. Cancel/normal confirmation/cleanup were not reached, and native
+exit-zero was not established. The failed `>3` nonblack-control-color condition,
+sealed/partial raw output and frame remain at
+`/tmp/unit-workshop-browser-v4/outcome.json`. Completed browser/original passes
+remain zero.
+
+The palette-diversity condition was an unsupported observer assumption.
+`Caviar::RasterPart` writes actual voxel palette colors; `Preview` guarantees no
+minimum number of distinct visible colors. Exact replay of the frozen pixel-crop
+formula finds two control colors: 2,879 pixels of `184,192,96` and 44 pixels of
+`192,172,24`. All 2,923 pixels match the Workshop's corresponding locations/RGB,
+with no missing, wrong or extra reference-palette pixels. Both crops are100×74.
+All three retained seven-owner native world snapshots also compare unchanged
+when UI observations are excluded. These are offline bounded observations, not
+a completed application test or original visual agreement.
+
+The replacement check keeps substantial nonempty control geometry and the actual
+pinned component/native resource binding. It compares every nonblack control
+material pixel exactly and rejects reference-palette pixels outside that mask.
+The black-background control supplies its observed material colors; the preview
+has a different panel background through transparent regions. Other preview
+background colors are explicitly excluded. Black voxels, alpha isolation, unknown
+material colors outside the reference palette, full assembly and original art
+remain unsupported. No expected asset palette, model geometry or coordinates are
+invented, and no asset-derived frame or mask is committed.
+
+Ten tracked synthetic pure cases cover two-color and single-color components,
+blank/missing controls, blank or wrong-color previews, swapped palette pixels,
+extra material, a one-pixel displacement, solid-rectangle substitutions and
+invalid/unequal geometry. Actual retained-image comparison is separately pinned
+at `/tmp/unit-workshop-v4-material-mask-proof.json`; it starts no engine/browser.
+The old threshold failure remains preserved, and a further application run
+requires separate authorization after independent source review.
+
 ## Concrete graphics and Workshop gaps
 
 | Area | Current bounded support | Unsupported |

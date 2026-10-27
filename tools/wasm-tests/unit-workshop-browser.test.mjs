@@ -16,6 +16,7 @@ import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs'
 import {declaredTerrain} from './terraform-browser-inputs.mjs';
 import {WorkshopPresentation} from './unit-workshop-presentation.mjs';
 import {completedWorkshopKey} from './unit-workshop-key-receipt.mjs';
+import {compareWorkshopMaterialMask} from './unit-workshop-preview-pixels.mjs';
 import {workshopMain,workshopWorld} from './unit-workshop-browser-fixture.mjs';
 
 const root=fileURLToPath(new URL('../../',import.meta.url));
@@ -209,19 +210,15 @@ test('real Workshop Window browses existing designs and commits only normal prod
   const preview=presentation.preview('game.unit_workshop','VT.cvr:crop(0,0,99,74)');
   const control=presentation.unique('workshop-pixel-control','VT.cvr');assert.ok(control.node.effective);
   const frame=PNG.sync.read(await capture('former-preview',preview));const box=await page.locator('#canvas').boundingBox();
-  const colors=bounds=>{
+  const crop=bounds=>{
     const viewport=shown.ui.viewport;const from=nativeToCanvas(bounds.left,bounds.top,viewport,box),to=nativeToCanvas(bounds.right,bounds.bottom,viewport,box);
     const left=Math.max(0,Math.ceil((from.x-box.x)*frame.width/box.width)),right=Math.min(frame.width,Math.floor((to.x-box.x)*frame.width/box.width));
     const top=Math.max(0,Math.ceil((from.y-box.y)*frame.height/box.height)),bottom=Math.min(frame.height,Math.floor((to.y-box.y)*frame.height/box.height));
-    assert.ok(right>left&&bottom>top);const counts=new Map();
-    for(let y=top;y<bottom;y++)for(let x=left;x<right;x++){const at=(y*frame.width+x)*4;const rgb=[...frame.data.subarray(at,at+3)];if(rgb.some(value=>value!==0)){const key=rgb.join(',');counts.set(key,(counts.get(key)||0)+1);}}
-    return{counts,image_crop:{left,top,right,bottom}};
+    assert.ok(right>left&&bottom>top);return{left,top,right,bottom};
   };
-  const reference=colors(control.node.effective),actual=colors(preview.bounds);
-  assert.ok(reference.counts.size>3,'Actual installed component pixel control must render its physical palette');
-  const dominant=[...reference.counts].sort((a,b)=>b[1]-a[1])[0];assert.ok(dominant[1]>100,'Pixel control must contain nonempty component geometry');
-  assert.ok((actual.counts.get(dominant[0])||0)>100,'The actual Workshop preview must contain the installed component palette, not blank/background pixels');
-  report.preview_pixels={component_dominant_rgb:dominant[0],control_pixels:dominant[1],workshop_matching_pixels:actual.counts.get(dominant[0]),control_native_bounds:control.node.effective,workshop_native_bounds:preview.bounds,control_crop:reference.image_crop,workshop_crop:actual.image_crop,scope:'candidate installed-component relation only; no original pixel or timing agreement'};
+  const reference=crop(control.node.effective),actual=crop(preview.bounds);
+  report.preview_pixels={...compareWorkshopMaterialMask(frame,reference,actual),control_native_bounds:control.node.effective,workshop_native_bounds:preview.bounds,
+    control_crop:reference,workshop_crop:actual,scope:'Candidate installed-component relation only; no original pixel, complete-assembly or timing agreement'};
   assert.equal(shown.ui.draft,draft);assert.deepEqual(nativeOnly(shown),baseline);noProductionAfter(initialProductionReceipts);
   await click(workshopButton('CANCEL'));shown=await observe('pointer-cancel');assert.equal(shown.ui.workshop_open,false);assert.equal(shown.ui.draft,draft);assert.deepEqual(nativeOnly(shown),baseline);
   await click(baseButton('WORKSHOP'));await wait(()=>latest('WS_STATE')?.ui.workshop_open);await choose(former.id);await key('Escape','ESCAPE');
