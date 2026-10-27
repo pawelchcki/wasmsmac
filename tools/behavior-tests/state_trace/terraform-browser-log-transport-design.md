@@ -194,3 +194,43 @@ equals the independently verified complete883-message replay, so that text
 integrity result is unchanged. Neither this proof nor its modeled callbacks
 substitutes for the next actual candidate's first runtime callback, pthread
 continuation, final all-owner graph and normal exit checks.
+
+## Actual candidate controls smoke
+
+The real game retry on frozen host `0322db43` passed one case in 78002.398 ms
+under the unchanged 180000 ms budget, and Node exited 0. Default tree
+`25ef18d3222f553507291d412330262169b2e418`, native tree
+`115032ffc7f53ff7f0c3a9f997da12674e25e643` and pinned v6 runtime are unchanged.
+The diagnostic root overlay was off. The configured print callback still
+omits only external debug-log autoscroll; its complete text remains observed.
+
+Actual main configuration installed and acknowledged once; eight actual
+pthread continuations acknowledged success. The first runtime callback was
+`<Thread::(NETWORK)#27> Starting thread`, with callMain present and both actual
+out/err identities bound. This is actual engine evidence, separate from the
+previous modeled callbacks. Late browser/barrier errors and read failures
+were absent.
+
+The case observed all 29 distinct source menu rows, actual semantic header
+and Road To hover/press/release completion, non-owned target rejection,
+Escape/Tab conservation, both Ctrl+R dispatches and an accepted owned-base
+pointer request. Four complete snapshots each retain seven owners, eight
+units, seven cities and 128 tiles, including the final native graph. The
+actual Q key reached the browser; the test awaited `body.dataset.state` equal
+to `exited`, set only by the unchanged bootstrap onExit callback for code 0.
+The raw log also retains native thread/SDL/OpenGL teardown. No standalone exit
+code packet was recorded, so the code-0 claim is bound to that passed live
+callback condition and its exact source, rather than a fabricated packet.
+
+After browser closure and pending-read settlement, the sealed raw artifact
+and every joined JSONL chunk agree exactly: 13671106 bytes, SHA256
+`c7c4e169309ff79982308caffa91f0e58dac0a630cd88b0ae3b9db0211c216a5`.
+The capture is nonpartial, with no late39-byte drift. Full artifacts remain
+`/tmp/terraform-browser-v6-cdp-fetch`; the adjacent compact proof JSON binds
+source/runtime/fixture/seed, snapshot counts, actual binding, exit evidence and
+remaining unsupported fields. Browser/server processes were reaped.
+
+This is one bounded controls smoke. It does not pass all36 browser actions,
+height quote/payment/effects, sea controls/production, original visual parity,
+typed frontend mesh/facing/frame telemetry, animation/audio timing or live
+browser RNG-state observation. Those remain separate gates.
