@@ -133,3 +133,52 @@ climate/victim displacement and stranding restrictions must not be removed to
 make a fixture pass. Original algorithms/contours/fees, naval art/assembly,
 numeric mesh vertices/corners, resident render-Z, facing/tool frames, original
 animation/audio/music, live RNG and fixed camera pose remain unsupported.
+
+## Artifact and teardown checklist before any authorized first attempt
+
+Source-only manifest preparation at
+`/tmp/terraform-sea-height-source-preflight/manifest.json` pins the d77c5c84
+executable source freeze, all15 driver/observer/shared GSE+Node source hashes,
+the actual immutable runtime/provenance and webshell bytes, requested seed,
+180000ms budget, full20-row input override and map bytes. This is **not** live
+readiness or execution. The map is8379 bytes, SHA
+`a523ccb96ad860ef9604842dd07c7c1942462cfabf4ecf1b96cde42d615a8fba`.
+After Delivery supplies a coherent accepted host and exclusive lease, recompute
+actual host/helper/source bindings before launch; never relabel this prep as a
+later executed snapshot. No old main-based branch or changed graphics binary is
+implicitly substituted.
+
+- Confirm no competing engine/browser/build and retain exact launch command,
+  source snapshot, effective180s budget, environment paths and real outer tool
+  session/chunk/exit. No new feature or input change is authorized by preparation.
+- Preserve runtime main HTTP ACK exactly once, every actual worker ACK and first
+  actual callback out/err/callMain identity. The model/no-WASM proof is not a
+  substitute. Keep diagnostic root overlay off and original bootstrap bytes.
+- Save actual imported map, original/executed rules hashes, full manifest override
+  and source file bytes. Require an actual loader read of the declared rules.
+- Before the first full baseline require one actual native birth at8,8, owner0,
+  persisted producing home10,8, real recipe/population/MP, seven production ACKs,
+  then normal resumption ACK. Retain opaque String event IDs and scalar receipts;
+  never manufacture a base/unit wrapper in the result. Actual83→80+3 overflow,
+  price, initial-turn credit and all7/8/7/128 counts are pending strict assertions.
+- Capture all six full raw GSE packets, scalar receipts and native input trace;
+  require fresh post-dispatch query IDs/scopes/session/generation and joint native
+  dialog-hide/settled-state fence. Preserve five frame hashes at fixed viewport,
+  not a fixed camera. Keep unknown native fields and exact Float tokens/bits.
+- On success require native actual status exit0, full fatal/late-error scan,
+  complete raw==joined chunks, settled read failure null, outer Node raw0 and
+  explicit browser/server/driver reap. Record these independently; a TAP footer
+  alone cannot establish native/process success.
+- On every failure retain the first native/raw error, last state, frames where
+  accessible and every received raw chunk. Close the producer, settle pending
+  serialized reads, then seal metadata/hashes. Unknown unread tail or failed
+  close remains partial/failure. Do not retry automatically or raise the budget.
+
+Failure classifications stay separate: preflight/route rejection before runtime
+is0 engine/actions; unavailable source composition or Native production guard is
+an unsupported/rejected setup, not Sea coverage; a different real stock/income or
+ordering is a strict fixture-contract failure, not permission to rewrite inputs;
+missing dispatch/ACK or in-flight state is not an action rejection; unsupported
+live quote is a real safety result, not completed work; full body markers followed
+by shutdown timeout/OOM remain failure. The existing land proof and original
+observations remain unchanged by any of these results.
