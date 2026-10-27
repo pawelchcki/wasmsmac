@@ -1,6 +1,7 @@
 {
   "version": 1,
   "suites": [
+    {"id":"energy-receipt-lifecycle","script":"GLSMAC_data/tests/energy_receipt_lifecycle.gls.js","domains":["gameplay","economy","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"terrain-journal-lifecycle","script":"GLSMAC_data/tests/terrain_journal_lifecycle.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"unit-automation-state","script":"GLSMAC_data/tests/unit_automation_state.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"former-level","script":"GLSMAC_data/tests/former_level.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},

@@ -3,6 +3,7 @@
   "kinds": {
     "regression": {
       "hot": [
+        "energy-receipt-lifecycle",
         "terrain-journal-lifecycle",
         "unit-automation-state",
         "former-level",
