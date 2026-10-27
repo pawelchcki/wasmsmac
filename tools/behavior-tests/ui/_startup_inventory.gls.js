@@ -38,6 +38,7 @@ for (input of faction_inputs) {
 	const players = []; players :+ owner;
 	game.get_players = () => { return players; };
 	game.get_tm = () => { return f.game.tm; };
+	game.get_settings = () => { return f.game.get_settings(); };
 	game.get = (key) => { return f.game.get(key); };
 	game.random = { get_int: (low, high) => { return low; } };
 	game.event = (name, data) => {
