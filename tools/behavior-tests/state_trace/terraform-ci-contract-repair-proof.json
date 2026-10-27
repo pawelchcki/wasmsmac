@@ -2806,7 +2806,39 @@
       }
     },
     "repair": "Expected full terrain explicitly advances only the affected target terrain_epoch by one alongside rockiness; no field omitted or normalized",
-    "full_repaired_suite_status": "pending focused native run"
+    "full_repaired_suite_status": "passed",
+    "full_repaired_suite_result": {
+      "id": "former-level",
+      "script": "GLSMAC_data/tests/former_level.gls.js",
+      "domains": [
+        "gameplay",
+        "decision-logic"
+      ],
+      "evidence": "glsmac-regression",
+      "status": "passed",
+      "scenarios": 7,
+      "assertions": 21,
+      "scenario_names": [
+        "rate1 Level reduces imported rocky category once while preserving every other native terrain field",
+        "Level completion receipt restores roughness work order and movement together",
+        "changed work receipt rejects undo before touching terrain or any unit field",
+        "stock source work declaration remains progressive and changes terrain only at completion",
+        "flat terrain rejects Level without consuming movement or changing the native graph",
+        "inherited work cancellation retains then refunds only its current application tick",
+        "genuine next-turn Level reduces rolling to flat without height or treasury changes"
+      ],
+      "elapsed_ms": 4758.24,
+      "log": ""
+    },
+    "full_repaired_suite_bindings": {
+      "source_commit": "7a8b3825",
+      "native_tree": "115032ffc7f53ff7f0c3a9f997da12674e25e643",
+      "snapshot_sha256": "a117ae5af721de1e245b975a4c0012df1fbecc1086a19be6f64b20171a679cb7",
+      "script_sha256": "301cd258600c5fd4f2d06d05e277c34d71c0e5d2439ec0d5d090df66a09f277f",
+      "runtime_js_sha256": "acbc76fbc94b2306a01bce0fa2acf9c30f43f43addea915802f8d07142e5e3ec",
+      "runtime_wasm_sha256": "83767fa8acce5c776be47f6298f0e24c5828f2e290722a4d341001f4ecb09a24"
+    },
+    "full_repaired_suite_log_sha256": "bcda739f24b1df76a4d0d4d20a54cf7f2ce5c82d6b9eca1727ae6dd341c1ee68"
   },
   "aquifer": {
     "bindings": {
