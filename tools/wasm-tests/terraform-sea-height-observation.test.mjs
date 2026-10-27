@@ -101,3 +101,17 @@ test('production bootstrap rejects early resumption missing ACKs and undeclared 
     r=>r.setup.base_states[6].production.last_processed_turn=0,
   ]){const row=bootstrap();mutate(row);assert.throws(()=>verifySeaBootstrap(row.records,row.setup));}
 });
+
+test('production bootstrap preserves the exact preturn base-to-owner mapping',async()=>{
+  const {verifySeaBootstrap}=await import('./terraform-sea-height-observation.mjs');
+  for(const mutate of [
+    row=>row.setup.base_states[6].base_id=70,
+    row=>row.records[1].value.bases[6].base_id=70,
+    row=>{[row.setup.base_states[5].owner,row.setup.base_states[6].owner]=[6,5];},
+  ]){
+    const row=bootstrap();mutate(row);
+    assert.throws(()=>verifySeaBootstrap(row.records,row.setup));
+  }
+  const reordered=bootstrap();reordered.setup.base_states.reverse();
+  assert.equal(verifySeaBootstrap(reordered.records,reordered.setup).production_acknowledgements.length,1);
+});
