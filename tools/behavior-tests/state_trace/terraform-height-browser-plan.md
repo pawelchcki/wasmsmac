@@ -23,8 +23,9 @@ The intended runtime is immutable local v6:
 from `terraform-controls-world.gls.js`: seven cities, seven Scouts, one actual
 local land Former, 16×16 imported map with 128 real tiles. Opening funding is
 the actual source starting reserve plus the real faction bonus. A test-only
-asset override changes exactly the twenty installed TERRAIN duration fields to
-one. Original/overridden file hashes, byte count, actual loader reads and both
+asset override changes exactly the twenty installed TERRAIN shared turns fields (index 4) to
+one; the parser uses that one field for both land and sea metadata. Names and
+prerequisites stay unchanged. Original/overridden file hashes, byte count, actual loader reads and both
 manifest identities are separate report fields. This is not a stock-duration
 claim.
 
@@ -149,8 +150,8 @@ failed frame, driver log and raw chunks. The actual rules hashes are original
 `bb01e3ac23793da0a46713f4851d65e63b599c24aef8300ffe45e7e57b332c42`
 and rate-one input
 `7abf62aa4f4f562aaa86c785b67b7af2320e122cbda7901287ee3ed0ab4c5bd0`.
-Raise source row 16 (`Raise Land`, line 127) changes land turn field 4 from 12
-to 1; its `EnvEcon` prerequisite and other fields remain unchanged.
+Raise source row 16 (`Raise Land`, line 127) changes shared turn field 4 from 12
+to 1 for both domain variants; its `EnvEcon` prerequisite and other fields remain unchanged.
 
 The real main continuation and all eight pthread continuations acknowledged;
 the first actual callback proved out/err capture and callMain presence. Raw and
@@ -160,3 +161,9 @@ They are sealed but partial because the application failed. Native exit code
 is unknown. Complete snapshots: 0; height actions: 0; passing cases: 0. Browser,
 server and driver were reaped and the heavy lease released. The Null guard
 requires a separately authorized actual verification; no retry is automatic.
+
+The original first-attempt preflight called field 4 `land_turns`. That label
+was incorrect: `terraforming_rules.gls.js` parses row[4] once and passes the
+same turns value to both land and sea variants. The original preflight remains
+untouched; its adjacent label-clarification sidecar records this correction.
+Neither the executed bytes nor any observed outcome changes.
