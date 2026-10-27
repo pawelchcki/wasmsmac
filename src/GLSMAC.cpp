@@ -460,7 +460,7 @@ WRAPIMPL_BEGIN( GLSMAC )
 					N_EXPECT_ARGS( 1 ); N_GETVALUE_UNWRAP( requested, 0, game::backend::Game );
 					if ( !requested ) { return VALUE( gse::value::String,, BodyUnavailable( "native-game-unavailable" ) ); }
 					if ( !m_game || !m_game->CanObserveUnitBodies() ) { return VALUE( gse::value::String,, BodyUnavailable( "frontend-unavailable" ) ); }
-					if ( m_game->GetGame() != requested ) { return VALUE( gse::value::String,, BodyUnavailable( "different-current-game" ) ); }
+					if ( m_game->GetBackend() != requested ) { return VALUE( gse::value::String,, BodyUnavailable( "different-current-game" ) ); }
 					return VALUE( gse::value::String,, CopyUnitBodyCensus( *m_game->GetUM() ) );
 				}
 				catch ( const std::exception& ) { return VALUE( gse::value::String,, BodyUnavailable( "observation-copy-unavailable" ) ); }
