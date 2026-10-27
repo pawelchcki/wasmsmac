@@ -149,6 +149,7 @@ CLASS2( Map, types::Serializable, gse::GCWrappable )
 	void GetReachableObjects( std::unordered_set< Object* >& reachable_objects ) override;
 
 private:
+	void ResetConstructionOwnersForImport();
 	friend class tile::TileManager;
 	friend struct gse::tests::mocks::ProductionFixture;
 	// The native fixture exercises terrain coordinates and snapshot decoding

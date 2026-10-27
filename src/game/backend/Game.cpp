@@ -1980,6 +1980,8 @@ void Game::InitGame( MT_Response& response, const bool interactive_opening, MT_C
 			SetLoaderText( "Loading dump" );
 			m_state->m_settings.global.map.preset_level = -1;
 			m_map->Deserialize( types::Buffer( util::FS::ReadTextFile( filename ) ) );
+			// A debug map dump starts a new roster, rather than restoring a full world.
+			m_map->ResetConstructionOwnersForImport();
 			ec = map::Map::EC_NONE;
 		}
 		else

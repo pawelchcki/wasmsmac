@@ -850,6 +850,10 @@ std::unique_ptr< Map > Map::LoadWorldTerrain( Game* game, types::Buffer& buffer,
 	return incoming;
 }
 
+void Map::ResetConstructionOwnersForImport() {
+	for ( auto& tile : *m_tiles->GetTilesPtr() ) { tile.m_terraforming_owners.fill( -1 ); }
+}
+
 const Map::error_code_t Map::LoadFromFile( const std::string& path ) {
 	if ( path.empty() || !util::FS::FileExists( path ) ) {
 		return EC_MAPFILE_NOT_FOUND;
@@ -865,7 +869,7 @@ const Map::error_code_t Map::LoadFromFile( const std::string& path ) {
 			if ( result == EC_NONE ) {
 				// Reusable terrain files have no saved player-roster mapping.
 				// Keep every physical enhancement; its historical builder is unknown.
-				for ( auto& tile : *m_tiles->GetTilesPtr() ) { tile.m_terraforming_owners.fill( -1 ); }
+				ResetConstructionOwnersForImport();
 			}
 			return result;
 		}
