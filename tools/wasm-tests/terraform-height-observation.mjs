@@ -2,6 +2,7 @@
 // Inputs come exclusively from actual native packets, never layout estimates.
 import assert from 'node:assert/strict';
 import {TerraformGeometry} from './terraform-browser-geometry.mjs';
+export const heightFatal=/TH_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i;
 
 export class HeightPresentation extends TerraformGeometry {
   constructor(){super();this.hidden=new Map();}
@@ -108,4 +109,15 @@ export function auditPaidLandHeight(beforeRecord,afterRecord,quote){
   }
   assert.deepEqual(after,expected,'Full native height world differs only at the actual payer fee/revision, actor MP/order, quoted canonical terrain and adjacent shared geometry');
   return{quoted_tiles:[...patches.keys()],adjacent_geometry_tiles:geometryChanges,payer:payer.id,actor:actor.id,scope:'exact full-world noninterference; shared corner values observed, no mesh-fidelity claim'};
+}
+
+export function verifyHeightFinalization({sealed,joined,producerClosed,errors,configuration,nativeExit}){
+  assert.equal(producerClosed,true);assert.equal(sealed.failure,null,'A settled read failure leaves the raw tail unknown');
+  assert.equal(joined,sealed.text,'Final raw text must equal every retained final chunk');
+  assert.doesNotMatch(sealed.text,heightFatal,'Final suffix must not contain a late native error');
+  assert.deepEqual(errors,[]);assert.equal(configuration.installations,1);assert.equal(configuration.barrier.continued,true);
+  assert.ok(configuration.worker_requests?.length>0);assert.ok(configuration.worker_requests.every(row=>row.continued===true));
+  const callback=configuration.callbacks?.first_callback;assert.ok(callback);
+  assert.equal(callback.runtime_out_bound,true);assert.equal(callback.runtime_err_bound,true);assert.equal(callback.runtime_callMain_present,true);
+  assert.deepEqual(nativeExit,{body_state:'exited',status_text:'GLSMAC exited (0).',raw_code:0});
 }
