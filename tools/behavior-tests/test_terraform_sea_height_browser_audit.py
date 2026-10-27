@@ -159,6 +159,13 @@ class DomainMutations:
             self.setUp()
             next(value for kind, value, _ in self.records if kind == 'TH_INPUTS')[field] = copy.deepcopy(value)
             self.reject()
+    def test_coherent_uninitialized_or_precredited_energy_is_not_the_authored_input(self):
+        for field, value in [('initialized', False), ('last_income_turn', 1), ('last_income_turn', False)]:
+            self.setUp()
+            for packet in self.packets():
+                packet['world']['terrain_trace']['player_details']['p0']['energy'][field] = value
+            next(row for kind, row, _ in self.records if kind == 'TH_INPUTS')['energy'][field] = value
+            self.reject()
     def test_query_carrier_stays_inside_each_native_checkpoint(self):
         for query in (1, 6):
             self.setUp()

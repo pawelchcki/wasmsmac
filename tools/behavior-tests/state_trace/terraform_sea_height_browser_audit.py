@@ -178,7 +178,12 @@ def audit_records(records, report):
     assert height.equal(json.loads(quote['unit_identity']), identity)
     assert type(fee) is int and fee == 1
     assert height.equal(inputs['starting_credits'], 10) and height.equal(inputs['faction_bonus'], 0) and quote['credits'] == 10
-    assert height.equal(inputs['energy'], before['terrain_trace']['player_details'][owner['id']]['energy'])
+    opening = before['terrain_trace']['player_details'][owner['id']]['energy']
+    assert height.equal(inputs['energy'], opening)
+    # The declared initialize_energy event establishes the ledger before the
+    # baseline; this fixture does not run an energy-income turn.
+    assert opening['initialized'] is True
+    assert type(opening['last_income_turn']) is int and opening['last_income_turn'] == 0
     for row in (packets[1], packets[3], packets[4]):
         dialog = row['ui']['dialog']
         assert dialog['fee'] == fee and dialog['reserves'] == quote['credits']
