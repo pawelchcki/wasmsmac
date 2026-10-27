@@ -47,6 +47,11 @@ chunks reproduce all893,579 bytes exactly; SHA-256 is
 The driver was reaped and its owned process group was absent. Retained artifacts
 are under `/tmp/unit-stack-health-browser-v1/`.
 
+Delivery's independent retained-raw audit passed: the exact chunks and three
+typed worlds,54 per-unit health/movement Float fields, health-only diff, actual
+receipt, recomputed weights, HUD IDs, hook acknowledgements and exits all agree.
+The proof JSON pins that audit and its read-only reproducer; no engine was rerun.
+
 The optional diagnostic canvas screenshot after APPexit0 timed out because the
 canvas was not visible. `report.frame_error` remains in the immutable report,
 and there is no `final-frame.png`. No screenshot or pixel assertion was an

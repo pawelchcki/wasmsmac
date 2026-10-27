@@ -239,8 +239,11 @@
     }
   },
   "independent_frontend_audit": {
-    "status": "pending Delivery retained-raw audit",
-    "path": "/tmp/unit-stack-health-browser-v1/independent-delivery-audit.json"
+    "status": "independently-audited-CLEAN/PASS",
+    "path": "/tmp/unit-stack-health-browser-v1/independent-delivery-audit.json",
+    "sha256": "eb5892c68ffff66e5fdc8f005ee5a916c853a97e41387ee5d67b7f26cae20e5b",
+    "reproducer": "/tmp/unit-stack-health-independent-audit.py",
+    "reproducer_sha256": "45aa171e3989b67b760d669bc267003f867e7813aa38d89cdf1fa85892c425df"
   },
   "original_passing_cases": 0,
   "unsupported": [
