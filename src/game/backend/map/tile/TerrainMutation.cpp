@@ -18,7 +18,7 @@ namespace game::backend::map::tile {
 int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* >& patches, const std::vector< gse::Value* >& workers, const bool apply ) {
 	if ( apply ) { m_game->CheckRW( GSE_CALL ); CheckCustomMutation( GSE_CALL ); }
 	auto* map = GetMap( GSE_CALL ); map->ValidateTerrainMutation();
-	if ( patches.empty() || patches.size() > 4096 || workers.size() > 64 || m_next_terrain_receipt == std::numeric_limits< int64_t >::max() ) {
+	if ( patches.empty() || patches.size() > MAX_TERRAIN_PATCHES || workers.size() > 64 || m_next_terrain_receipt == std::numeric_limits< int64_t >::max() ) {
 		GSE_ERROR( gse::EC.INVALID_CALL, "Invalid terrain patch count or receipt capacity" );
 	}
 	struct Patch { Tile* tile; moisture_t moisture; rockiness_t rockiness; feature_t features; terraforming_t terraforming; std::array< int8_t, 13 > owners; };

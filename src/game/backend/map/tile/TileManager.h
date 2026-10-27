@@ -56,6 +56,8 @@ private:
 	const std::shared_ptr< TileManager* > m_live_handle = std::make_shared< TileManager* >( this );
 	Tile* GetTileAt( GSE_CALLABLE, int64_t x, int64_t y ) const;
 	gse::Value* GetTerrainState( GSE_CALLABLE, int64_t x, int64_t y ) const;
+	gse::Value* GetTerrainGeometry( GSE_CALLABLE, int64_t x, int64_t y ) const;
+	static constexpr size_t MAX_TERRAIN_PATCHES = 4096;
 	int64_t ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* >& patches, const std::vector< gse::Value* >& workers, bool apply = true );
 	void RollbackTerrain( GSE_CALLABLE, int64_t receipt );
 	struct TerrainRecord {

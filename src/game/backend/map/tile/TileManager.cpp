@@ -95,6 +95,24 @@ gse::Value* TileManager::GetTerrainState( GSE_CALLABLE, const int64_t x, const i
 	} );
 }
 
+gse::Value* TileManager::GetTerrainGeometry( GSE_CALLABLE, const int64_t x, const int64_t y ) const {
+	const auto* tile = GetTileAt( GSE_CALL, x, y );
+	// Version 1: [version, x, y, native integer center, water, patch limit,
+	//             [W, NW, N, NE, E, SE, S, SW]], each neighbor null or [x,y].
+	// Arrays carry detached scalar data without per-Object script contexts.
+	gse::value::array_elements_t neighbors;
+	for ( const auto* neighbor : std::array< const Tile*, 8 >{ tile->W, tile->NW, tile->N, tile->NE, tile->E, tile->SE, tile->S, tile->SW } ) {
+		neighbors.push_back( neighbor ? static_cast< gse::Value* >( VALUE( gse::value::Array,, ( gse::value::array_elements_t {
+			VALUE( gse::value::Int,, neighbor->coord.x ), VALUE( gse::value::Int,, neighbor->coord.y ),
+		} ) ) ) : VALUE( gse::value::Null ) );
+	}
+	return VALUE( gse::value::Array,, ( gse::value::array_elements_t {
+		VALUE( gse::value::Int,, 1 ), VALUE( gse::value::Int,, tile->coord.x ), VALUE( gse::value::Int,, tile->coord.y ),
+		VALUE( gse::value::Int,, *tile->elevation.center ), VALUE( gse::value::Bool,, tile->is_water_tile ),
+		VALUE( gse::value::Int,, MAX_TERRAIN_PATCHES ), VALUE( gse::value::Array,, neighbors ),
+	} ) );
+}
+
 void TileManager::Clear() {
 	m_terrain_records.clear();
 	m_tile_lock_requests.clear();
@@ -241,6 +259,14 @@ WRAPIMPL_BEGIN( TileManager )
 				N_EXPECT_ARGS( 1 ); N_GETVALUE( receipt, 0, Int ); auto* tm = *handle;
 				if ( !tm || tm->m_game->GetTM() != tm ) { GSE_ERROR( gse::EC.INVALID_CALL, "Tile manager no longer exists" ); }
 				tm->RollbackTerrain( GSE_CALL, receipt ); return VALUE( gse::value::Undefined );
+			} )
+		},
+		{
+			"get_terrain_geometry", NATIVE_CALL( handle = m_live_handle ) {
+				N_EXPECT_ARGS( 2 ); N_GETVALUE( x, 0, Int ); N_GETVALUE( y, 1, Int );
+				auto* tm = *handle;
+				if ( !tm || tm->m_game->GetTM() != tm ) { GSE_ERROR( gse::EC.INVALID_CALL, "Tile manager no longer exists" ); }
+				return tm->GetTerrainGeometry( GSE_CALL, x, y );
 			} )
 		},
 		{
