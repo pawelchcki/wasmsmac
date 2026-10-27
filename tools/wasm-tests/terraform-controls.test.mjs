@@ -11,7 +11,7 @@ import {fixtureSources} from './terraform-browser-inputs.mjs';
 import {TerraformGeometry,nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {BrowserLogCursor} from './browser-log-cursor.mjs';
 import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
-import {installNativeLogHook} from './browser-native-log-hook.mjs';
+import {installNativeLogHook,runtimeLogRequestKind} from './browser-native-log-hook.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const scriptsRoot = process.env.WASM_SCRIPTS_ROOT || root;
@@ -127,12 +127,19 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const errors=[];report.navigation_timeline=[];
   await page.route('**/GLSMAC.js',async route=>{
     const request=route.request();
-    if(request.resourceType()!=='script'||request.frame()!==page.mainFrame()){await route.continue();return;}
     try{
+      const headers=await request.allHeaders();
+      const destination=Object.entries(headers).find(([key])=>key.toLowerCase()==='sec-fetch-dest')?.[1];
+      const kind=runtimeLogRequestKind(destination,request.resourceType());
+      if(kind==='worker'){
+        report.native_log_configuration.worker_requests??=[];report.native_log_configuration.worker_requests.push({url:request.url(),destination,resource_type:request.resourceType(),continued_without_frame_lookup:true});
+        await route.continue();return;
+      }
+      assert.equal(request.frame(),page.mainFrame(),'Only the actual main-frame script may install the print configuration');
       assert.equal(report.native_log_configuration.installations,0,'Main runtime print configuration installs once');
       const ack=await page.evaluate(installNativeLogHook,{expectedOriginalSource:originalLogSource});
       report.native_log_configuration.installations++;
-      report.native_log_configuration.barrier={url:request.url(),resource_type:request.resourceType(),acknowledged_node_ms:performance.now(),before_unmodified_runtime_response:true,ack};
+      report.native_log_configuration.barrier={url:request.url(),destination,resource_type:request.resourceType(),acknowledged_node_ms:performance.now(),before_unmodified_runtime_response:true,ack};
       await route.continue();
     }catch(error){errors.push(String(error));await route.abort('failed');}
   });
