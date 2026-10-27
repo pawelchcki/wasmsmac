@@ -117,6 +117,7 @@ test('actual native declared health change and tile reselection preserve current
     metadata:report.native_log_configuration,onError:error=>errors.push(String(error))});
   await page.goto(address);await page.waitForFunction(()=>document.body.dataset.state==='ready');
   const manifest=await(await page.request.get(`${address}/assets/manifest.json`)).json();report.manifest_id=manifest.id;
+  assert.equal(manifest.id,'12743b42e275842a7ae3862572ec769c6d86f647394f0edb1ff9db6d104888e3','The declared installed assets must match before starting native execution');
   await page.locator('#custom-maps').setInputFiles({name:'unit-stack-health-arid.MP',mimeType:'application/octet-stream',buffer:declaredTerrain()});await page.locator('#import-maps').click();
   await page.waitForFunction(()=>document.querySelector('#custom-map-list').textContent.includes('unit-stack-health-arid.MP'));
   await page.locator('#asset-source').selectOption('remote');await page.locator('#asset-url').fill(`${address}/assets/manifest.json`);
