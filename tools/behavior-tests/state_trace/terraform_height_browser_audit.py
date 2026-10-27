@@ -6,6 +6,7 @@ import json
 import struct
 import re
 import math
+import zlib
 from pathlib import Path
 
 CHECKPOINTS = ('before-height', 'raise-quote', 'raise-cancel', 'raise-reopened',
@@ -90,6 +91,11 @@ def validate_coverage(state):
     assert {row['owner'] for row in state['units']} == ids['players']
     assert {row['owner'] for row in state['bases']} == ids['players']
     trace = state['terrain_trace']
+    required = ('all_players', 'terrain_height', 'terrain_type', 'terrain_resources',
+                'traverse_quotes', 'canonical_height', 'energy_initialization', 'automation_context',
+                'automation_phase', 'home_identity', 'improvement_owners', 'terrain_epoch',
+                'paid_height_work', 'naval_recovery', 'energy_revision', 'cooperative_work', 'ui')
+    assert all(trace['coverage'][name] is True for name in required), 'Missing/unsupported native observation capability'
     for name, detail in [('players', 'player_details'), ('units', 'unit_details'), ('bases', 'base_details')]:
         assert set(trace[detail]) == ids[name], (name, 'incomplete native details')
     for detail in trace['player_details'].values():
@@ -494,7 +500,7 @@ def validate_finalization(report, raw, chunks, records):
     # genuine bypass needs a separately supported contract, not fake callbacks.
     assert type(callbacks['initial_utf16']) is int and callbacks['initial_utf16'] == 0
     assert callbacks['initial_text'] == ''
-    position = 0
+    position, message_bindings = 0, 0
     text16 = text.encode('utf-16-le')
     assert callbacks['calls']
     for i, call in enumerate(callbacks['calls']):
@@ -505,6 +511,16 @@ def validate_finalization(report, raw, chunks, records):
         assert position == call['before_utf16'] < call['after_utf16'] <= offset, 'Uncovered native callback interval'
         assert type(call['message_utf16']) is int and call['message_utf16'] == call['after_utf16'] - call['before_utf16'] - 1
         assert text16[(call['after_utf16'] - 1) * 2:call['after_utf16'] * 2] == b'\n\0'
+        payload = text16[call['before_utf16'] * 2:(call['after_utf16'] - 1) * 2]
+        bound = False
+        if 'message' in call:
+            assert type(call['message']) is str and call['message'].encode('utf-16-le', 'surrogatepass') == payload, 'Different callback message'
+            bound = True
+        if 'message_utf16le_sha256' in call:
+            assert type(call['message_utf16le_sha256']) is str and re.fullmatch(r'[0-9a-f]{64}', call['message_utf16le_sha256'])
+            assert hashlib.sha256(payload).hexdigest() == call['message_utf16le_sha256'], 'Different callback message digest'
+            bound = True
+        message_bindings += bound
         position = call['after_utf16']
     assert position == offset, 'Uncovered final callback suffix'
     assert all(equal(first[key], value) for key, value in callbacks['calls'][0].items())
@@ -542,7 +558,11 @@ def validate_finalization(report, raw, chunks, records):
     assert all(last_native_line < carriers[event['seq']] < exit_lines[0] for event in [ingresses[0], begin, ends[0]])
     return {'sealed_complete': True, 'native_exit_verified': True, 'actual_main_ack': True,
             'actual_worker_acks': len(workers), 'actual_exit_key_and_request': True, 'full_raw_fatal_scan': 'clean',
-            'continuous_native_callbacks': len(callbacks['calls']), 'callback_utf16_covered': position,
+            'callback_metadata_intervals': len(callbacks['calls']), 'callback_utf16_covered': position,
+            'exact_callback_message_identity': {'supported': message_bindings == len(callbacks['calls']),
+                'verified_messages': message_bindings,
+                'scope': 'per-call UTF16 message or digest binding' if message_bindings == len(callbacks['calls']) else
+                         'UNSUPPORTED: legacy offset-only metadata cannot prove exact callback message identities/count; sealed-byte journal remains bounded evidence'},
             'lossless_trace_packets': sum(kind == 'TH_TRACE' for kind, _, _ in records), 'unique_contiguous_trace_events': len(events),
             'exit_order_scope': 'this fixture drains Q ingress/begin/end before its owned-timer TH_EXIT_REQUEST'}
 
@@ -676,14 +696,138 @@ def validate_pointer_route(records, report):
             'scope': 'MENU/terraform/raise/Cancel/reopen/Expend/confirm; actual native geometry and input receipts'}
 
 
+def validate_keyboard_route(records, report):
+    """Exact eight physical Ctrl+Alt shortcuts, including modifier/up edges."""
+    events, _ = validate_trace(records)
+    event_map = {event['seq']: event for event in events}
+    ingresses = [event for event in events if event['kind'] == 'input.ingress' and event['data'].get('type') in ('keydown', 'keyup')]
+    assert len(ingresses) == 48, 'Unexpected/unreported native keyboard edge'
+    receipts = report['processed_keys']
+    assert len(receipts) == 8
+    commands = ['K'] + ['P'] * 6 + ['Q']
+    scan = {'K': 14, 'P': 19, 'Q': 20}
+    used, previous = set(), 0
+    for index, (code, receipt) in enumerate(zip(commands, receipts)):
+        assert receipt['shortcut'] == 'Control+Alt+' + code.lower()
+        edges = [('keydown', 1073742048, 224, 64, 'CTRL', 2),
+                 ('keydown', 1073742050, 226, 320, 'ALT', 6),
+                 ('keydown', ord(code.lower()), scan[code], 320, code, 6),
+                 ('keyup', ord(code.lower()), scan[code], 320, code, 6),
+                 ('keyup', 1073742050, 226, 64, 'ALT', 2),
+                 ('keyup', 1073742048, 224, 0, 'CTRL', 0)]
+        for offset, (edge, keycode, scancode, raw_modifiers, dispatch_code, modifiers) in enumerate(edges):
+            ingress = ingresses[index * 6 + offset]
+            data = ingress['data']
+            assert ingress['seq'] > previous
+            assert data['type'] == edge
+            expected = {'ingress': data['ingress'], 'keycode': keycode, 'scancode': scancode,
+                        'modifiers': raw_modifiers, 'repeat': 0, 'sdl_type': 768 if edge == 'keydown' else 769}
+            assert all(type(data[name]) is int and data[name] == value for name, value in expected.items()), 'Different raw SDL keyboard edge'
+            begins = [event for event in events if event['kind'] == 'input.dispatch' and event['data'].get('phase') == 'begin'
+                      and type(event['data'].get('ingress')) is int and event['data']['ingress'] == data['ingress']]
+            ends = [event for event in events if event['kind'] == 'input.dispatch' and event['data'].get('phase') == 'end'
+                    and type(event['data'].get('ingress')) is int and event['data']['ingress'] == data['ingress']]
+            assert len(begins) == len(ends) == 1
+            begin, end = begins[0], ends[0]
+            assert ingress['seq'] < begin['seq'] < end['seq']
+            assert begin['data']['type'] == edge and begin['data']['code'] == dispatch_code
+            assert type(begin['data']['modifiers']) is int and begin['data']['modifiers'] == modifiers
+            assert type(data['action']) is int and data['action'] >= 0
+            assert type(begin['data']['action']) is int and begin['data']['action'] == data['action']
+            assert type(end['data']['handled']) is bool
+            if offset == 2:
+                assert end['data']['handled'] is True
+                for name, actual in [('ingress', ingress), ('begin', begin), ('end', end)]:
+                    assert type(receipt[name]['seq']) is int and equal(receipt[name], node_projection(actual)), 'Keyboard receipt is not its actual native event'
+                if 1 <= index <= 6:
+                    assert end['seq'] == report['native_snapshots'][index - 1]['query_after_native_key']
+            used.update((ingress['seq'], begin['seq'], end['seq']))
+            previous = end['seq']
+    keyboard_ids = {event['data']['ingress'] for event in ingresses}
+    all_keyboard = {event['seq'] for event in events if (event['kind'] == 'input.ingress' and event['data'].get('type') in ('keydown', 'keyup'))
+                    or (event['kind'] == 'input.dispatch' and (event['data'].get('type') in ('keydown', 'keyup') or
+                        (event['data'].get('phase') == 'end' and event['data'].get('ingress') in keyboard_ids)))}
+    assert all_keyboard == used, 'Unreported keyboard ingress/dispatch'
+    return {'shortcuts_verified': 8, 'raw_key_edges_exhausted': 48,
+            'scope': 'exact K/six P/Q Ctrl+Alt command and modifier/down/up sequence; no additional key actions'}
+
+
+def decode_frame_png(data, expected_size):
+    """Decode this capture's noninterlaced 8-bit RGB/RGBA PNGs, bounded by size."""
+    assert data.startswith(b'\x89PNG\r\n\x1a\n')
+    offset, kinds, compressed, dimensions = 8, [], bytearray(), None
+    while offset < len(data):
+        assert offset + 12 <= len(data), 'Truncated PNG chunk'
+        size, kind = struct.unpack('>I4s', data[offset:offset + 8])
+        stop = offset + 12 + size
+        assert stop <= len(data), 'Truncated PNG payload'
+        payload = data[offset + 8:stop - 4]
+        assert zlib.crc32(kind + payload) & 0xffffffff == struct.unpack('>I', data[stop - 4:stop])[0], 'PNG CRC mismatch'
+        assert not kinds or kind != b'IHDR'
+        if not kinds:
+            assert kind == b'IHDR' and size == 13
+            width, height, depth, color, compression, filtering, interlace = struct.unpack('>IIBBBBB', payload)
+            dimensions = (width, height)
+            assert dimensions == expected_size, 'Frame dimensions differ from the retained canvas clip'
+            assert depth == 8 and color in (2, 6) and compression == filtering == interlace == 0, 'Unsupported PNG encoding'
+            channels = 3 if color == 2 else 4
+        elif kind == b'IDAT':
+            assert kinds[-1] in (b'IHDR', b'IDAT') or (b'IDAT' not in kinds), 'Noncontiguous IDAT'
+            compressed.extend(payload)
+        elif kind == b'IEND':
+            assert size == 0 and b'IDAT' in kinds and stop == len(data)
+        else:
+            assert kind[0] & 32, 'Unknown critical PNG chunk'
+        kinds.append(kind); offset = stop
+    assert kinds and kinds[-1] == b'IEND' and dimensions is not None
+    width, height = dimensions
+    stride = width * channels
+    expected_bytes = height * (stride + 1)
+    inflater = zlib.decompressobj()
+    filtered = inflater.decompress(bytes(compressed), expected_bytes + 1)
+    assert len(filtered) == expected_bytes and inflater.eof and not inflater.unconsumed_tail and not inflater.unused_data, 'Invalid/truncated PNG zlib data'
+    previous, pixels = bytearray(stride), hashlib.sha256()
+    for y in range(height):
+        row = filtered[y * (stride + 1):(y + 1) * (stride + 1)]
+        mode, current = row[0], bytearray(row[1:])
+        assert mode in range(5), 'Invalid PNG scanline filter'
+        if mode:
+            for x in range(stride):
+                a = current[x - channels] if x >= channels else 0
+                b = previous[x]
+                c = previous[x - channels] if x >= channels else 0
+                if mode == 1: predictor = a
+                elif mode == 2: predictor = b
+                elif mode == 3: predictor = (a + b) // 2
+                else:
+                    prediction = a + b - c
+                    pa, pb, pc = abs(prediction - a), abs(prediction - b), abs(prediction - c)
+                    predictor = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                current[x] = (current[x] + predictor) & 255
+        pixels.update(current); previous = current
+    return {'width': width, 'height': height, 'decoded_pixel_bytes': height * stride, 'decoded_pixels_sha256': pixels.hexdigest()}
+
+
 def validate_frames(directory, report):
     names = ['before-height', 'raise-quote', 'raise-cancel', 'raise-payment-draft', 'raise-paid-completion']
     assert [row['name'] for row in report['captures']] == names
+    box = report['processed_pointers'][0]['canvas_css_rect']
+    assert all(finite_number(box[key]) for key in ('x', 'y', 'width', 'height'))
+    assert box['width'] > 0 and box['height'] > 0
+    clip = tuple(math.ceil(box[axis] + box[size] - 1e-3) - math.floor(box[axis] + 1e-3)
+                 for axis, size in [('x', 'width'), ('y', 'height')])
+    assert all(type(value) is int and 0 < value <= 4096 for value in clip)
+    ready = report['rendered_readiness']
+    assert type(ready['width']) is int and type(ready['height']) is int
+    assert clip == (ready['width'], ready['height'])
+    decoded = []
     for row in report['captures']:
         assert type(row['sha256']) is str and re.fullmatch(r'[0-9a-f]{64}', row['sha256'])
         data = (Path(directory) / (row['name'] + '.png')).read_bytes()
-        assert data.startswith(b'\x89PNG\r\n\x1a\n') and hashlib.sha256(data).hexdigest() == row['sha256'], 'Different/missing retained frame'
-    return {'retained_frame_digests_verified': 5, 'scope': 'actual file bytes; no original pixels/pose/mesh agreement'}
+        assert hashlib.sha256(data).hexdigest() == row['sha256'], 'Different/missing retained frame'
+        decoded.append(decode_frame_png(data, clip))
+    return {'retained_frame_digests_verified': 5, 'decoded_frames': decoded,
+            'scope': 'actual decoded RGB/RGBA file bytes and retained canvas clip; no original pixels/pose/mesh agreement'}
 
 
 def validate_external_exit(path, native_exit, capture_bindings):
@@ -702,7 +846,12 @@ def validate_external_exit(path, native_exit, capture_bindings):
     assert type(data['version']) is int and data['version'] == 1
     assert data['status'] == 'exited' and type(data['raw_process_exit']) is int and data['raw_process_exit'] == 0
     assert type(data['tool_session_id']) is int and type(data['tool_completion_chunk_id']) is str and data['tool_completion_chunk_id']
-    assert type(data['command']) is str and 'node --test' in data['command'] and 'terraform-height-browser.test.mjs' in data['command']
+    assert type(data['command']) is str
+    if 'kind' in data:
+        assert data['command'] in ('node --test tools/wasm-tests/terraform-height-browser.test.mjs',
+                                   'node --test --test-concurrency=1 tools/wasm-tests/terraform-height-browser.test.mjs'), 'Unsupported external invocation'
+    else:
+        assert data['command'], 'Legacy invocation is bound by its exact recognized outcome digest'
     assert type(data['source']) is str and data['source']
     completion = data['tool_completion_result']
     assert type(completion['exit_code']) is int and completion['exit_code'] == 0
@@ -710,6 +859,16 @@ def validate_external_exit(path, native_exit, capture_bindings):
     assert data['browser_server_driver_reaped'] is True and equal(data['native_exit'], native_exit)
     return {'supported': True, 'external_raw_exit_code': 0, 'tool_session_id': data['tool_session_id'],
             'completion_chunk_id': data['tool_completion_chunk_id'], 'artifact_sha256': digest}
+
+
+def classify_browser_credit(finalization, external):
+    assert external['supported'] is True, 'External Node completion remains required'
+    complete = finalization['exact_callback_message_identity']['supported'] is True
+    return {'browser_cases_audited': 1 if complete else 0,
+            'complete_browser_cases_audited': 1 if complete else 0,
+            'bounded_state_receipt_cases_audited': 1,
+            'status': 'passed-readonly-complete-browser-audit' if complete else 'partial-readonly-bounded-state-receipt-audit',
+            'unsupported_capabilities': [] if complete else ['exact per-callback message identity; legacy offset-only metadata cannot earn complete-browser case credit']}
 
 
 def audit_artifacts(directory, outer_outcome=None):
@@ -724,15 +883,16 @@ def audit_artifacts(directory, outer_outcome=None):
     chunks = [json.loads(line) for line in (directory / 'application-log-chunks.jsonl').read_text().splitlines() if line]
     finalization = validate_finalization(report, raw, chunks, records)
     pointer_route = validate_pointer_route(records, report)
+    keyboard_route = validate_keyboard_route(records, report)
     frames = validate_frames(directory, report)
     bindings = {'raw_sha256': hashlib.sha256(raw).hexdigest(), 'report_sha256': hashlib.sha256(report_bytes).hexdigest(),
                 'preflight_sha256': hashlib.sha256(preflight_bytes).hexdigest(), 'host_head': report['host_head']}
     external = validate_external_exit(Path(outer_outcome) if outer_outcome else directory / 'raw-outcome.json', report['native_exit'], bindings)
     assert external['supported'], 'Full browser audit requires genuine external Node completion; native-field-only audit adds no browser case credit'
-    result['browser_cases_audited'] = 1
+    result.update(classify_browser_credit(finalization, external))
     result.update(raw_sha256=hashlib.sha256(raw).hexdigest(), raw_bytes=len(raw), report_sha256=hashlib.sha256(report_bytes).hexdigest(),
                   preflight_sha256=hashlib.sha256(preflight_bytes).hexdigest(), source_audit_script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                  preflight_schema=schema, finalization=finalization, pointer_route=pointer_route, frames=frames, external_node_exit=external,
+                  preflight_schema=schema, finalization=finalization, pointer_route=pointer_route, keyboard_route=keyboard_route, frames=frames, external_node_exit=external,
                   historical_cleanliness_scope='legacy tracked_diff/source bindings only; no retrospective untracked-source cleanliness receipt')
     return result
 

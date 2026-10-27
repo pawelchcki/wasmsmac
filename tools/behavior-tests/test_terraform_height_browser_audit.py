@@ -12,6 +12,8 @@ import hashlib
 import tempfile
 from pathlib import Path
 import unittest
+import struct
+import zlib
 
 MODULE_PATH = Path(__file__).parent / 'state_trace/terraform_height_browser_audit.py'
 spec = importlib.util.spec_from_file_location('height_audit', MODULE_PATH)
@@ -34,7 +36,11 @@ def protocol_fixture():
                 'is_land': True, 'is_water': False, 'native_type': {'domain': 'land'},
                 'native_height_band': {name: False for name in audit.BANDS}, 'unknown_native': {'value': -0.0}}
     tiles['8,8']['neighbors']['E'] = {'x': 10, 'y': 8}
-    trace = {'policy': {'version': 1, 'ignore_technologies': True}, 'ui': {}, 'tiles': tiles, 'unit_details': {u['id']: {'moved_this_turn': False, 'quotes': {'E': {'allowed_now': True, 'reason': None}}} for u in units},
+    capabilities = {name: True for name in ('all_players', 'terrain_height', 'terrain_type', 'terrain_resources',
+        'traverse_quotes', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase',
+        'home_identity', 'improvement_owners', 'terrain_epoch', 'paid_height_work', 'naval_recovery',
+        'energy_revision', 'cooperative_work', 'ui')}
+    trace = {'coverage': capabilities, 'policy': {'version': 1, 'ignore_technologies': True}, 'ui': {}, 'tiles': tiles, 'unit_details': {u['id']: {'moved_this_turn': False, 'quotes': {'E': {'allowed_now': True, 'reason': None}}} for u in units},
              'player_details': {p['id']: {'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}, 'energy_revision': 1} for p in players},
              'base_details': {b['id']: {'unknown': 'unchanged'} for b in bases}}
     world = {'width': 16, 'height': 16, 'turn': 1, 'players': players, 'units': units, 'bases': bases, 'terrain_trace': trace}
@@ -219,6 +225,17 @@ class AuditMutations:
         self.report['native_input']['policy']['ignore_technologies'] = False
         self.reject()
 
+    def test_reject_missing_or_unsupported_native_capabilities(self):
+        for capability in (None, 'paid_height_work', 'cooperative_work', 'ui'):
+            self.setUp()
+            for packet in self.packets():
+                if capability is None: packet['world']['terrain_trace'].pop('coverage')
+                else: packet['world']['terrain_trace']['coverage'][capability] = False
+            self.reject()
+        self.setUp()
+        for packet in self.packets(): packet['world']['terrain_trace']['coverage']['paid_height_work'] = 1
+        self.reject()
+
     def test_reject_missing_actual_coverage(self):
         for field in ('players', 'units', 'bases', 'tiles'):
             with self.subTest(field=field):
@@ -352,7 +369,7 @@ def finalization_fixture():
     for line in text.splitlines(keepends=True):
         size = audit.utf16_length(line)
         calls.append({'sequence': len(calls) + 1, 'channel': 'stdout', 'before_utf16': offset, 'after_utf16': offset + size,
-                      'message_utf16': size - 1, 'observed_ms': 1.0, 'runtime_out_bound': True,
+                      'message_utf16': size - 1, 'message': line[:-1], 'observed_ms': 1.0, 'runtime_out_bound': True,
                       'runtime_err_bound': True, 'runtime_callMain_present': True})
         offset += size
     callback = {'installed_before_runtime_capture': True, 'initial_text': '', 'initial_utf16': 0,
@@ -463,6 +480,51 @@ class FinalizationMutations:
 
 
 class ProtocolFinalizationTests(FinalizationMutations, unittest.TestCase):
+
+    def test_modern_callback_messages_bind_each_interval(self):
+        result = audit.validate_finalization(self.report, self.raw, self.chunks, self.records)
+        self.assertTrue(result['exact_callback_message_identity']['supported'])
+        self.assertEqual(audit.classify_browser_credit(result, {'supported': True})['complete_browser_cases_audited'], 1)
+        calls = self.report['native_log_configuration']['callbacks']['calls']
+        calls[1]['message'] = 'changed message'
+        self.reject()
+
+    def test_modern_callback_absorption_is_rejected(self):
+        calls = self.report['native_log_configuration']['callbacks']['calls']
+        calls[1]['after_utf16'] = calls[2]['after_utf16']
+        calls[1]['message_utf16'] = calls[1]['after_utf16'] - calls[1]['before_utf16'] - 1
+        calls.pop(2)
+        for i, call in enumerate(calls): call['sequence'] = i + 1
+        self.reject()
+
+    def test_modern_digest_binding_rejects_modified_payload(self):
+        calls = self.report['native_log_configuration']['callbacks']['calls']
+        for call in calls:
+            call['message_utf16le_sha256'] = hashlib.sha256(call.pop('message').encode('utf-16-le')).hexdigest()
+        first = self.report['native_log_configuration']['callbacks']['first_callback']
+        first['message_utf16le_sha256'] = calls[0]['message_utf16le_sha256']
+        self.assertTrue(audit.validate_finalization(self.report, self.raw, self.chunks, self.records)['exact_callback_message_identity']['supported'])
+        calls[1]['message_utf16le_sha256'] = '0' * 64
+        self.reject()
+
+    def test_legacy_offset_only_journal_is_not_complete_callback_identity(self):
+        for call in self.report['native_log_configuration']['callbacks']['calls']: call.pop('message', None)
+        result = audit.validate_finalization(self.report, self.raw, self.chunks, self.records)
+        self.assertFalse(result['exact_callback_message_identity']['supported'])
+        credit = audit.classify_browser_credit(result, {'supported': True})
+        self.assertEqual(credit['complete_browser_cases_audited'], 0)
+        self.assertEqual(credit['browser_cases_audited'], 0)
+        self.assertEqual(credit['bounded_state_receipt_cases_audited'], 1)
+        self.assertTrue(credit['status'].startswith('partial-'))
+        calls = self.report['native_log_configuration']['callbacks']['calls']
+        # Source-only legacy metadata can absorb one omitted entry. Preserve
+        # the fact that even contiguous offsets cannot prove callback identity.
+        calls[1]['after_utf16'] = calls[2]['after_utf16']
+        calls[1]['message_utf16'] = calls[1]['after_utf16'] - calls[1]['before_utf16'] - 1
+        calls.pop(2)
+        for i, call in enumerate(calls): call['sequence'] = i + 1
+        self.assertFalse(audit.validate_finalization(self.report, self.raw, self.chunks, self.records)['exact_callback_message_identity']['supported'])
+
     @classmethod
     def setUpClass(cls):
         cls.original_final = finalization_fixture()
@@ -505,6 +567,59 @@ class ActualFinalizationTests(FinalizationMutations, unittest.TestCase):
         with self.assertRaises(AssertionError): audit.validate_external_exit(directory / 'raw-outcome.json', self.report['native_exit'], bindings)
 
 
+def keyboard_route_fixture():
+    """Public model of physical modifier/command edges; never runtime proof."""
+    events, receipts, snapshots = [], [], []
+    def emit(kind, data):
+        event = {'seq': len(events) + 1, 'kind': kind, 'target': 'input', 'data': data}
+        events.append(event)
+        return copy.deepcopy(event)
+    ingress_id = 0
+    for index, code in enumerate(['K'] + ['P'] * 6 + ['Q']):
+        receipt = {'shortcut': 'Control+Alt+' + code.lower()}
+        scan = {'K': 14, 'P': 19, 'Q': 20}[code]
+        for offset, (edge, keycode, scancode, rawmods, normalized, mods) in enumerate([
+            ('keydown', 1073742048, 224, 64, 'CTRL', 2), ('keydown', 1073742050, 226, 320, 'ALT', 6),
+            ('keydown', ord(code.lower()), scan, 320, code, 6), ('keyup', ord(code.lower()), scan, 320, code, 6),
+            ('keyup', 1073742050, 226, 64, 'ALT', 2), ('keyup', 1073742048, 224, 0, 'CTRL', 0)]):
+            ingress_id += 1
+            action = 1 if edge == 'keydown' else 2
+            ingress = emit('input.ingress', {'ingress': ingress_id, 'type': edge, 'keycode': keycode, 'scancode': scancode,
+                'modifiers': rawmods, 'repeat': 0, 'sdl_type': 768 if action == 1 else 769, 'action': action})
+            begin = emit('input.dispatch', {'phase': 'begin', 'ingress': ingress_id, 'type': edge, 'code': normalized, 'modifiers': mods, 'action': action})
+            end = emit('input.dispatch', {'phase': 'end', 'ingress': ingress_id, 'handled': True})
+            if offset == 2:
+                receipt.update(ingress=ingress, begin=begin, end=end)
+                if 1 <= index <= 6: snapshots.append({'query_after_native_key': end['seq']})
+        receipts.append(receipt)
+    return [('TH_TRACE', {'enabled': True, 'dropped': 0, 'events': events}, 0)], {'processed_keys': receipts, 'native_snapshots': snapshots}
+
+
+class ProtocolKeyboardRouteTests(unittest.TestCase):
+    def test_exact_eight_shortcuts_and_all_modifier_edges(self):
+        records, report = keyboard_route_fixture()
+        self.assertEqual(audit.validate_keyboard_route(records, report)['raw_key_edges_exhausted'], 48)
+
+    def test_unreported_enter_between_clicks_is_rejected(self):
+        records, report = keyboard_route_fixture()
+        events = records[0][1]['events']
+        events.append({'seq': len(events) + 1, 'kind': 'input.ingress', 'data': {'type': 'keydown', 'keycode': 13, 'ingress': 1000}})
+        with self.assertRaises(AssertionError): audit.validate_keyboard_route(records, report)
+
+    def test_wrong_modifiers_repeated_keys_or_fabricated_receipt_rejected(self):
+        for change in ('modifiers', 'repeat', 'bool_id', 'wrong_receipt', 'wrong_query', 'missing_release', 'extra_dispatch'):
+            records, report = keyboard_route_fixture()
+            events = records[0][1]['events']
+            if change == 'modifiers': events[0]['data']['modifiers'] = 0
+            if change == 'repeat': events[0]['data']['repeat'] = 1
+            if change == 'bool_id': events[0]['data']['ingress'] = True
+            if change == 'wrong_receipt': report['processed_keys'][0]['end']['data']['handled'] = False
+            if change == 'wrong_query': report['native_snapshots'][0]['query_after_native_key'] += 1
+            if change == 'missing_release': events[-3]['data']['type'] = 'other'
+            if change == 'extra_dispatch': events.append({'seq': len(events) + 1, 'kind': 'input.dispatch', 'data': {'phase': 'begin', 'type': 'keydown', 'code': 'ENTER', 'ingress': 999}})
+            with self.assertRaises((AssertionError, KeyError, TypeError)): audit.validate_keyboard_route(records, report)
+
+
 class ExternalOutcomeTests(unittest.TestCase):
     def test_missing_unknown_wrongrun_nonzero_and_unreaped_external_result(self):
         native = {'body_state': 'exited', 'status_text': 'GLSMAC exited (0).', 'raw_code': 0}
@@ -519,7 +634,10 @@ class ExternalOutcomeTests(unittest.TestCase):
             path.write_text(json.dumps(data)); self.assertTrue(audit.validate_external_exit(path, native, bindings)['supported'])
             for change in (lambda d: d.update(kind='unknown'), lambda d: d['capture_bindings'].update(raw_sha256='wrong'),
                            lambda d: d.update(raw_process_exit=1), lambda d: d['tool_completion_result'].update(exit_code=1),
-                           lambda d: d.pop('tool_completion_result'), lambda d: d.update(browser_server_driver_reaped=False)):
+                           lambda d: d.pop('tool_completion_result'), lambda d: d.update(browser_server_driver_reaped=False),
+                           lambda d: d.update(command="echo 'node --test tools/wasm-tests/terraform-height-browser.test.mjs'"),
+                           lambda d: d.update(command='node --test tools/wasm-tests/terraform-height-browser.test.mjs; echo success'),
+                           lambda d: d.update(command='node --test tools/wasm-tests/other.test.mjs')):
                 mutated = copy.deepcopy(data); change(mutated); path.write_text(json.dumps(mutated))
                 with self.assertRaises((AssertionError, KeyError, TypeError)): audit.validate_external_exit(path, native, bindings)
 
@@ -754,21 +872,39 @@ class PreflightSchemaTests(unittest.TestCase):
             with self.assertRaises(AssertionError): self.validate()
 
 
+def png_model(width=3, height=2, row_filter=0, bad_zlib=False):
+    def chunk(kind, payload):
+        return struct.pack('>I', len(payload)) + kind + payload + struct.pack('>I', zlib.crc32(kind + payload) & 0xffffffff)
+    rows = bytes([row_filter]) + b'\x10\x20\x30' * width
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', b'invalid-zlib' if bad_zlib else zlib.compress(rows * height)) + chunk(b'IEND', b'')
+
+
 class FrameFileTests(unittest.TestCase):
-    def test_all_five_actual_digests_required_without_pixel_agreement_claim(self):
+    def test_all_five_actual_digests_and_decoded_clip_required(self):
         names = ['before-height', 'raise-quote', 'raise-cancel', 'raise-payment-draft', 'raise-paid-completion']
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder); captures = []
             for name in names:
-                data = b'\x89PNG\r\n\x1a\n' + name.encode()  # Digest protocol only; not a rendered image.
+                data = png_model()
                 (root / (name + '.png')).write_bytes(data)
                 captures.append({'name': name, 'sha256': hashlib.sha256(data).hexdigest()})
-            report = {'captures': captures}
+            report = {'captures': captures, 'processed_pointers': [{'canvas_css_rect': {'x': 0, 'y': 0, 'width': 3, 'height': 2}}],
+                      'rendered_readiness': {'width': 3, 'height': 2}}
             self.assertEqual(audit.validate_frames(root, report)['retained_frame_digests_verified'], 5)
             target = root / (names[2] + '.png'); original = target.read_bytes(); target.unlink()
             with self.assertRaises(FileNotFoundError): audit.validate_frames(root, report)
-            target.write_bytes(original + b'changed')
-            with self.assertRaises(AssertionError): audit.validate_frames(root, report)
+            for bad in (original + b'changed', b'\x89PNG\r\n\x1a\n', png_model(4, 2), png_model(row_filter=5), png_model(bad_zlib=True), original[:-1]):
+                target.write_bytes(bad)
+                # Rebound digest must not disguise an invalid image.
+                report['captures'][2]['sha256'] = hashlib.sha256(bad).hexdigest()
+                with self.assertRaises((AssertionError, zlib.error)): audit.validate_frames(root, report)
+
+    def test_png_filters_are_actually_decoded(self):
+        first = audit.decode_frame_png(png_model(row_filter=0), (3, 2))
+        for filter_mode in (1, 2, 3, 4):
+            result = audit.decode_frame_png(png_model(row_filter=filter_mode), (3, 2))
+            self.assertEqual(result['decoded_pixel_bytes'], 18)
+            self.assertNotEqual(result['decoded_pixels_sha256'], first['decoded_pixels_sha256'])
 
 
 if __name__ == '__main__':
