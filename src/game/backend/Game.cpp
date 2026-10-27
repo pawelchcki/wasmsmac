@@ -1571,6 +1571,13 @@ void Game::FinalizeAcceptedEvent( const event::Event* event, gse::Value* applied
 	// The whole parent Apply has succeeded, including inline turn-ready work.
 	// Pending optimistic events do not reach this boundary before acceptance.
 	if ( m_tm ) { m_tm->FinalizeAcceptedTerrain( event->GetId() ); }
+	// Only the receiving world's live canonical roster participates. Notification
+	// copies and retired players never acquire acceptance authority.
+	if ( m_state ) {
+		for ( auto& slot : m_state->m_slots->GetSlots() ) {
+			if ( slot.GetState() == slot::Slot::SS_PLAYER ) { slot.GetPlayer()->FinalizeAcceptedEnergy( event->GetId() ); }
+		}
+	}
 }
 
 void Game::ProcessEventResponses() {

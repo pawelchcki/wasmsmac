@@ -295,7 +295,7 @@ int64_t Player::InitializeEnergy( GSE_CALLABLE, const int64_t credits ) {
 	GetGame()->CheckRW( GSE_CALL ); CheckCustomMutation( GSE_CALL );
 	const auto error = ValidateInitialEnergy( credits ); if ( !error.empty() ) { GSE_ERROR( gse::EC.GAME_ERROR, error ); }
 	const auto token = m_next_energy_receipt + 1;
-	m_energy_receipts.emplace( token, EnergyReceipt { int64_t( GetGame()->GetTurnId() ), 0, 0, credits, 0, m_energy_revision, false, true, m_energy_initialization_allowed } );
+	m_energy_receipts.emplace( token, EnergyReceipt { int64_t( GetGame()->GetTurnId() ), 0, 0, credits, 0, m_energy_revision, false, true, m_energy_initialization_allowed, GetGame()->m_applying_event_id } );
 	m_energy_credits = credits; m_energy_initialized = true; m_energy_initialization_allowed = false; m_next_energy_receipt = token; m_energy_revision = token;
 	GetGame()->QueueEnergyChanged( m_energy_handle );
 	return token;
@@ -313,10 +313,18 @@ int64_t Player::ChangeEnergy( GSE_CALLABLE, const int64_t delta, const int64_t e
 	const auto token = m_next_energy_receipt + 1;
 	const auto next = m_energy_credits + delta;
 	const auto income_turn = income ? turn : m_energy_income_turn;
-	m_energy_receipts.emplace( token, EnergyReceipt { turn, m_energy_credits, m_energy_income_turn, next, income_turn, m_energy_revision, m_energy_initialized, false, m_energy_initialization_allowed } );
+	m_energy_receipts.emplace( token, EnergyReceipt { turn, m_energy_credits, m_energy_income_turn, next, income_turn, m_energy_revision, m_energy_initialized, false, m_energy_initialization_allowed, game->m_applying_event_id } );
 	m_energy_credits = next; m_energy_income_turn = income_turn; m_next_energy_receipt = token; m_energy_revision = token;
 	game->QueueEnergyChanged( m_energy_handle );
 	return token;
+}
+
+void Player::FinalizeAcceptedEnergy( const std::string& event_id ) {
+	if ( event_id.empty() ) { return; }
+	for ( auto it = m_energy_receipts.begin(); it != m_energy_receipts.end(); ) {
+		if ( it->second.acceptance_context == event_id ) { it = m_energy_receipts.erase( it ); }
+		else { ++it; }
+	}
 }
 
 const Player::EnergyReceipt& Player::ValidateEnergyRollback( GSE_CALLABLE, const int64_t receipt ) const {

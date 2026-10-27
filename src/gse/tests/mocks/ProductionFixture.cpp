@@ -1390,6 +1390,19 @@ struct ProductionFixture : gc::Object {
 	void Process() { game.ProcessEvents(); }
 	size_t DisbandJournalCount() const { return game.m_disbanding_records.size(); }
 	size_t TerrainJournalCount() const { return game.GetTM()->m_terrain_records.size(); }
+	Value* EnergyJournalCounts( GSE_CALLABLE ) const {
+		value::array_elements_t rows;
+		for ( const auto& slot : state->m_slots->GetSlots() ) {
+			if ( slot.GetState() == backend::slot::Slot::SS_PLAYER ) {
+				rows.push_back( VALUEEXT( value::Object, GSE_CALL, {
+					{ "owner", VALUE( value::Int,, slot.GetIndex() ) },
+					{ "retained", VALUE( value::Int,, slot.GetPlayer()->m_energy_receipts.size() ) },
+				} ) );
+			}
+		}
+		return VALUE( value::Array,, rows );
+	}
+
 	void ServerEvent( GSE_CALLABLE, const std::string& name, const value::object_properties_t& data ) {
 		if ( !transport ) { transport = std::make_unique< ProbeConnection >( true ); state->m_connection = transport.get(); }
 		game.AddEvent( new backend::event::Event( &game, backend::event::Event::ES_SERVER, game.m_slot_num, GSE_CALL, name, data ) );
@@ -1869,6 +1882,9 @@ Value* MakeNaturalStartupFixture( GSE_CALLABLE, size_t width, size_t height, con
 	auto* object = static_cast< FixtureObject* >( MakeWorldStartupFixture( GSE_CALL, width, height ) );
 	const auto session = object->session;
 	session->current->PrepareNaturalStartup( terrain );
+	object->Set( "energy_journal_counts", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return session->current->EnergyJournalCounts( GSE_CALL );
+	} ), GSE_CALL );
 	object->Set( "audit_snapshot", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return VALUE( value::String,, session->current->AuditSnapshot() );
 	} ), GSE_CALL );
@@ -2099,6 +2115,9 @@ Value* MakeProductionFixture( GSE_CALLABLE, bool founding, bool selection, const
 	} ), GSE_CALL );
 	object->Set( "received_energy_turn_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->ReceivedEnergyTurnProbe( GSE_CALL );
+	} ), GSE_CALL );
+	object->Set( "energy_journal_counts", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return session->current->EnergyJournalCounts( GSE_CALL );
 	} ), GSE_CALL );
 	object->Set( "energy_codec_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->EnergyCodecProbe( GSE_CALL );
