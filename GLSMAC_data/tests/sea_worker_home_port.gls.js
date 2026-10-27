@@ -68,6 +68,14 @@ behavior.scenario('seven-owner normal native world produces a SeaFormer then ent
   near = game.get_bm().spawn_base(f.owner,tm.get_tile(8,row),{facilities:[]});
   foreign = game.get_bm().spawn_base(other,tm.get_tile(12,row+2),{facilities:[]});
  }); f.process_events();
+ // A newly authored native city starts empty. Give the producer its real
+ // initial citizen through the shipped allocation event before the baseline;
+ // the native nonempty-population production requirement stays unchanged.
+ const initial_pop = {caller:0,data:{automatic_growth:true}}; initial_pop.game = game; initial_pop.data.base = home;
+ const add_pop = #include('../default/game/event/add_base_pop');
+ test.assert(!#is_defined(add_pop.validate(initial_pop)));
+ f.with_write(() => { add_pop.apply(initial_pop); });
+ test.assert(#sizeof(home.get_pops()) == 1);
  let announced_home = 0; game.get_um().on('unit_spawn',(e) => { if (e.unit.get_def().id == 'SeaFormers') { announced_home = e.unit.get_terraform_home(); } });
  // The new city's zero-credit project is an explicit initial input. Use the
  // native restore API before the baseline so this one real production tick is
