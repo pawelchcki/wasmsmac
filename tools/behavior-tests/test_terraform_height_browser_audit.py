@@ -32,7 +32,7 @@ def protocol_fixture():
                 'is_land': True, 'is_water': False, 'native_type': {'domain': 'land'},
                 'native_height_band': {name: False for name in audit.BANDS}, 'unknown_native': {'value': -0.0}}
     tiles['8,8']['neighbors']['E'] = {'x': 10, 'y': 8}
-    trace = {'ui': {}, 'tiles': tiles, 'unit_details': {u['id']: {'moved_this_turn': False, 'quotes': {'E': {'allowed_now': True, 'reason': None}}} for u in units},
+    trace = {'policy': {'version': 1, 'ignore_technologies': True}, 'ui': {}, 'tiles': tiles, 'unit_details': {u['id']: {'moved_this_turn': False, 'quotes': {'E': {'allowed_now': True, 'reason': None}}} for u in units},
              'player_details': {p['id']: {'energy': {'credits': 10}, 'energy_revision': 1} for p in players},
              'base_details': {b['id']: {'unknown': 'unchanged'} for b in bases}}
     world = {'width': 16, 'height': 16, 'turn': 1, 'players': players, 'units': units, 'bases': bases, 'terrain_trace': trace}
@@ -67,7 +67,7 @@ def protocol_fixture():
     target['imported'].update(active=False, source_corners=None, source_elevation=None, source_water=None)
     after['terrain_trace']['tiles']['10,8']['elevation']['left'] = 241
     receipt = {'name': 'unit_terraform', 'event_id': '0_68', 'caller': 0, 'success': True, 'data': {'unit_id': 8, 'action': 'raise', 'confirmed_height': True}}
-    inputs = {'actor': 8, 'can_terraform': True, 'raise_rule': {'turns': 1}}
+    inputs = {'policy': {'version': 1, 'ignore_technologies': True}, 'actor': 8, 'can_terraform': True, 'raise_rule': {'turns': 1}}
     events = []
     for i in range(6):
         fence = (i + 1) * 3
@@ -140,6 +140,23 @@ class AuditMutations:
                 if begins:
                     begins[0]['data']['code'] = 'Q'
                     break
+        self.reject()
+
+    def test_reject_missing_world_policy(self):
+        self.packets()[1]['world']['terrain_trace'].pop('policy')
+        self.reject()
+
+    def test_reject_changed_world_policy(self):
+        for policy in ({'version': 1, 'ignore_technologies': False}, {'version': 2, 'ignore_technologies': True}, {'version': True, 'ignore_technologies': True}, {'version': 1, 'ignore_technologies': 1}):
+            with self.subTest(policy=policy):
+                self.setUp()
+                for row in self.packets(): row['world']['terrain_trace']['policy'] = policy.copy()
+                self.reject()
+
+    def test_reject_different_actual_input_policy(self):
+        for kind, value, _ in self.records:
+            if kind == 'TH_INPUTS': value['policy']['ignore_technologies'] = False
+        self.report['native_input']['policy']['ignore_technologies'] = False
         self.reject()
 
     def test_reject_missing_actual_coverage(self):

@@ -99,6 +99,10 @@ def validate_coverage(state):
 
 
 def validate_sequence(records, report):
+    inputs = [value for kind, value, _ in records if kind == 'TH_INPUTS']
+    assert len(inputs) == 1
+    policy = inputs[0]['policy']
+    assert equal(policy, {'version': 1, 'ignore_technologies': True}), 'Different actual native input policy'
     native = [(value, line) for kind, value, line in records if kind == 'TH_NATIVE']
     assert len(native) == len(CHECKPOINTS)
     reported = report['native_snapshots']
@@ -131,6 +135,7 @@ def validate_sequence(records, report):
         presentation = ui['height_presentation']
         assert (presentation is None) if i == 0 else (presentation['stage'] == STAGES[i])
         assert type(row['world']['turn']) is int and row['world']['turn'] == turn
+        assert equal(row['world']['terrain_trace']['policy'], policy), 'Native world policy differs from actual input policy'
         validate_coverage(row['world'])
         fence = item['query_after_native_key']
         assert type(fence) is int and fence > prior_fence
@@ -304,6 +309,16 @@ def audit_artifacts(directory):
     assert report['log_transport']['partial'] is False and report['log_transport']['settled_failure'] is None
     assert report['runtime_js_sha256'] == preflight['runtime']['js'] and report['runtime_wasm_sha256'] == preflight['runtime']['wasm']
     assert report['source_override']['original_sha256'] == preflight['original_rules_sha256'] and report['source_override']['rate_one_sha256'] == preflight['executed_rules_sha256']
+    assert preflight['head'] == report['host_head'] and preflight['native_tree'] == report['native_source_tree'] and preflight['default_tree'] == report['default_tree']
+    if preflight.get('kind') == 'terraform-height-producer-preflight.v1':
+        assert preflight['version'] == 1 and preflight['candidate_executed'] is False and preflight['phase'] == 'before-native-launch'
+        assert report['preflight_sha256'] == hashlib.sha256(preflight_bytes).hexdigest()
+        assert preflight['seed_requested'] == report['seed_requested'] and preflight['browser_budget_ms'] == 180000
+        assert preflight['production_default_sha256'] == report['production_default_sha256']
+        for name, field in [('fixture-main.gls.js', 'main'), ('fixture-world.gls.js', 'world'), ('fixture-map.MP', 'map')]:
+            assert hashlib.sha256((directory / name).read_bytes()).hexdigest() == preflight['input_sha256'][field]
+        assert preflight['input_sha256']['main'] == report['observer_sha256'] and preflight['input_sha256']['world'] == report['world_input_sha256']
+        assert preflight['input_sha256']['helpers'] == report['observer_helpers_sha256']
     assert hashlib.sha256(raw).hexdigest() == report['log_transport']['raw_sha256']
     joined = ''.join(json.loads(line)['text'] for line in (directory / 'application-log-chunks.jsonl').read_text().splitlines() if line)
     assert joined.encode() == raw
