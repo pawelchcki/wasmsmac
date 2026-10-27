@@ -386,6 +386,8 @@ public:
 	gc::Space* const GetGCSpace() const;
 
 	void CheckRW( GSE_CALLABLE ) const;
+	void QueueEnergyChanged( const std::shared_ptr< Player* >& player );
+	void FlushEnergyChanges();
 
 	void SetSlotNum( const size_t slotnum ); // not thread-safe, make sure to call from game thread only
 
@@ -483,6 +485,8 @@ private:
 	std::atomic< uint64_t > m_next_event_id = 0;
 
 	std::atomic< size_t > m_rw_counter = 0;
+	std::mutex m_energy_views_mutex;
+	std::unordered_map< size_t, std::shared_ptr< Player* > > m_pending_energy_views;
 	void WithRW( const std::function< void() >& f );
 
 	enum OpeningPhase { OPENING_NONE, OPENING_PREPARING, OPENING_PLANETFALL, OPENING_NAME, OPENING_STARTING, OPENING_TOUR, OPENING_MAP, OPENING_FAILED };

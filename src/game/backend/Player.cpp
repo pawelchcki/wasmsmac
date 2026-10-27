@@ -297,6 +297,7 @@ int64_t Player::InitializeEnergy( GSE_CALLABLE, const int64_t credits ) {
 	const auto token = m_next_energy_receipt + 1;
 	m_energy_receipts.emplace( token, EnergyReceipt { int64_t( GetGame()->GetTurnId() ), 0, 0, credits, 0, m_energy_revision, false, true, m_energy_initialization_allowed } );
 	m_energy_credits = credits; m_energy_initialized = true; m_energy_initialization_allowed = false; m_next_energy_receipt = token; m_energy_revision = token;
+	GetGame()->QueueEnergyChanged( m_energy_handle );
 	return token;
 }
 
@@ -314,6 +315,7 @@ int64_t Player::ChangeEnergy( GSE_CALLABLE, const int64_t delta, const int64_t e
 	const auto income_turn = income ? turn : m_energy_income_turn;
 	m_energy_receipts.emplace( token, EnergyReceipt { turn, m_energy_credits, m_energy_income_turn, next, income_turn, m_energy_revision, m_energy_initialized, false, m_energy_initialization_allowed } );
 	m_energy_credits = next; m_energy_income_turn = income_turn; m_next_energy_receipt = token; m_energy_revision = token;
+	game->QueueEnergyChanged( m_energy_handle );
 	return token;
 }
 
@@ -335,6 +337,7 @@ void Player::RollbackEnergy( GSE_CALLABLE, const int64_t receipt ) {
 	const auto& previous = ValidateEnergyRollback( GSE_CALL, receipt );
 	m_energy_credits = previous.credits; m_energy_income_turn = previous.income_turn; m_energy_revision = previous.previous_revision; m_energy_initialized = previous.was_initialized; m_energy_initialization_allowed = previous.was_allowed;
 	m_energy_receipts.erase( receipt );
+	GetGame()->QueueEnergyChanged( m_energy_handle );
 }
 
 WRAPIMPL_BEGIN( Player )
@@ -369,6 +372,7 @@ WRAPIMPL_BEGIN( Player )
 		if ( apply ) {
 			player->m_energy_credits = credits; player->m_energy_income_turn = income_turn; player->m_energy_revision = revision; player->m_energy_initialized = initialized; player->m_energy_initialization_allowed = allowed;
 			for ( const auto token : tokens ) { player->m_energy_receipts.erase( token ); }
+			game->QueueEnergyChanged( player->m_energy_handle );
 		}
 		return VALUE( gse::value::Undefined );
 	};

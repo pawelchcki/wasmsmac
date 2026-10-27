@@ -178,6 +178,7 @@ void Game::Stop() {
 }
 
 void Game::Iterate() {
+	FlushEnergyChanges();
 	MTModule::Iterate();
 
 	State* state;
@@ -2159,6 +2160,7 @@ void Game::InitGame( MT_Response& response, const bool interactive_opening, MT_C
 }
 
 void Game::ResetGame() {
+	{ std::lock_guard guard( m_energy_views_mutex ); m_pending_energy_views.clear(); }
 	std::lock_guard startup_guard( m_startup_mutex );
 	++m_startup_generation;
 	for ( auto& contacts : m_contacts ) { contacts.clear(); }

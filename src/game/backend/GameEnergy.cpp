@@ -1,0 +1,51 @@
+#include "Game.h"
+#include "State.h"
+#include "Player.h"
+#include "game/backend/slot/Slot.h"
+#include <exception>
+#include <utility>
+
+namespace game::backend {
+void Game::QueueEnergyChanged( const std::shared_ptr< Player* >& handle ) {
+	auto* player = *handle;
+	if ( !player || !player->GetSlot() || player->GetSlot()->GetPlayer() != player ) { return; }
+	std::lock_guard guard( m_energy_views_mutex );
+	m_pending_energy_views[ player->GetSlot()->GetIndex() ] = handle;
+}
+
+void Game::FlushEnergyChanges() {
+	decltype( m_pending_energy_views ) pending;
+	{ std::lock_guard guard( m_energy_views_mutex ); pending.swap( m_pending_energy_views ); }
+	State* state; uint64_t generation;
+	{ std::lock_guard guard( m_startup_mutex ); state = m_state; generation = m_startup_generation; }
+	if ( pending.empty() || !state ) { return; }
+	state->WithGSE( state, [ game = this, state, generation, pending = std::move( pending ) ]( GSE_CALLABLE ) {
+		{ std::lock_guard guard( game->m_startup_mutex ); if ( game->m_state != state || game->m_startup_generation != generation ) { return; } }
+		if ( state->GetGame() != game ) { return; }
+		// Delivery happens after the authoritative receipt has been sealed.
+		// An owner-thread accumulation cannot open a mutation scope for views.
+		if ( game->m_rw_counter ) {
+			for ( const auto& entry : pending ) { game->QueueEnergyChanged( entry.second ); }
+			return;
+		}
+		for ( const auto& entry : pending ) {
+			auto* player = *entry.second;
+			if ( !player || !player->GetSlot() || player->GetSlot()->GetPlayer() != player ||
+				player->GetSlot()->GetIndex() != entry.first || player->GetGame() != game ) { continue; }
+			const auto id = static_cast< int64_t >( entry.first );
+			const auto credits = player->GetEnergyCredits(), income_turn = player->GetEnergyIncomeTurn();
+			const auto initialized = player->IsEnergyInitialized();
+			try {
+				game->Trigger( GSE_CALL, "energy_changed", ARGS_F( id, credits, income_turn, initialized ) {
+					{ "player_id", VALUE( gse::value::Int,, id ) },
+					{ "credits", VALUE( gse::value::Int,, credits ) },
+					{ "last_income_turn", VALUE( gse::value::Int,, income_turn ) },
+					{ "initialized", VALUE( gse::value::Bool,, initialized ) },
+				}; } );
+			} catch ( const std::exception& error ) {
+				game->MTModule::Log( "Energy view listener failed: " + std::string( error.what() ) );
+			}
+		}
+	} );
+}
+}
