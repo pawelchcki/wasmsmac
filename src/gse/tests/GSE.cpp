@@ -192,10 +192,10 @@ void AddGSETests( task::gsetests::GSETests* task ) {
 				// Assert only after threads and pending cleanup have settled. Root
 				// references stay live until both threads join, including old-red.
 				GT_ASSERT( !owner_error && !collector_error && !producer_error, "Concurrent GC progress probe raised an exception" );
-				GT_ASSERT( both_finished_inside_owner, "Collector or queued producer blocked until owner accumulation ended" );
 				GT_ASSERT( no_early_delivery && pending_roots_retained, "Concurrent probe executed off-owner or lost pending lifetime roots" );
 				GT_ASSERT( delivered == 1 && cleaned == 1 && delivered_on_owner, "Concurrent probe lost, duplicated or mis-threaded a callback/cleanup" );
 				GT_ASSERT( destroyed == 2, "Delivered concurrent callback retained its owner/context or destroyed them twice" );
+				GT_ASSERT( both_finished_inside_owner, "Collector or queued producer blocked until owner accumulation ended" );
 				GT_OK();
 			}
 		);
