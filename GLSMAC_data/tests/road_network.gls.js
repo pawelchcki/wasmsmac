@@ -115,6 +115,8 @@ for (terrain of [['wet',3,1], ['rolling',1,2], ['rocky',1,3]]) {
     const e = {caller:f.owner.id}; e.game = f.game; e.data = {};
     e.data.unit = f.current_unit(); e.data.tile = f.game.tm.get_tile(outbound ? 0 : 2, 2);
     const before = f.snapshot(); const quote = move.observe_cost(e);
+    #print('ROAD_TERRAIN_QUOTE|' + #json_text_exact({terrain:terrain[0],uniform:uniform,source:{x:e.data.unit.get_tile().x + 0,moisture:e.data.unit.get_tile().moisture + 0,rockiness:e.data.unit.get_tile().rockiness + 0},
+     destination:{x:e.data.tile.x + 0,moisture:e.data.tile.moisture + 0,rockiness:e.data.tile.rockiness + 0},quote:quote,unchanged:f.snapshot() == before}));
     test.assert(quote.road_rate == 3 && f.snapshot() == before, 'Both connected land endpoints use the declared road rate without mutation');
     const actual = f.move(outbound);
     test.assert(actual.resolved.is_movement_successful && actual.applied.completed && !f.current_unit().get_tile().is_locked());
