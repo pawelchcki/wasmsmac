@@ -12,7 +12,7 @@ fixture changes preserve its production GSE tree
 fixture digest separately. Older supporting proofs retain their actual versions.
 
 The catalog already registers `terraforming-controls-all`, `terraforming-dialog`,
-`former-controls` and `native-input-state` in active hot coverage. Mounted
+`former-controls` and `native-input-state` in active catalog coverage. Mounted
 handlers and input guards have supporting native passes; they do not establish
 real browser rendering or input delivery. Run the applicable suites again after
 controller, work or authority changes:
@@ -31,8 +31,16 @@ typed fields and exact Float bits with a clean exit and flat sampled 481 MB
 WASM capacity. The frozen `ade25925` / v4 matrix then passed all 36 cases / 680
 assertions, 166 observations, 1,162 owner snapshots and 21,248 tile rows, all raw
 exit zero. Its artifacts are `/tmp/terraform-pr2-full36-staged-v4`. This remains
-a supporting baseline: the complete matrix must run again on final v6 source
-after cooperation, shared-progress and aquifer-reuse integration.
+a supporting baseline. The current production source subsequently passed the
+complete matrix in cloud run `40515414432` on `0b419a29`, including cooperation,
+shared progress and aquifer reuse. Independent raw-log replay confirms the same
+36/680, 166 observations, 1,162 owner snapshots and 21,248 tile rows, all raw
+exit zero; the complete cooperative observation also passes 1/532. Cloud binary
+hashes differ from the private v6 build while the native source is identical.
+See [the current cloud receipt](terraform-current-cloud-proof.json) for exact
+artifact/runtime bindings. The local private-v6 repeat is only 11/36 passed,
+intentionally stopped at a completed-case boundary when cloud coverage was
+running; it is not another full matrix pass.
 
 ```sh
 python3 tools/behavior-tests/state_trace/terraform_actions.py \
@@ -67,8 +75,15 @@ env FONTCONFIG_FILE=/tmp/glsmac-fonts.conf \
 The smoke checks 29 distinct source rows, an actual non-base click, Escape and
 Tab cancellation, and owned-base pointer dispatch while preserving all seven
 owners and the map across pure controls. Rows are not domain variants or 36
-completed actions. This browser proof remains pending on the complete current
-host. Native traces cannot set `browser_verified`.
+completed actions. Actual controls browser acceptance passes 1/1 in 78.002
+seconds with raw exit zero on frozen `0322db43`, native tree `115032ff` and
+default tree `25ef18d3`. It includes four complete seven-owner snapshots,
+acknowledged native pointer/key processing, an accepted owned-base road plan,
+actual Q delivery and normal teardown. The sealed 13,671,106-byte raw log equals
+the retained chunk stream. Actual main/worker log-hook capture is verified;
+production bootstrap is unchanged and only harness debug autoscroll is omitted.
+See [the browser receipt](terraform-controls-browser-v6-proof.json). Native
+traces alone cannot set `browser_verified`.
 
 Native nonheight cooperation now passes 35/248, seven-owner binding 1/151,
 4,096-tile capacity 1/11, full cooperative observation 1/532 and mock-mounted
@@ -78,10 +93,14 @@ also pass; see [normal-map acceptance](normal-worker-acceptance.md),
 [cooperation policy](terraforming-cooperation-policy.md) and
 [aquifer reuse](aquifer-plan-reuse.md) for exact versions and failures.
 
-Real current-host browser controls, height payment/mesh refresh and naval browser
-flows remain separate gates. The browser fixture now uses native managers at
+Height payment/mesh refresh and naval browser flows remain separate gates from
+the passing controls check. The browser fixture uses native managers at
 `start_ui`, actual source-backed city projects, SDL/pointer delivery and complete
 raw snapshots. Its retained initial fixture/protocol failures are not passes.
+Current Hot CI still exposes strict disband shutdown and capacity cleanup
+failures. Completed body assertions or stage END messages do not establish a
+passing process/footer. A private-v6 capacity pass does not replace a failing
+cloud-runtime check; fresh final-head CI and clean review remain required.
 Real work-animation binding, recorded original fee/height/contour/climate
 mismatches, unmeasured general original formulas/priorities, full audio and
 typography remain explicit fidelity gaps. Original passing action cases stay zero.
