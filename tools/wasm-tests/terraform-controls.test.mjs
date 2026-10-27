@@ -8,6 +8,7 @@ import {test} from 'node:test';
 import {chromium} from 'playwright';
 import {PNG} from 'pngjs';
 import {fixtureSources} from './terraform-browser-inputs.mjs';
+import {TerraformGeometry} from './terraform-browser-geometry.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const scriptsRoot = process.env.WASM_SCRIPTS_ROOT || root;
@@ -97,6 +98,8 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const log=async()=>{const value=await page.locator('#log').textContent();assert.doesNotMatch(value,fatal);assert.deepEqual(errors,[]);return value;};
   const fresh=async(prefix,action)=>{const before=(await log()).length;await action();await page.waitForFunction(({before,prefix,fatal})=>{const t=document.querySelector('#log').textContent;return t.slice(before).includes(prefix)||new RegExp(fatal).test(t);},{before,prefix,fatal:fatal.source});return(await log()).slice(before);};
   const lines=(text,prefix)=>text.split('\n').filter(line=>line.includes(prefix)).map(line=>line.slice(line.indexOf(prefix)+prefix.length).trim());
+  const geometry=new TerraformGeometry();report.input_ledger={enabled:true,dropped:0,events:[]};
+  const drain=async()=>{const text=await fresh('TF_INPUT|',()=>page.keyboard.press('Control+Alt+i'));const packet=JSON.parse(JSON.parse(lines(text,'TF_INPUT|').at(-1)));geometry.ingest(packet);report.input_ledger.events.push(...packet.events);return packet;};
   const state=async()=>{const text=await fresh('TF_STATE|',async()=>{});const line=lines(text,'TF_STATE|').at(-1);return JSON.parse(line.slice(line.indexOf('|')+1));};
   const snapshot=async checkpoint=>{const text=await fresh('TF_NATIVE|',()=>page.keyboard.press('Control+Alt+p'));const value=JSON.parse(lines(text,'TF_NATIVE|').at(-1));report.native_snapshots.push({checkpoint,value});return value;};
   const nativeOnly=value=>{const copy=structuredClone(value);delete copy.terrain_trace.ui;return copy;};
@@ -120,13 +123,18 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   assert.equal(initial.players.length,7);assert.equal(initial.bases.length,7);assert.equal(initial.units.length,8);assert.equal(Object.keys(initial.terrain_trace.tiles).length,128);
   for(const player of initial.players){assert.ok(initial.bases.some(base=>base.owner===player.id));assert.ok(initial.units.some(unit=>unit.owner===player.id));}
   assert.deepEqual(initial.terrain_trace.policy,{version:1,ignore_technologies:true});
-  await click(65,539);let text=await fresh('TF_POINT|header|',async()=>{});
-  const header=lines(text,'TF_POINT|header|').at(-1).split('|').map(Number);await click(...header);
-  text=await fresh('TF_ROWS|',async()=>{});const rows=JSON.parse(lines(text,'TF_ROWS|').at(-1));
+  let text=await fresh('TF_HEADERS|',()=>click(65,539));
+  report.headers=JSON.parse(lines(text,'TF_HEADERS|').at(-1));
+  const headers=report.headers.rows.filter(row=>row.id==='left_menu_terraform');assert.equal(headers.length,1);
+  assert.equal(new Set(report.headers.rows.map(row=>row.id)).size,report.headers.rows.length);
+  await drain();const header=geometry.button('terraform-header',headers[0].id,headers[0].label,report.headers.viewport);
+  report.header_target=header;
+  text=await fresh('TF_ROWS|',()=>click(header.x,header.y));const rows=JSON.parse(lines(text,'TF_ROWS|').at(-1));
+  const headerPacket=await drain();geometry.assertPointerHit(headerPacket,header);
   assert.equal(rows.length,29);assert.equal(new Set(rows.map(row=>row.id)).size,29);
   assert.ok(rows.find(row=>row.id==='soil_enricher'));assert.ok(rows.find(row=>row.id==='mag_tube'));
   assert.equal(rows.filter(row=>row.id==='monolith').length,0);
-  for(const row of rows){assert.ok(row.x>=0&&row.x<=1024&&row.y>=0&&row.y<=768,`reachable ${row.id}`);}
+  for(const row of rows){const target=geometry.button('terraform-row',row.id,row.label,report.headers.viewport);Object.assign(row,{node_id:target.id,bounds:target.bounds,x:target.x,y:target.y});}
   report.rows=rows;await page.locator('#canvas').screenshot({path:`${artifacts}/complete-menu.png`});
   const road=rows.find(row=>row.id==='road_to');assert.ok(road.enabled);await click(road.x,road.y);
   let current=await state();assert.equal(current.target.command,'road_to');assert.equal(current.modal,false);
@@ -146,8 +154,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   assert.equal(result.command,'road_to');assert.equal(result.target_x,0);assert.equal(result.target_y,2);
   await page.waitForTimeout(300);current=await state();assert.equal(current.target,null);assert.equal(current.pending,null);
   report.final_state=current;await snapshot('after-owned-base-request');
-  const ledger=await fresh('TF_INPUT|',()=>page.keyboard.press('Control+Alt+i'));
-  report.input_ledger=JSON.parse(JSON.parse(lines(ledger,'TF_INPUT|').at(-1)));
+  await drain();
   assert.equal(report.input_ledger.enabled,true);assert.equal(report.input_ledger.dropped,0,'Native input observer must remain complete');
   assert.ok(report.input_ledger.events.some(event=>event.kind==='input.ingress'),'Actual SDL input ingress must be recorded');
   assert.ok(report.input_ledger.events.some(event=>event.kind==='input.dispatch'),'Actual engine input dispatch must be recorded');

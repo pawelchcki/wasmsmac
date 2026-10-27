@@ -48,6 +48,12 @@
     return {selected:preview.selected_unit_id,pending:preview.order_pending == null ? null : #clone(preview.order_pending),order_label:preview.order_label == null ? null : preview.order_label.text + '',
      movement_label:preview.movement_label == null ? null : preview.movement_label.text + '',work_progress:preview.work_progress_label == null ? null : preview.work_progress_label.text + '',target:preview.terraforming_target.snapshot(),modal:popup.is_shown()};
    });
+   let headers_logged = false; const tagged_rows = {};
+   const properties = (node) => {
+    const result = {};
+    for (key of ['left','top','width','height','bottom']) { const value = node[key]; result[key] = #is_defined(value) ? value : null; }
+    return result;
+   };
    const observe = () => {
     const movement = actor.movement;
     #print('TF_STATE|' + #to_string(serial) + '|' + #json_text_exact({selected:preview.selected_unit_id,actor:actor.id,owner:game.get_player().id + 0,
@@ -58,9 +64,18 @@
      height_presentation:preview.height_presentation}));
     serial++;
     const root = menu.menus.left_menu;
-    if (root.is_open) {
-     const header = root.items[5].el;
-     #print('TF_POINT|header|' + #to_string(root.el.left + header.width / 2) + '|' + #to_string(glsmac.ui.get_height() - root.el.bottom - root.el.height + header.top + header.height / 2));
+    if (root.is_open && !headers_logged) {
+     if (#sizeof(root.items) != #sizeof(menu.headers)) { throw Error('Native root controls differ from installed header inventory'); }
+     const records = []; let index = 0;
+     for (definition of menu.headers) {
+      const control = root.items[index]; const node = control.el;
+      if (control.entry.label != definition.label || node.text != definition.label) { throw Error('Native root control label differs from its source identity'); }
+      node.presentation_role('terraform-header',definition.id);
+      records :+ {id:definition.id + '',source:definition.source + '',index:index,label:node.text + '',native_class:#classof(node),properties:properties(node)};
+      index++;
+     }
+     #print('TF_HEADERS|' + #json_text_exact({viewport:{width:glsmac.ui.get_width(),height:glsmac.ui.get_height()},root:properties(root.el),rows:records}));
+     headers_logged = true;
     }
     const child = menu.menus.left_menu_terraform;
     if (#is_defined(child) && child.is_open) {
@@ -68,8 +83,9 @@
      for (row of child.items) {
       const entry = row.entry;
       if (#is_defined(entry.terraform_action)) {
+       if (!#is_defined(tagged_rows[entry.terraform_action])) { row.el.presentation_role('terraform-row',entry.terraform_action); tagged_rows[entry.terraform_action] = true; }
        rows :+ {id:entry.terraform_action + '',label:row.el.text + '',enabled:row.el.color != 'black',
-        x:child.el.left + row.el.width / 2,y:child.el.top + row.el.top + row.el.height / 2};
+        properties:properties(row.el)};
       }
      }
      #print('TF_ROWS|' + #json_text_exact(rows));

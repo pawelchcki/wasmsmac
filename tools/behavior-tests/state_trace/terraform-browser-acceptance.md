@@ -70,3 +70,17 @@ agreement. Native work completion is not proof of work animation/audio timing.
 Keep those fields unsupported unless actual rendered evidence establishes the
 specific claim. A browser failure stops expansion for diagnosis; no extra keys,
 expected-state relaxation, blind sleeps or runtime memory increase are allowed.
+
+The initial real-menu attempt preserved a wrong target point `(45,434)` which
+opened ACTION. Source inspection confirmed Terraform remains header index five;
+no replacement ordinal or pixel offset is justified. The harness therefore tags
+the actual source-matched native buttons with the existing `presentation_role`
+observer and reads `semantic.geometry` effective absolute rectangles. Source ID,
+label, native button tag, unique live target and in-viewport positive area must
+all agree before calculating its center. Actual SDL hover-transition evidence
+must enter that button or its embedded child. Requested relative GSE properties
+remain logged separately and never authorize a pointer target. The same mechanism
+observes all 29 action rows. These are diagnostic roles, not input handlers or
+new native APIs. Three pure wire-integrity tests exercise missing/duplicate/wrong
+label/bad bounds/wrong hit rejection and exact native float coordinates; they do
+not count as a real-browser pass.
