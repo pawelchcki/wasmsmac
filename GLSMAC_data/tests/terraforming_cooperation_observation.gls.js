@@ -23,7 +23,8 @@ const observe = (stage,total,has_paused,has_stale) => {
  const snapshot = scene.observer.read(); const trace = snapshot.terrain_trace;
  test.assert(#sizeof(snapshot.players) == 7 && #sizeof(snapshot.bases) == 7 && #sizeof(snapshot.units) == 22 && trace.coverage.cooperative_work && !trace.coverage.ui);
  for (pair of f.cooperation_pairs) {
-  for (unit of [pair.first,pair.second]) {
+  for (unit_id of [pair.first.id + 0,pair.second.id + 0]) {
+   const unit = f.game.get_um().get_unit(unit_id);
    let row = null;
    for (candidate of snapshot.units) { if (candidate.raw_id == unit.id) { row = candidate; } }
    test.assert(row != null && #float_bits(row.movement) == #float_bits(unit.movement));
