@@ -58,3 +58,14 @@ retained separately under that proof directory. The final test repair only
 materializes plain mock inventory descriptors; it changes no expected output.
 These are application checks, with zero original Workshop/visual cases. Real
 native-window input, resource pixels and final integration CI remain separate.
+
+The shared test observer's quote/source reader also passes a separate native
+3-scenario / 13-assertion probe on `1b6a1a89` with raw exit zero and one complete
+summary in 2.042 seconds. It retains the inland naval rejection, reaches the
+following land design, accepts the same naval quote at a coast and preserves
+the native state. Its shifted weapon-table case uses synthetic input through
+the real native text parser; installed table linkage remains browser-pending.
+Probe SHA-256 is `c31d5875bdaf9b1e562a5311e1d433a99804efa2fcb279e898304a944708bf1b`;
+reader SHA-256 is `b5cede1b2f1f7902dc3c50df75858de133bbf8f715574f1e983a5f9134d538d1`.
+Artifacts are `/tmp/unit-workshop-observer-native-v2`; the preceding duplicate
+summary failure is retained separately and excluded from passing totals.
