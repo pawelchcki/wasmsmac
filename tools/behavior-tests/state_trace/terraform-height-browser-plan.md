@@ -1,7 +1,8 @@
 # Land height browser proof
 
-Status: first actual browser attempt failed in test-only observation before any
-height action or complete native snapshot. **Zero passing height cases.**
+Status: the second actual browser attempt strictly passed the bounded land Raise
+case below. The first failed observation remains preserved. **One candidate
+browser case, zero original-agreement cases.**
 
 The isolated case starts from PR35 `7ee4e80b1c1723f60c3349d2d0456aee70f54873`,
 native tree `115032ffc7f53ff7f0c3a9f997da12674e25e643`, default source tree
@@ -167,3 +168,72 @@ was incorrect: `terraforming_rules.gls.js` parses row[4] once and passes the
 same turns value to both land and sea variants. The original preflight remains
 untouched; its adjacent label-clarification sidecar records this correction.
 Neither the executed bytes nor any observed outcome changes.
+
+## Verified second attempt
+
+Executed source `bc8a3e4a113456cce2ada80e7a56d0872911d8a0` retains the same
+native/default trees, v6 engine, rules bytes and 180-second budget. The actual
+case passed in 84.769 seconds; the outer Node process returned 0. The tool's
+actual session 40314 completion, chunk `0ae251`, records that raw return code
+independently of TAP. The application also exposed body state `exited` and
+actual `#status` text `GLSMAC exited (0).`.
+
+Artifacts are `/tmp/terraform-land-height-v6-second`; the immutable repository
+summary is `terraform-height-browser-v6-proof.json`. All six raw snapshots have
+seven players, eight units, seven bases and 128 full tiles. The five prepayment
+worlds are identical under recursive exact JSON type/value/Float64-bit comparison.
+All 96 unit movement/health Float tokens across the snapshots round-trip exactly
+to Float32; the actor's movement bits are `1065353216` before payment and `0`
+after completion. `terraform_height_browser_audit.py --artifacts PATH` reproduces
+the read-only typed audit without launching an engine.
+
+The actual quote names the two approximation policies, charges 4 of the real
+10 credits and raises target canonical elevation 240 → 1500 while retaining land
+domain. Nine quoted canonical tiles and the 25-tile shared-geometry footprint
+account for the complete native difference. The read-only audit classified all
+229 changed native fields; no other field changed. Payer revision advances 1 → 2
+and its balance 10 → 6. Quote, Cancel, ordinary reopen and Expend draft preserve
+the entire observed world. The accepted receipt contains the actual scalar
+`unit_id/action/confirmed_height` fields and opaque String event ID, not a
+fabricated nested quote echo.
+
+The real main continuation and all eight worker continuations acknowledged.
+The first actual callback proved configured out/err and callMain presence.
+All raw chunks join exactly to 14,465,994 bytes, SHA256
+`7877baed15b88c2700f3042fe5c31f64c6ee66517dcef04541c1ced832bad473`.
+The sealed failure is Null, partial is false and late errors are empty.
+Delivery independently audited the raw typed worlds, bits, inputs, frames,
+receipt, runtime barrier and sealed bytes. Browser, server and driver are reaped.
+
+Five frames are retained with an unchanged viewport, **not a proved fixed camera**.
+Completion auto-selects Scout 1 instead of worker 8, and the final frame shows
+changed focus/position. Native actor map coordinates stay fixed; resident render-Z,
+camera pose, facing and numeric mesh/corner fidelity are not established. No
+pixel comparison or unchanged-camera assertion is inferred from the screenshots.
+
+## Next source-only coastal/sea plan
+
+No additional live case is authorized by this document. The next coherent scope
+needs a separately reviewed fixture and resource grant:
+
+1. Prepare a declared coastal world with all seven real players and registered
+   source recipes. A Sea Former must come through its actual source-composed
+   Foil/terraforming-capability recipe and normal production pathway in a
+   separate acceptance step. Do not replace production with a fake availability
+   answer or treat a disabled original template as enabled. Any bounded input
+   for production stock/rate needs its own explicit source hash and scope.
+2. On a genuine sea worker's shelf square away from protected cities, preserve
+   quote/Cancel/draft purity, then confirm the live approximate Raise plan and
+   fee. Capture every affected neighbor, land/sea class and epoch, all players,
+   the unit definition and actual naval-recovery state. Its renderer remains the
+   real currently supported resource; no invented Sea Former art is introduced.
+3. Observe legal reversal through the same initiating worker's actual recovery
+   context after a real turn boundary. Retain all seven players' genuine income,
+   research and movement differences at that boundary. Separately reject illegal
+   docked-port/foreign-resident stranding cases without charging or mutating work.
+   Technology bypass must not waive those domain/treasury/geometry restrictions.
+4. Resolve camera/resident/mesh observation capability before any numeric visual
+   claim. Existing native refresh logs and screenshots are observations only;
+   a new read-only renderer getter would need a separate proven need and C++
+   lease. Coast/climate/Pressure Dome/victim algorithms, original graphics,
+   animations and audio stay outside passing totals until independently observed.
