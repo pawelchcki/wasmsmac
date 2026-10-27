@@ -36,7 +36,7 @@ inputs and per-call records remain in `/tmp/terraform-log-dom-benchmark`.
 ## Approved diagnostic print-hook source; runtime proof pending
 
 Keep production web/default/native bytes unchanged. Pause only the main-frame
-`GLSMAC.js` request through Playwright's existing routing boundary. At that
+`GLSMAC.js` request through the exact CDP Fetch boundary described below. At that
 boundary, assert the existing bootstrap-created `Module.print`/`printErr`
 configuration functions are present. Install harness callbacks before allowing
 the unmodified runtime to execute. The pinned runtime captures those existing
@@ -177,3 +177,20 @@ Unknown `Other` alone still waits and rejects. Twenty-six pure tests now cover
 these actual records, mismatched role types and stale/wrong-loader negatives.
 The failed NO-WASM report remains `/tmp/terraform-runtime-fetch-proof`; a
 separate reproof is required before any candidate run.
+
+The separate reproof on source `5f7a1602` completed with Node exit 0. Actual
+Fetch/Network/Target observations link one main `Script` pause to its current
+document loader and bootstrap initiator, then one worker `Other` pause to the
+exact live dedicated-worker Target/parent frame. Main configuration installed
+once; both continuations acknowledged success. The model emitted both output
+lanes with bound out/err, callMain absent and no WASM resources. Browser and
+local server were reaped. The protocol observation span was 731.276 ms; total
+process wall time was not separately instrumented.
+
+`terraform-runtime-fetch-reproof-v1.json` binds actual roles, ACKs, source
+hashes and the full artifact report SHA256. Full events remain in
+`/tmp/terraform-runtime-fetch-reproof`. The print-hook function hash still
+equals the independently verified complete883-message replay, so that text
+integrity result is unchanged. Neither this proof nor its modeled callbacks
+substitutes for the next actual candidate's first runtime callback, pthread
+continuation, final all-owner graph and normal exit checks.
