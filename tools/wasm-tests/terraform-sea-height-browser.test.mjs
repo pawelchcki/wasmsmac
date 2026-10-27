@@ -15,7 +15,7 @@ import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs'
 import {rateOneSource} from './terraform-browser-inputs.mjs';
 import {HeightPresentation,completedHeightKey,nativeHeightWorld,verifyHeightCapture,heightFatal,verifyHeightFinalization} from './terraform-height-observation.mjs';
 import {seaHeightTerrain,seaHeightInput,seaHeightOverrideManifest} from './terraform-sea-height-inputs.mjs';
-import {auditPaidSeaHeight,verifySeaBootstrap} from './terraform-sea-height-observation.mjs';
+import {auditPaidSeaHeight,verifySeaBootstrap,verifySeaRaiseMenu,verifySeaRaiseQuote} from './terraform-sea-height-observation.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const scriptsRoot=process.env.WASM_SCRIPTS_ROOT||root;
 const build=process.env.WASM_APP_DIR||`${root}build/wasm-release/bin`;
@@ -41,7 +41,7 @@ test('real produced SeaFormer Raise quote Cancel draft and paid completion prese
   const originalRules=readFileSync(`${assets}/alphax.txt`),rules=rateOneSource(originalRules);
   assert.equal(hash(originalRules),'bb01e3ac23793da0a46713f4851d65e63b599c24aef8300ffe45e7e57b332c42');
   assert.equal(hash(rules),'7abf62aa4f4f562aaa86c785b67b7af2320e122cbda7901287ee3ed0ab4c5bd0');
-  const report={version:1,status:'running',candidate_executed:false,native_raw_exit_code:null,scope:'actual produced SeaFormer sea-preserving height application UI; explicit approximate height/fee policy',
+  const report={version:1,sea_menu_contract_version:3,status:'running',candidate_executed:false,native_raw_exit_code:null,scope:'actual produced SeaFormer sea-preserving height application UI; explicit approximate height/fee policy',
     original_passing_cases:0,original_visual_agreement:'unsupported',
     host_head:execFileSync('git',['rev-parse','HEAD'],{cwd:scriptsRoot,encoding:'utf8'}).trim(),
     native_source_tree:execFileSync('git',['rev-parse','HEAD:src'],{cwd:scriptsRoot,encoding:'utf8'}).trim(),
@@ -222,14 +222,14 @@ test('real produced SeaFormer Raise quote Cancel draft and paid completion prese
     if(!settled()?.root)await click(presentation.textButton('MENU',viewport));
     const headers=await wait(()=>latest('TH_HEADERS')),header=headers.filter(row=>row.id==='left_menu_terraform');assert.equal(header.length,1);
     await click(presentation.button('terraform-header',header[0].id,header[0].label,viewport));
-    const rows=await wait(()=>latest('TH_ROWS')),raise=rows.filter(row=>row.id==='raise');assert.equal(raise.length,1);assert.equal(raise[0].enabled,true);
-    assert.ok(raise[0].label.includes(report.native_input.raise_rule.sea.name),'Actual sea wording must come from the installed sea variant');
-    report.actual_sea_row=raise[0];
-    await click(presentation.button('terraform-row','raise',raise[0].label,viewport));
+    const rows=await wait(()=>latest('TH_ROWS')),raise=verifySeaRaiseMenu(rows,report.native_input,before);
+    report.actual_sea_row=raise;
+    await click(presentation.button('terraform-row','raise',raise.label,viewport));
     await wait(()=>{const ui=settled();return ui?.modal&&ui.popup_id==='terraforming_height'&&ui;});
   };
   await openRaise();const quoted=await observe('raise-quote');pure(quoted);await capture('raise-quote');
   const quote=quoted.ui.height_presentation.quote;
+  verifySeaRaiseQuote(quote,report.native_input,quoted);
   assert.equal(quote.source_water,true);assert.equal(quote.destination_water,true);
   assert.ok(quote.source_elevation < -1000 && quote.destination_elevation < 0 && quote.destination_elevation > quote.source_elevation);
   assert.equal(quote.supported,true);assert.equal(quote.action,'raise');assert.equal(quote.unit_id,before.ui.actor);assert.equal(quote.owner,before.ui.owner);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {declaredTerrain,rateOneSource} from './terraform-browser-inputs.mjs';
 import {seaHeightTerrain,seaHeightInput,seaHeightOverrideManifest} from './terraform-sea-height-inputs.mjs';
-import {auditPaidSeaHeight} from './terraform-sea-height-observation.mjs';
+import {auditPaidSeaHeight,verifySeaRaiseMenu,verifySeaRaiseQuote} from './terraform-sea-height-observation.mjs';
 
 test('coastal map changes only the declared deep-water altitude and contour bytes',()=>{
   const base=declaredTerrain(),sea=seaHeightTerrain();assert.equal(sea.length,base.length);
@@ -41,6 +41,56 @@ function pair(){
   Object.assign(changed.canonical,{active:true,elevation:-500,is_water:true});Object.assign(changed.imported,{active:false,source_corners:null,source_elevation:null,source_water:null});changed.native_height_band.below_ocean=false;
   return{before:{world},after:{world:after},quote};
 }
+
+function seaMenuCase(){
+  const sample=pair(),record=sample.before;
+  record.ui={actor:8,selected:8,owner:0,turn:1,x:8,y:8};
+  const details=record.world.terrain_trace.unit_details.actor;
+  Object.assign(details,{definition_id:'SeaFormers',movement_kind:'sea',can_terraform:true});
+  Object.assign(record.world.units[0],{owner:'payer',x:8,y:8});
+  const input={actor:8,definition:'SeaFormers',can_terraform:true,energy:{credits:10},
+    raise_rule:{id:'raise',source_row:16,name:'Raise Land',order:'Terraform UP',
+      sea:{id:'raise',source_row:16,name:'Raise Sea Floor',order:'Terraform UP',enabled:true}}};
+  const quote={...sample.quote,supported:true,turn:1,x:8,y:8,action:'raise',source_elevation:-1460,destination_elevation:-500,credits:10,
+    mode:'functional_approximation',policy:'application.band-slope-height.v1',fee_policy:'application.band-fee.v1',
+    unit_identity:JSON.stringify({unit_id:8,owner:0,definition:'SeaFormers'}),
+    terrain_identity:JSON.stringify({version:1,policy:'application.band-slope-height.v1',fee_policy:'application.band-fee.v1',tiles:[structuredClone(record.world.terrain_trace.tiles['8,8'])]})};
+  return{record,input,quote,rows:[{id:'raise',label:'Terraform UP',enabled:true}]};
+}
+
+test('sea command order is exact while domain and quote identities remain independent of shared text',()=>{
+  const row=seaMenuCase(),before=structuredClone(row);
+  assert.equal(verifySeaRaiseMenu(row.rows,row.input,row.record).label,'Terraform UP');
+  verifySeaRaiseQuote(row.quote,row.input,row.record);assert.deepEqual(row,before);
+});
+
+test('sea command binding rejects wrong order action availability and land actor despite identical text',()=>{
+  for(const mutate of [
+    r=>r.rows[0].label='Raise Sea Floor',r=>r.rows[0].label='Terraform DOWN',
+    r=>r.rows[0].id='lower',r=>r.rows.push(structuredClone(r.rows[0])),r=>r.rows[0].enabled=false,
+    r=>r.input.raise_rule.sea.order='wrong order',r=>r.input.raise_rule.sea.id='lower',
+    r=>r.input.raise_rule.sea.name='Raise Land',r=>r.input.raise_rule.sea.source_row=17,
+    r=>r.record.ui.selected=1,r=>r.record.ui.actor=1,r=>r.record.ui.owner=1,
+    r=>r.record.world.terrain_trace.unit_details.actor.movement_kind='land',
+    r=>r.record.world.terrain_trace.unit_details.actor.can_terraform=false,
+    r=>r.record.world.terrain_trace.unit_details.actor.definition_id='Formers',
+    r=>r.record.world.units[0].owner='foreign',r=>r.record.world.terrain_trace.tiles['8,8'].is_water=false,
+  ]){const row=seaMenuCase();mutate(row);assert.throws(()=>verifySeaRaiseMenu(row.rows,row.input,row.record));}
+});
+
+test('sea quote binding rejects wrong actor land domain owner action location fee and unit identity',()=>{
+  for(const mutate of [
+    r=>r.quote.unit_id=1,r=>r.quote.owner=1,r=>r.quote.turn=2,r=>r.quote.action='lower',
+    r=>r.quote.x=10,r=>r.quote.y=10,r=>r.quote.source_water=false,r=>r.quote.destination_water=false,
+    r=>r.quote.source_elevation=240,r=>r.quote.destination_elevation=1500,
+    r=>r.quote.credits=11,r=>r.quote.fee=0,r=>r.quote.fee=11,
+    r=>r.quote.policy='other-policy',r=>r.quote.fee_policy='other-fee',
+    r=>r.quote.unit_identity=JSON.stringify({unit_id:1,owner:0,definition:'Formers'}),
+    r=>r.quote.terrain_identity='',r=>r.record.ui.selected=1,
+    r=>{const t=JSON.parse(r.quote.terrain_identity);t.tiles[0].terrain_epoch++;r.quote.terrain_identity=JSON.stringify(t);},
+    r=>{const t=JSON.parse(r.quote.terrain_identity);t.tiles[0].x=10;r.quote.terrain_identity=JSON.stringify(t);},
+  ]){const row=seaMenuCase();mutate(row);assert.throws(()=>verifySeaRaiseQuote(row.quote,row.input,row.record));}
+});
 
 test('sea audit checks the complete world while accepting exact quote fee budget and canonical changes',()=>{
   const p=pair();assert.deepEqual(auditPaidSeaHeight(p.before,p.after,p.quote).quoted_tiles,['8,8']);
