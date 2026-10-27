@@ -1,8 +1,9 @@
-// Recorded road scope: flat arid land without fungus. Bases connect to roads
-// without gaining a road flag. Read live state so later road edits take effect.
+// Installed Manual p48: three connected road squares per normal movement
+// point across land terrain. Original wet/uneven traversal is unmeasured.
+// Bases connect without gaining a road flag; read every live road edit.
+// Fungus traversal remains under the separately bounded existing policy.
 const get_road_rate = (e, src_tile, dst_tile) => {
 	if (!e.data.unit.is_land || !src_tile.is_land || !dst_tile.is_land ||
-		src_tile.moisture != 1 || dst_tile.moisture != 1 || src_tile.rockiness != 1 || dst_tile.rockiness != 1 ||
 		src_tile.features.xenofungus || dst_tile.features.xenofungus) { return 0; }
 	const tm = e.game.get_tm();
 	if ((src_tile.get_base() == null && !tm.get_terraforming(src_tile.x, src_tile.y).road) ||
