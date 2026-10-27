@@ -1,10 +1,4 @@
 // Browser-side test configuration only. Production bootstrap/runtime stay intact.
-export function runtimeLogRequestKind(destination,resourceType){
-  if(destination==='worker'||destination==='sharedworker')return'worker';
-  if(destination==='script'&&resourceType==='script')return'main-script-candidate';
-  throw Error(`Unexpected runtime fetch destination/type: ${destination}/${resourceType}`);
-}
-
 export function installNativeLogHook({expectedOriginalSource}){
   if(globalThis.__terraformNativeLogHook)throw Error('Native log hook already installed');
   const module=globalThis.Module,element=document.querySelector('#log');

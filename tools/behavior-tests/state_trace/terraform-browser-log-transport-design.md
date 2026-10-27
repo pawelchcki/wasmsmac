@@ -121,3 +121,44 @@ raw logs and callback records remain `/tmp/terraform-log-hook-full883`.
 Nineteen pure checks also pass, including runtime worker/main classification,
 late/missing/repeated installation rejection and delayed39-byte sealing.
 The actual game-browser smoke remains failed until separately rerun.
+
+## Actual request ambiguity and replacement CDP barrier
+
+The `0b419a29` candidate failed before engine startup: intercepted
+`Request.allHeaders()` had no `Sec-Fetch-Dest`. It passed no input or native
+state case. The empty raw log and chunks sealed identically; this is not a
+native failure. A separate short NO-WASM local page then dynamically loaded a
+classic script which created a dedicated worker at the same script URL.
+
+Actual Chromium149/Playwright1.61.1 observations show both requests as
+`resourceType:script`, `frame:main`, no service worker, and no fetch-destination
+header at the Playwright interception boundary. Wire requests acquire their
+distinct script/worker destination headers only after continuing. Therefore
+URL, public resource type, owning frame and missing headers cannot safely
+classify these requests. Those failed assumptions remain archived evidence.
+
+The replacement source uses CDP `Fetch.requestPaused.networkId`, which the
+installed protocol explicitly defines as the exact link to the corresponding
+`Network.requestWillBeSent.requestId`. A main request must match the current
+document frame/loader and the actual bootstrap `loadApplication` initiator.
+A worker request must link to an independently observed live dedicated-worker
+Target ID with the correct parent frame. In the pinned actual diagnostic,
+that worker Target ID equals its Network request ID. Missing or unfamiliar
+linkage remains unsupported and fails closed; no header or same-URL FIFO
+fallback exists.
+
+Network/Target evidence can arrive in either order, so a paused request waits
+up to two seconds for positive matching evidence. Unknown IDs, wrong frames,
+destroyed targets, navigation, shared-worker targets, duplicate consumed
+requests and a second main installation reject. Main installation happens
+before continuing the unmodified response; workers continue without another
+installation. Protocol observers and pending evidence timers stop after
+producer closure, before final artifact metadata freezes. The actual
+first-callback out/err identity checks remain unchanged.
+
+The source-only pure fixture selects actual Network/Target fields from
+`/tmp/terraform-runtime-request-diagnostic/report.json`. Its Fetch IDs are
+explicitly declared protocol-model fields until the new live Fetch diagnostic
+executes. Twenty-two pure tests pass; no actual CDP Fetch or candidate proof
+is claimed yet. `runtime-fetch-barrier-diagnostic.mjs` stages the next NO-WASM
+proof using only a tiny configuration/worker model, never the runtime bytes.

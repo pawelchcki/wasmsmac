@@ -11,7 +11,8 @@ import {fixtureSources} from './terraform-browser-inputs.mjs';
 import {TerraformGeometry,nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {BrowserLogCursor} from './browser-log-cursor.mjs';
 import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
-import {installNativeLogHook,runtimeLogRequestKind} from './browser-native-log-hook.mjs';
+import {installNativeLogHook} from './browser-native-log-hook.mjs';
+import {attachRuntimeLogBarrier} from './runtime-fetch-barrier.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const scriptsRoot = process.env.WASM_SCRIPTS_ROOT || root;
@@ -125,24 +126,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     },{capture:true,passive:true});
   });
   const errors=[];report.navigation_timeline=[];
-  await page.route('**/GLSMAC.js',async route=>{
-    const request=route.request();
-    try{
-      const headers=await request.allHeaders();
-      const destination=Object.entries(headers).find(([key])=>key.toLowerCase()==='sec-fetch-dest')?.[1];
-      const kind=runtimeLogRequestKind(destination,request.resourceType());
-      if(kind==='worker'){
-        report.native_log_configuration.worker_requests??=[];report.native_log_configuration.worker_requests.push({url:request.url(),destination,resource_type:request.resourceType(),continued_without_frame_lookup:true});
-        await route.continue();return;
-      }
-      assert.equal(request.frame(),page.mainFrame(),'Only the actual main-frame script may install the print configuration');
-      assert.equal(report.native_log_configuration.installations,0,'Main runtime print configuration installs once');
-      const ack=await page.evaluate(installNativeLogHook,{expectedOriginalSource:originalLogSource});
-      report.native_log_configuration.installations++;
-      report.native_log_configuration.barrier={url:request.url(),destination,resource_type:request.resourceType(),acknowledged_node_ms:performance.now(),before_unmodified_runtime_response:true,ack};
-      await route.continue();
-    }catch(error){errors.push(String(error));await route.abort('failed');}
-  });
+  const runtimeBarrier=await attachRuntimeLogBarrier(page,browser,{runtimeURL:`${address}/GLSMAC.js`,bootstrapURL:`${address}/bootstrap.js`,originalLogSource,metadata:report.native_log_configuration,onError:error=>errors.push(String(error))});
   const navigation=(kind,url)=>report.navigation_timeline.push({kind,url,observed_node_ms:performance.now()});
   page.on('framenavigated',frame=>{if(frame===page.mainFrame())navigation('main-frame-navigated',frame.url());});
   page.on('requestfailed',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())report.navigation_timeline.push({kind:'main-frame-request-failed',url:request.url(),failure:request.failure(),observed_node_ms:performance.now()});});
@@ -156,6 +140,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     try{report.native_log_configuration.callbacks=await page.evaluate(()=>globalThis.__terraformNativeLogHook);report.native_log_configuration.callback_metadata_partial=report.status!=='passed';}catch(error){report.native_log_configuration.capture_error=String(error);}
     if(report.status!=='passed'){try{await page.locator('#canvas').screenshot({path:`${artifacts}/failed-frame.png`,timeout:1000});}catch(error){report.frame_capture_error=String(error);}}
     try{await browser.close();}catch(error){report.browser_close_error=String(error);report.status='failed-or-incomplete';}
+    runtimeBarrier.stop();
     const producerClosed=!browser.isConnected();
     const frozen=producerClosed?await logCursor.seal():{text:logCursor.text,reads:structuredClone(logCursor.reads),failure:'Producer close failed; prefix only'};
     const chunks=readFileSync(logChunksPath,'utf8').split('\n').filter(Boolean).map(row=>JSON.parse(row));
@@ -183,7 +168,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const log=async()=>{const packet=await logCursor.read();const freshText=fatalLineTail+packet.text;assert.doesNotMatch(freshText,fatal);fatalLineTail=freshText.slice(freshText.lastIndexOf('\n')+1);assert.deepEqual(errors,[]);return logCursor.text;};
   const waitLog=async marker=>{await page.waitForFunction(({marker,fatal})=>document.querySelector('#log').textContent.includes(marker)||new RegExp(fatal).test(document.querySelector('#log').textContent)||document.body.dataset.state==='failed',{marker,fatal:fatal.source});
     await log();};
-  await page.goto(address); await page.waitForFunction(()=>document.body.dataset.state==='ready');
+  await page.goto(address); await page.waitForFunction(()=>['ready','failed'].includes(document.body.dataset.state));assert.deepEqual(errors,[]);assert.equal(await page.locator('body').getAttribute('data-state'),'ready');
   const manifest=await (await page.request.get(`${address}/assets/manifest.json`)).json();
   const entry=manifest.files.find(row=>row.path==='VT.cvr'); assert.ok(entry,'Real manifest must include the CVR resource');
   assert.equal(entry.sha256,report.component_sha256); report.manifest_id=manifest.id;

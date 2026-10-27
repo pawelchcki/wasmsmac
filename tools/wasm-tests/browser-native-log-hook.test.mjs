@@ -1,14 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import vm from 'node:vm';
-import {installNativeLogHook,runtimeLogRequestKind} from './browser-native-log-hook.mjs';
+import {installNativeLogHook} from './browser-native-log-hook.mjs';
 const source='function log(message) {\n  logElement.textContent += `${message}\\n`;\n  logElement.scrollTop = logElement.scrollHeight;\n}';
-test('runtime worker fetches are distinguished before any frame lookup',()=>{
- for(const type of ['script','other'])assert.equal(runtimeLogRequestKind('worker',type),'worker');
- assert.equal(runtimeLogRequestKind('sharedworker','other'),'worker');
- assert.equal(runtimeLogRequestKind('script','script'),'main-script-candidate');
- for(const pair of [[undefined,'script'],['empty','script'],['script','other'],['document','document']])assert.throws(()=>runtimeLogRequestKind(...pair),/Unexpected runtime fetch/);
-});
 function fixture(){
  const element={textContent:'bootstrap prefix\n'};
  Object.defineProperty(element,'scrollHeight',{get(){throw Error('Forced layout must not be read');}});
