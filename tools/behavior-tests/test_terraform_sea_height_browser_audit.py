@@ -88,7 +88,7 @@ def model():
              'plan': [{'x': 8, 'y': 8, 'canonical': {'elevation': -500, 'is_water': True}}],
              'unit_identity': json.dumps(identity), 'terrain_identity': json.dumps({'version': 1, 'policy': sea.POLICY, 'fee_policy': sea.FEE_POLICY, 'tiles': baseline})}
     inputs = {'actor': 8, 'definition': 'SeaFormers', 'can_terraform': True, 'policy': {'version': 1, 'ignore_technologies': True},
-              'starting_credits': 10, 'faction_bonus': 0, 'energy': {'credits': 10}, 'raise_rule': {'sea': {'id': 'raise', 'source_row': 16,
+              'starting_credits': 10, 'faction_bonus': 0, 'energy': copy.deepcopy(before['terrain_trace']['player_details']['p0']['energy']), 'raise_rule': {'sea': {'id': 'raise', 'source_row': 16,
               'name': 'Raise Sea Floor', 'order': 'Terraform UP', 'turns': 1, 'enabled': True}}}
     changed = []
     for kind, value, line in records:
@@ -103,7 +103,8 @@ def model():
                     'lines': ['It will cost 1 credits to raise this area;', 'our current reserves are 10 credits.'],
                     'source_choices': ['Cancel action.', 'Expend $NUM0 credits.'], 'choices': ['Cancel action.', 'Expend 1 credits.']}
         if kind == 'TH_RECEIPT': value['event_id'] = 'model-height-accepted'
-        changed.append((kind, value, line + 100 if kind in ('TH_NATIVE', 'TH_RECEIPT') else line))
+        changed.append((kind, value, line + 100 if kind in ('TH_NATIVE', 'TH_TRACE', 'TH_RECEIPT') else line))
+    changed.append(('TH_EXIT_REQUEST', None, max(line for _, _, line in changed) + 1))
     report.update(native_input=copy.deepcopy(inputs), actual_sea_row={'id': 'raise', 'label': 'Terraform UP', 'enabled': True},
                   expected_effect_from_live_quote=copy.deepcopy(quote), traversal={'home_port_before': copy.deepcopy(detail['quotes']['E'])})
     for item, packet in zip(report['native_snapshots'], [v for k, v, _ in changed if k == 'TH_NATIVE']): item['observation'] = sea.height.node_projection(packet)
@@ -144,6 +145,33 @@ class DomainMutations:
         self.assertEqual(result['native_float_fields'], 96); self.assertEqual(result['fee'], 1)
         self.assertEqual(result['per_world'], {'players': 7, 'units': 8, 'bases': 7, 'tiles': 128})
         self.assertEqual(result['browser_cases_audited'], 0); self.assertTrue(sea.height.equal(before, (self.records, self.report)))
+    def test_coherent_foreign_actor_and_remote_position_are_rejected(self):
+        # All six native worlds and their reported copies agree. A matching
+        # report must not turn a foreign actor or remote position into payer0.
+        for field, value in [('owner', 'p1'), ('x', 10), ('y', 10)]:
+            self.setUp()
+            for packet in self.packets():
+                next(unit for unit in packet['world']['units'] if unit['raw_id'] == 8)[field] = value
+            self.reject()
+    def test_coherent_funding_cannot_contradict_native_energy(self):
+        for field, value in [('starting_credits', 999), ('faction_bonus', 3),
+                             ('energy', {'credits': 123, 'initialized': True, 'last_income_turn': 0})]:
+            self.setUp()
+            next(value for kind, value, _ in self.records if kind == 'TH_INPUTS')[field] = copy.deepcopy(value)
+            self.reject()
+    def test_query_carrier_stays_inside_each_native_checkpoint(self):
+        for query in (1, 6):
+            self.setUp()
+            fence = self.report['native_snapshots'][query - 1]['query_after_native_key']
+            index = next(i for i, (kind, value, _) in enumerate(self.records)
+                         if kind == 'TH_TRACE' and any(event['seq'] == fence for event in value['events']))
+            kind, value, _ = self.records[index]
+            # Last query must precede the real exit marker, not merely appear
+            # somewhere after its native snapshot. The first must follow its
+            # own Native packet, not an earlier carrier.
+            boundary = next(line for kind, _, line in self.records if kind == 'TH_EXIT_REQUEST') if query == 6 else next(line for kind, value, line in self.records if kind == 'TH_NATIVE' and value['query'] == query)
+            self.records[index] = kind, value, boundary + 1 if query == 6 else boundary - 1
+            self.reject()
     def test_wrong_land_domain_actor_fee_or_source_policy_rejects(self):
         for key, value in [('source_water', False), ('destination_water', False), ('unit_id', 1), ('owner', 1), ('action', 'lower'), ('fee', 2), ('credits', 9), ('destination_elevation', -1500), ('policy', 'unknown')]:
             self.setUp(); self.set_quote(key, value); self.reject()
@@ -213,6 +241,10 @@ class BootstrapMutations:
 class PublicSeaDomainTests(DomainMutations, unittest.TestCase):
     @classmethod
     def setUpClass(cls): cls.original = model()
+
+class PublicSeaParserTests(unittest.TestCase):
+    def test_exit_marker_is_retained_for_the_last_query_interval(self):
+        self.assertEqual(sea.parse_records(b'prefix\nTH_EXIT_REQUEST\n'), [('TH_EXIT_REQUEST', None, 1)])
 
 class PublicSeaBootstrapTests(BootstrapMutations, unittest.TestCase):
     @classmethod

@@ -33,6 +33,8 @@ def parse_records(raw):
              'TH_SEA_DECLARED', 'TH_SEA_ACCOUNTING', 'TH_SEA_PRETURN', 'TH_SEA_BIRTH', 'TH_SEA_SETUP')
     records = []
     for line_number, line in enumerate(raw.decode('utf8').splitlines()):
+        if 'TH_EXIT_REQUEST' in line:
+            records.append(('TH_EXIT_REQUEST', None, line_number))
         for kind in kinds:
             if kind + '|' in line:
                 value = json.loads(line.split(kind + '|', 1)[1])
