@@ -15,6 +15,7 @@
         "trace-float-transport",
         "base-operations",
         "base-operations-lifecycle",
+        "base-operations-selection",
         "duplicate-faction-identity",
         "computer-production",
         "state-trace-snapshot",
