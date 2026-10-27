@@ -381,3 +381,15 @@ reordered pointers, wrong semantic action, geometry/CSS/hover/ingress/point/
 completed-end/choice and native-disabled widgets despite an enabled source packet.
 These are negative protocol tests, not additional gameplay observations or an
 original UI, mesh, animation, audio or Sea agreement claim.
+
+## Exact native pointer identity types v5
+
+`terraform-height-browser-v6-reaudit-pointer-types.json` is a separate subsequent
+read-only replay, retaining v4 and every earlier result unchanged. Native pointer
+ingress and dispatch-begin buttons must be exact Int1; all ingress/begin/end
+ingress IDs must be exact Int before equality. This matches the producer's
+strict `button===1` checks and prevents Python BoolTrue from masquerading as1.
+Coherent raw/report Boolean counterexamples were accepted by the previous v4
+validator and are rejected by this version, including both down and up paths.
+The accepted original capture still passes unchanged; no new browser case or
+native input was executed and no historical callback/receipt was fabricated.
