@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {test} from 'node:test';
-import {evaluateUnitStackHealthLog,parseUnitStackHealthLog,healthCommand,healthNonce} from './unit-stack-health-proof.mjs';
+import {evaluateUnitStackHealthLog,parseUnitStackHealthLog,healthCommand,healthNonce,currentSourceUnitWeight} from './unit-stack-health-proof.mjs';
 
 const world={turn:1,players:[],bases:[],units:[],terrain_trace:{tiles:{},ui:{},unit_details:{}}};
 for(let i=0;i<7;i++){
@@ -48,6 +48,16 @@ test('complete health-priority agreement remains synthetic evaluation with zero 
 });
 test('fully guarded stale HUD is a complete mismatch instead of setup failure',()=>{
  const result=evaluate(record(8));assert.equal(result.match,false);assert.equal(result.complete,true);assert.equal(result.expected_unit_id,9);assert.equal(result.observed_unit_id,8);
+});
+test('source priority derives from actual ownership, readiness, definition and truncated health contribution',()=>{
+ const actor={owner:'local',health:1,movement:1,order:'NO_ORDERS',morale:2};
+ assert.equal(currentSourceUnitWeight(actor,'ScoutPatrol','local'),272);
+ assert.equal(currentSourceUnitWeight({...actor,health:0.5},'ScoutPatrol','local'),268);
+ assert.equal(currentSourceUnitWeight({...actor,health:0.99},'ScoutPatrol','local'),271,'A small health change need not reverse the observed ranking');
+ assert.equal(currentSourceUnitWeight({...actor,order:'HOLD'},'ScoutPatrol','local'),72);
+ assert.equal(currentSourceUnitWeight(actor,'ScoutPatrol','other'),72);
+ assert.equal(currentSourceUnitWeight(actor,'SporeLauncher','local'),212);
+ assert.equal(currentSourceUnitWeight({...actor,movement:0.024},'ScoutPatrol','local'),72);
 });
 test('exit, seal, complete chunks and canonical callbacks are required before mismatch evaluation',()=>{
  const text=logFor(record(8));assert.throws(()=>evaluateUnitStackHealthLog(text));

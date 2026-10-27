@@ -1,10 +1,11 @@
 # Candidate unit health ranking and movement observations
 
 This is a source-only follow-up to the verified Hold cache repair at
-`b6a80a056cee421e7c6a1bb727664939052c7c2f`. It adds six new files on a separate
+`b6a80a056cee421e7c6a1bb727664939052c7c2f`. It adds test-only files on a separate
 branch. It changes no production Default, C++, existing witness, expected
-selection policy, shared browser helper or current PR delivery head. No engine,
-browser, build or original game has executed this new health case.
+selection policy, shared browser helper or current PR delivery head. The small
+backend sanity below has executed. No browser, new build or original game has
+executed this health-ranking case.
 
 ## Health fixture and acceptance
 
@@ -48,8 +49,12 @@ The native update source path is:
 No further C++ change is proposed. Current source weights are A=272/B=270 with
 full health and A=268/B=270 after A's health becomes 0.5. Both remain active. The
 known `UnitDef::IsArtillery` policy and all tie/explicit-selection behavior stay
-unchanged. These numbers describe current application source, not original-game
-unit selection.
+unchanged. The evaluator derives weights from the observed native fields using
+the current Float arithmetic and integer-conversion policy. The launcher pins
+the exact three C++ policy-source hashes and Native829/v7 runtime; a changed
+source or a formula that does not invert this declared fixture is a setup
+failure, not permission to substitute an expected identity. These numbers
+describe current application source, not original-game unit selection.
 
 The first warm barrier requires an actual native tile-select, newer native map
 unit-preview(A), matching mounted Widget ID/text ID and null explicit selection.
@@ -85,12 +90,13 @@ from actual execution and canonical helper receipts; supplied synthetic test
 metadata is not evidence of a game run. Evaluation always reports zero executed
 candidate/original cases of its own.
 
-Fifteen committed asset-free synthetic checks cover complete match versus
+Sixteen committed asset-free synthetic checks cover complete match versus
 complete guarded mismatch, receipt types and identity, actual callback barriers,
 Widget agreement, full inventory, unrelated mutations, Float bits, one-shot
 application, raw boundary order, checkpoint drift, exit/seal and native failure
-classification. They execute no game or native engine. Node syntax checks do not
-parse the GSE string.
+classification, including a small health change that does not reverse priority
+under the actual policy. They execute no game or native engine. Node syntax
+checks do not parse the GSE string.
 
 `unit_stack_health_native.gls.js` prepares the smallest actual backend sanity:
 two native scenarios, 31 assertions, one accepted registered event per fixture,
@@ -98,10 +104,41 @@ exact actual receipt types/owner/actor/Float bits and one-shot rejection, plus
 unknown-field, owner, actor-type, health-type and nonce rejection with complete
 fixture snapshot/inspection purity and a subsequent valid event. Its nested
 control and setup import no behavior module; the canonical worker owns the sole
-finish/summary. These expected counts are not executed native coverage until the
-strict native footer, sole summary and raw process zero are retained. This small
+finish/summary. This small
 fixture has two participant slots and no frontend; it is not the all-seven
 browser world or a rendering proof.
+
+That backend probe executed once on `e0c9ce007bd71f9f26d6a8577ed392667ab0b54d`
+with Native829/v7: actual native raw0, one `BEHAVIOR_SUMMARY 2 31` and one native
+success footer in 1.869s. It emitted eight real receipts: two accepted and six
+rejected. Exact stdout SHA-256 is
+`2518ef61d6e60051aaaa008b034c21ac365194a7358abdac674a7c440b5742cf`;
+stderr was empty. `/tmp/unit-stack-health-native-v1/result.json` permanently
+retains the first external-driver failure: it wrongly required opaque tokens
+to be globally unique across the two fresh native Game instances. The source
+counter is per Game (`Game.h:492`, `Game.cpp:2368`, reset at `Game.cpp:2287`).
+The exact native `BEHAVIOR_BEGIN`/`PASS` boundaries and one `make_fixture` call
+per case identify the actual separate lifetimes. A corrected read-only audit
+requires uniqueness inside each Game/scenario, never from actor ID alone and
+never by parsing the token. It verifies the same raw bytes, footer/counts,
+receipt types, exact declared rejected inputs and five retained-packet negative
+checks. Delivery independently accepted that source/raw lifetime audit; the
+first driver failure was not overwritten and no native run was repeated.
+Retained provenance and corrected audit are under
+`/tmp/unit-stack-health-native-v1/`. No combat or frontend result follows from
+this bounded backend evidence.
+
+`unit-stack-health-browser.test.mjs` is the new pending launcher. It mounts the
+exact shared control, fixture and existing observers and reuses the canonical
+CDP/log/cursor helpers unchanged. It requires actual normal APP exit0, one main
+and eight worker acknowledgements, canonical out/err/callMain binding, closed
+producer and exact sealed raw/chunks before creating `receipt-acceptance.json`
+and evaluating a complete HUD result. It preserves complete guarded matches and
+mismatches separately from setup/guard failures. The overall Node budget is
+180s, with the same bounded 120s native observation window. Inputs are native
+tile selection, the declared registered health event and native reselection;
+there are zero physical game inputs or combat actions. No browser execution is
+claimed by the native sanity or pure tests.
 
 Before a live case: independent source review, native fixture scalar/event sanity
 where supported, exact source/Default/runtime/asset/helper pins and an exclusive
@@ -153,3 +190,14 @@ may supply clean observable expectations through Root without candidate
 implementation details. Rendered map identity, original orientation/frame cadence,
 Former full assembly/tools/limbs, action clips and audio timing remain unsupported
 by the present HUD and Workshop proofs.
+
+Root supplied the clean exploratory Scout-East contract at
+`/tmp/wasmsmac-scout-east-clean-handoff-v1/contract.md`, SHA-256
+`2b1155ae357a73ec9ab653b9fff76066db862d37c763e54af5898f61ac99e003`.
+It reports distinct visible leg configurations during translation and a later
+HUD selection advance to the remaining Former in one declared synthetic setup.
+This gives useful animation/selection observation targets; it establishes no
+candidate clip/resource binding or facing index. Its frame acquisition intervals
+are not game-thread animation cadence. It has zero accepted repeated cases and
+no observed health-priority contract. Only that clean contract and its clean
+observations JSON were read; no original private code or image files were used.

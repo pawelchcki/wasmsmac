@@ -8,6 +8,18 @@ const hash=text=>createHash('sha256').update(text).digest('hex');
 const f32Bits=value=>{assert.ok(Number.isFinite(value));const bytes=new DataView(new ArrayBuffer(4));bytes.setFloat32(0,value,true);return bytes.getUint32(0,true);};
 const nativeWorld=checkpoint=>{const world=structuredClone(checkpoint.world);delete world.terrain_trace.ui;return world;};
 
+// Pinned frontend Unit::{ShouldBeActive,GetSelectionWeight}, backend minimum
+// constants and UnitDef::IsArtillery. The launcher records their exact source
+// bytes and requires the native source tree used to build the runtime.
+export function currentSourceUnitWeight(unit,definitionID,localOwner){
+ assert.ok(Number.isFinite(unit.health)&&unit.health>=0&&unit.health<=1&&Number.isFinite(unit.movement));
+ assert.ok(Number.isSafeInteger(unit.morale)&&unit.morale>=0&&unit.morale<=6);assert.equal(typeof definitionID,'string');
+ const active=unit.owner===localOwner&&Math.fround(unit.health)>=Math.fround(0.025)&&Math.fround(unit.movement)>=Math.fround(0.025)&&unit.order==='NO_ORDERS';
+ let weight=active?200:0;if(definitionID!=='SporeLauncher')weight+=60;weight+=unit.morale*2;
+ // size_t += Float uses Float arithmetic followed by integer conversion.
+ return Math.trunc(Math.fround(weight+Math.fround(Math.fround(unit.health)*8)));
+}
+
 export function parseUnitStackHealthLog(text){
  assert.doesNotMatch(text,/UH_UNSUPPORTED|UH_ERROR|Unhandled exception|Event result listener failed|RuntimeError:|Assertion failed|Aborted\(|Uncaught|\[Error\]/i);
  const rows=prefix=>text.split('\n').flatMap(line=>{const match=line.match(new RegExp('^\\s*(?:\\[[^\\]]+\\]\\s*)?'+prefix+'\\|(.+)$'));return match?[JSON.parse(match[1])]:[];});
@@ -81,11 +93,17 @@ function evaluate(record){
    assert.deepEqual(restored,record.warm.native_unit_scalars,'Only A exact F32 health bits may change in native typed scalar observations');
   }
  }
- const observed=record.final.ui.bound_unit_id;
+ const after=nativeWorld(record.after_health),final=nativeWorld(record.final);
+ const priority=world=>({a:currentSourceUnitWeight(world.units.find(unit=>unit.raw_id===a),world.terrain_trace.unit_details[first.id].definition_id,first.owner),
+  b:currentSourceUnitWeight(world.units.find(unit=>unit.raw_id===b),world.terrain_trace.unit_details[second.id].definition_id,first.owner)});
+ const sourcePriority={warm:priority(before),after_health:priority(after)};assert.deepEqual(priority(final),sourcePriority.after_health);
+ assert.ok(sourcePriority.warm.a>sourcePriority.warm.b,'Actual source formula must justify the warmed A priority');
+ assert.ok(sourcePriority.after_health.b>sourcePriority.after_health.a,'Declared health case must invert actual source priority; otherwise setup is unsupported');
+ const expected=sourcePriority.after_health.a>sourcePriority.after_health.b?a:b,observed=record.final.ui.bound_unit_id;
  return{schema:'application.unit-stack-health-proof.v1',complete:true,evaluation_only:true,candidate_executed:false,original_passing_cases:0,
   scope:'candidate HUD binding versus existing source priority after declared native health fixture event',
-  expected_unit_id:b,observed_unit_id:observed,match:observed===b,a,b,all_seven_native_guard:true,
-  source_priority:{warm:{a:272,b:270},after_health:{a:268,b:270}},allowed_native_change:'A health Float32 0x3f800000 to 0x3f000000 only',
+  expected_unit_id:expected,observed_unit_id:observed,match:observed===expected,a,b,all_seven_native_guard:true,
+  source_priority:sourcePriority,allowed_native_change:'A health Float32 0x3f800000 to 0x3f000000 only',
   unsupported:['original selection policy','combat/damage gameplay','rendered map instance identity','original pixels','facing/frame/tool/limb animation','movement/audio timing','direct frontend-request cause ID']};
 }
 
