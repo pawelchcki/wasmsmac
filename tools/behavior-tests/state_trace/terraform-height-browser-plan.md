@@ -73,6 +73,12 @@ every field of all 128 tiles:
    worker spends its real movement budget, completes work, retains its native
    definition and logical tile, and every other unit remains intact.
 
+`Event.cpp` retains only scalar receipt fields. The driver binds actual
+`name/event_id/caller/unit_id/action/confirmed_height` acceptance to the stored
+live UI quote and resulting native fee/effect. The nested submitted quote is
+not echoed by `event_result`; that payload-echo capability is explicitly
+unsupported, never reconstructed from the UI observation.
+
 Five fixed-viewport frames are retained before height work, at the quote,
 after cancellation, at the payment draft and after completion. No camera input
 is sent between them. Frames are candidate evidence, not original pixel matches

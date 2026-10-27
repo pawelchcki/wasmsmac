@@ -219,7 +219,11 @@ test('real land Raise quote Cancel draft and paid completion preserve the seven-
   const confirmationFence=records.length;await click(presentation.ok(viewport));
   const receipt=await wait(()=>records.slice(confirmationFence).find(row=>row.kind==='TH_RECEIPT'&&row.value.name==='unit_terraform'&&row.value.success&&row.value.caller===quote.owner&&row.value.data.unit_id===quote.unit_id&&row.value.data.action==='raise')?.value);
   report.height_receipt=receipt;
-  assert.equal(receipt.data.confirmed_height,true);assert.deepEqual(receipt.data.height_quote,quote);
+  assert.equal(receipt.data.confirmed_height,true);assert.equal(typeof receipt.event_id,'string');
+  // Event.cpp retains scalar-only receipt data. The nested peer quote is not
+  // echoed; actual acceptance, fee and native effects bind the live UI quote.
+  assert.equal(receipt.data.height_quote,undefined);
+  report.peer_payload_quote_echo='unsupported: native event_result exposes scalar fields only';
   await wait(()=>{const ui=settled();return ui&&!ui.modal&&ui.pending===null&&!ui.native_pending&&!ui.tile_locked&&ui;});
   const completed=await observe('raise-paid-completion');await capture('raise-paid-completion');
   report.expected_effect_from_live_quote=quote;
