@@ -54,7 +54,7 @@ export const workshopMain=String.raw`#main((glsmac) => {
    // A separate declared pixel control loads the same installed component
    // through the normal asset loader. It never supplies an input target or
    // replaces any Workshop widget, model, renderer or palette.
-   const pixel_control = glsmac.ui.root.panel({align:'top right',right:8,top:8,width:100,height:75,background:'black',zindex:0.92});
+   const pixel_control = glsmac.ui.root.panel({align:'top right',right:8,top:8,width:100,height:75,background:'black',zindex:0.99});
    const pixel_surface = pixel_control.surface({left:0,top:0,width:100,height:75,background:'VT.cvr'});
    pixel_surface.presentation_role('workshop-pixel-control','VT.cvr');
    let base_id = null;
