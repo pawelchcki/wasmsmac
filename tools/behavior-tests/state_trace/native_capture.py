@@ -45,7 +45,11 @@ def capture_script(runtime, script, *, timeout=180, initial_seed=None):
         hashes = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
         snapshot = create_snapshot(ROOT)
         alias = 'GLSMAC_data/tests/terrain_observation_probe.gls.js'
-        snapshot[alias] = script.read_text()
+        # Bind the exact emitted probe, even if its source file changes while
+        # the worker is running. Read once for both digest and request.
+        probe_bytes = script.read_bytes()
+        hashes[str(script)] = hashlib.sha256(probe_bytes).hexdigest()
+        snapshot[alias] = probe_bytes.decode('utf-8')
         execution.update(runtime_js_sha256=hashes[str(runtime)],
                          runtime_wasm_sha256=hashes[str(runtime.with_suffix('.wasm'))],
                          worker_sha256=hashes[str(WORKER)], probe_sha256=hashes[str(script)],

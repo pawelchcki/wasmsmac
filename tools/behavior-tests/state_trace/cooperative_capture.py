@@ -1,6 +1,5 @@
 """Strict complete native cooperation observations; never original agreement."""
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -80,7 +79,9 @@ def main():
         log = error.log; report.update(error=str(error), execution=error.execution, candidate_executed=error.execution['candidate_executed'])
     except (OSError, ProtocolError, ValueError) as error:
         report['error'] = str(error)
-    report['probe_sha256'] = hashlib.sha256(PROBE.read_bytes()).hexdigest()
+    # The transport digest binds the actual pre-launch request snapshot; do
+    # not relabel executed bytes by reading the source after the process exits.
+    report['probe_sha256'] = report.get('execution', {}).get('probe_sha256')
     (args.artifacts / 'cooperation.log').write_text(log)
     (args.artifacts / 'cooperation.json').write_text(json.dumps(report, indent=2) + '\n')
     return int(report['status'] != 'passed')
