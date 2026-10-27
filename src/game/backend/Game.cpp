@@ -1553,6 +1553,26 @@ void Game::SetTurnStatus( const backend::turn::turn_status_t requested_status ) 
 	});
 }
 
+gse::Value* Game::ApplyEventWithContext( const event::Event* event, const std::function< gse::Value*() >& apply ) {
+	// Allocate before touching a possibly nested owner's context. Swapping and
+	// restoring the transient owner cannot throw, including during Apply cleanup.
+	std::string previous = event->GetId();
+	previous.swap( m_applying_event_id );
+	struct RestoreContext {
+		std::string& current;
+		std::string& previous;
+		~RestoreContext() { current.swap( previous ); }
+	} restore { m_applying_event_id, previous };
+	return apply();
+}
+
+void Game::FinalizeAcceptedEvent( const event::Event* event, gse::Value* applied ) {
+	FinalizeUnitDisbandEvent( event, applied );
+	// The whole parent Apply has succeeded, including inline turn-ready work.
+	// Pending optimistic events do not reach this boundary before acceptance.
+	if ( m_tm ) { m_tm->FinalizeAcceptedTerrain( event->GetId() ); }
+}
+
 void Game::ProcessEventResponses() {
 	std::vector< pending_event_response_t > responses;
 	{ std::lock_guard guard( m_pending_event_responses_mutex ); responses.swap( m_pending_event_responses ); }
@@ -1578,8 +1598,8 @@ void Game::ProcessEventResponses() {
 				if ( !response.is_accepted && waiting.applied ) { WithRW( [ & ]() { handler->Rollback( GSE_CALL, args ); } ); }
 				else if ( response.is_accepted ) {
 					auto* applied = waiting.rollback_data;
-					if ( !waiting.applied ) { WithRW( [ & ]() { applied = handler->Apply( GSE_CALL, args ); } ); }
-					FinalizeUnitDisbandEvent( waiting.event, applied );
+					if ( !waiting.applied ) { WithRW( [ & ]() { applied = ApplyEventWithContext( waiting.event, [ & ]() { return handler->Apply( GSE_CALL, args ); } ); } ); }
+					FinalizeAcceptedEvent( waiting.event, applied );
 				}
 			} catch ( const std::exception& error ) { success = false; MTModule::Log( "Event response failed: " + std::string( error.what() ) ); }
 			NotifyEventResult( GSE_CALL, waiting.event, success );
@@ -1623,7 +1643,7 @@ void Game::ProcessEvents() {
 				}
 				if ( error.empty() ) {
 					const auto apply = [ & ]() {
-						auto* applied = handler->Apply( GSE_CALL, args );
+						auto* applied = ApplyEventWithContext( event, [ & ]() { return handler->Apply( GSE_CALL, args ); } );
 						if ( applied ) { obj->Set( "applied", applied, GSE_CALL ); }
 						return applied;
 					};
@@ -1635,7 +1655,7 @@ void Game::ProcessEvents() {
 							if ( resolved ) { event->SetResolved( resolved ); obj->Set( "resolved", resolved, GSE_CALL ); }
 						}
 						const auto wire = m_state->m_connection ? event->Serialize().ToString() : std::string{};
-						WithRW( [ & ]() { FinalizeUnitDisbandEvent( event, apply() ); } );
+						WithRW( [ & ]() { FinalizeAcceptedEvent( event, apply() ); } );
 						success = true;
 						// A failed native apply must never be published as accepted.
 						if ( m_state->m_connection ) {
@@ -1661,7 +1681,7 @@ void Game::ProcessEvents() {
 							m_events_waiting_for_responses.emplace( event->GetId(), event_waiting_for_response_t { event, rollback, process_now } );
 							m_state->m_connection->SendSerializedGameEvent( event->GetCaller(), event->GetEventName(), wire );
 						}
-						else { FinalizeUnitDisbandEvent( event, rollback ); }
+						else { FinalizeAcceptedEvent( event, rollback ); }
 					}
 				}
 			} catch ( const std::exception& failure ) { error = failure.what(); }

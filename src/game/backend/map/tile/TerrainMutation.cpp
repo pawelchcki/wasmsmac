@@ -140,6 +140,7 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 		}
 	}
 	TerrainRecord record; record.world = map->m_terrain_identity;
+	record.acceptance_context = m_game->m_applying_event_id;
 	for ( auto* value : workers ) {
 		value = value->Deref();
 		if ( value->type != gse::VT_INT ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain participant must be a live worker ID" ); }
@@ -266,6 +267,14 @@ const TileManager::TerrainRecord& TileManager::ValidateTerrainRollback( GSE_CALL
 		}
 	}
 	return record;
+}
+
+void TileManager::FinalizeAcceptedTerrain( const std::string& event_id ) {
+	if ( event_id.empty() ) { return; }
+	for ( auto it = m_terrain_records.begin(); it != m_terrain_records.end(); ) {
+		if ( it->second.acceptance_context == event_id ) { it = m_terrain_records.erase( it ); }
+		else { ++it; }
+	}
 }
 
 void TileManager::RollbackTerrain( GSE_CALLABLE, const int64_t receipt ) {

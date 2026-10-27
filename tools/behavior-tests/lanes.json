@@ -3,6 +3,7 @@
   "kinds": {
     "regression": {
       "hot": [
+        "terrain-journal-lifecycle",
         "unit-automation-state",
         "former-level",
         "terraforming-primitives",

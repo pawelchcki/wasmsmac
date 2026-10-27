@@ -31,6 +31,8 @@ CLASS( TileManager, gse::GCWrappable )
 public:
 	TileManager( Game* game );
 	~TileManager();
+	// Internal event acceptance only; direct raw API receipts retain their undo.
+	void FinalizeAcceptedTerrain( const std::string& event_id );
 
 	typedef std::function< void() > cb_oncomplete;
 
@@ -70,6 +72,7 @@ private:
 			int64_t previous_revision;
 		};
 		std::weak_ptr< const uint8_t > world;
+		std::string acceptance_context;
 		std::vector< Entry > entries;
 		std::map< size_t, std::weak_ptr< unit::Unit* > > workers;
 	};

@@ -511,6 +511,10 @@ private:
 	void ProcessEvents();
 	void ProcessEventResponses();
 	void NotifyEventResult( GSE_CALLABLE, const event::Event* event, bool success );
+	// Transient application ownership; not world state and never serialized.
+	std::string m_applying_event_id;
+	gse::Value* ApplyEventWithContext( const event::Event* event, const std::function< gse::Value*() >& apply );
+	void FinalizeAcceptedEvent( const event::Event* event, gse::Value* applied );
 	void FinalizeUnitDisbandEvent( const event::Event* event, gse::Value* applied );
 	struct FoundingRecord {
 		size_t unit_id = 0, base_id = 0, owner = 0, x = 0, y = 0;

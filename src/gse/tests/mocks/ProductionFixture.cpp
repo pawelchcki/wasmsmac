@@ -1389,6 +1389,7 @@ struct ProductionFixture : gc::Object {
 	}
 	void Process() { game.ProcessEvents(); }
 	size_t DisbandJournalCount() const { return game.m_disbanding_records.size(); }
+	size_t TerrainJournalCount() const { return game.GetTM()->m_terrain_records.size(); }
 	void ServerEvent( GSE_CALLABLE, const std::string& name, const value::object_properties_t& data ) {
 		if ( !transport ) { transport = std::make_unique< ProbeConnection >( true ); state->m_connection = transport.get(); }
 		game.AddEvent( new backend::event::Event( &game, backend::event::Event::ES_SERVER, game.m_slot_num, GSE_CALL, name, data ) );
@@ -1398,7 +1399,7 @@ struct ProductionFixture : gc::Object {
 		Value* rollback = nullptr;
 		if ( applied ) {
 			auto* obj = VALUEEXT( value::Object, GSE_CALL, event->GetData() );
-			game.WithRW( [ & ]() { rollback = game.m_event_handlers.at( name )->Apply( GSE_CALL, { obj } ); } );
+			game.WithRW( [ & ]() { rollback = game.ApplyEventWithContext( event, [ & ]() { return game.m_event_handlers.at( name )->Apply( GSE_CALL, { obj } ); } ); } );
 		}
 		game.m_events_waiting_for_responses.emplace( event->GetId(), backend::Game::event_waiting_for_response_t { event, rollback, applied } );
 		return event->GetId();
@@ -2334,6 +2335,9 @@ Value* MakeProductionFixture( GSE_CALLABLE, bool founding, bool selection, const
 	object->Set( "resolve_response_event", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 2 ); N_GETVALUE( id, 0, String ); N_GETVALUE( accepted, 1, Bool );
 		session->current->ResolveResponse( id, accepted ); return VALUE( value::Undefined );
+	} ), GSE_CALL );
+	object->Set( "terrain_journal_count", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return VALUE( value::Int,, session->current->TerrainJournalCount() );
 	} ), GSE_CALL );
 	object->Set( "disband_journal_count", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return VALUE( value::Int,, session->current->DisbandJournalCount() );
