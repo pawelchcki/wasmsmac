@@ -121,6 +121,44 @@ class TerrainCaptureTests(unittest.TestCase):
             else: moves[-1]['quote']['policy_quote']['total_cost'] = 2.0
             with self.subTest(change=change), self.assertRaises(ProtocolError): capture.audit(wire(stages, moves))
 
+    def test_opponent_foreign_occupancy_quotes_are_retained_without_hiding_native_changes(self):
+        stages, moves = declared_transport()
+        opponent = 'other:0'
+        # The Former arrives on the opponent's observed destination. The
+        # opponent's native position/budget/work remain identical throughout.
+        for stage, snapshot in stages.items():
+            if stage not in ('initial', 'former-before'):
+                for quote in snapshot['terrain_trace']['unit_details'][opponent]['quotes'].values():
+                    quote.update(allowed_now=False,
+                                 reason='Destination tile contains foreign units (combat not implemented yet)')
+        report = capture.audit(wire(stages, moves))
+        movement = report['movement_evidence'][0]
+        self.assertEqual(movement['changes']['units'], ['former'])
+        self.assertEqual(movement['changes']['unit_details'], ['former', opponent])
+        self.assertEqual(len(movement['derived_quote_changes']), 8)
+        self.assertEqual(movement['derived_quote_changes'][0]['unit_id'], opponent)
+        self.assertTrue(movement['derived_quote_changes'][0]['before']['allowed_now'])
+        self.assertFalse(movement['derived_quote_changes'][0]['after']['allowed_now'])
+        for corruption in ('work', 'price', 'reason', 'unaffected_destination'):
+            changed = deepcopy(stages)
+            detail = changed['former-after']['terrain_trace']['unit_details'][opponent]
+            if corruption == 'work':
+                detail['work']['last_turn'] = 1
+            elif corruption == 'price':
+                quote = detail['quotes']['E']
+                quote['policy_quote']['base_cost'] = quote['policy_quote']['total_cost'] = 2.0
+                quote['quoted_step_cost_mp'] = 2.0
+                quote['quoted_tiles_per_turn'] = 0.5
+            elif corruption == 'reason':
+                detail['quotes']['E']['reason'] = 'Unrelated failure'
+            else:
+                # Foreign units remain on this source tile in both snapshots;
+                # it cannot explain a newly blocked quote.
+                for snapshot in changed.values():
+                    snapshot['terrain_trace']['unit_details'][opponent]['quotes']['E']['destination'] = dict(x=0, y=0)
+            with self.subTest(corruption=corruption), self.assertRaises(ProtocolError):
+                capture.audit(wire(changed, moves))
+
     def test_chunk_identity_counts_and_complete_fence_are_not_optional(self):
         original = wire(*declared_transport()); lines = original.splitlines()
         index = next(i for i, line in enumerate(lines) if line.startswith('TERRAIN_STAGE_ROW|initial|'))

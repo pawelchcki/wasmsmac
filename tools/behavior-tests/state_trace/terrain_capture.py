@@ -34,6 +34,55 @@ def _rows(log):
             yield match.groups()
 
 
+def _derived_quote_changes(before, after, actor, changed_details):
+    """Explain opponent quote changes using only observed occupancy changes.
+
+    A move changes the passability view of adjacent foreign units without
+    mutating those units. Costs, source geometry and every native detail remain
+    exact; only the foreign-occupancy guard may change on the actor's two tiles.
+    """
+    units = {row['id']: row for row in before['units']}
+    moved = units[actor]
+    arrived = next(row for row in after['units'] if row['id'] == actor)
+    affected = {(moved['x'], moved['y']), (arrived['x'], arrived['y'])}
+    explained = []
+    reason = 'Destination tile contains foreign units (combat not implemented yet)'
+    for identity in changed_details:
+        if identity == actor:
+            continue
+        old = before['terrain_trace']['unit_details'][identity]
+        new = after['terrain_trace']['unit_details'][identity]
+        require(canonical({k: v for k, v in old.items() if k != 'quotes'}) ==
+                canonical({k: v for k, v in new.items() if k != 'quotes'}),
+                'Traversal altered an unrelated native unit detail')
+        unit = units[identity]
+        for direction, quote in old['quotes'].items():
+            current = new['quotes'][direction]
+            if canonical(quote) == canonical(current):
+                continue
+            require(canonical({k: v for k, v in quote.items() if k not in ('allowed_now', 'reason')}) ==
+                    canonical({k: v for k, v in current.items() if k not in ('allowed_now', 'reason')}),
+                    'Traversal changed an unrelated quote cost or geometry')
+            destination = quote['destination']
+            require(quote['source'] == dict(x=unit['x'], y=unit['y']) and
+                    (destination['x'], destination['y']) in affected,
+                    'Changed opponent quote is unrelated to the actual move')
+            def occupied(snapshot):
+                return any(row['owner'] != unit['owner'] and
+                           (row['x'], row['y']) == (destination['x'], destination['y'])
+                           for row in snapshot['units'])
+            old_foreign, new_foreign = occupied(before), occupied(after)
+            require(old_foreign != new_foreign and
+                    quote['allowed_now'] == (not old_foreign) and
+                    current['allowed_now'] == (not new_foreign) and
+                    quote['reason'] == (reason if old_foreign else None) and
+                    current['reason'] == (reason if new_foreign else None),
+                    'Changed opponent quote is not the observed foreign-occupancy guard')
+            explained.append(dict(unit_id=identity, direction=direction, destination=destination,
+                                  before=quote, after=current))
+    return explained
+
+
 def audit(log):
     summary = parse_output(log)
     snapshots, native, movements, completed = {}, {}, [], 0
@@ -142,11 +191,11 @@ def audit(log):
         changes = observed_deltas(before, after)
         require(not any(changes[key] for key in ('tiles', 'player_details', 'base_details', 'players', 'bases', 'research'))
                 and not changes['policy_changed'], 'Traversal unexpectedly altered terrain/treasury/research/cities/roster/policy')
-        require(changes['units'] == [actor] and set(changes['unit_details']) <= {actor},
-                'Actual move is missing or altered an unrelated native unit')
+        require(changes['units'] == [actor], 'Actual move is missing or altered an unrelated native unit')
+        derived_quotes = _derived_quote_changes(before, after, actor, changes['unit_details'])
         # Whole-map checks above are independent of the quoted debit; no quote
         # is used to fabricate or approve a native command result.
-        evidence.append(dict(actor=actor, definition=definition, actual=movement,
+        evidence.append(dict(actor=actor, definition=definition, actual=movement, derived_quote_changes=derived_quotes,
                              before_sha256=fingerprint(before), after_sha256=fingerprint(after), changes=changes))
     coverage = baseline['terrain_trace']['coverage']
     unsupported = list(UNSUPPORTED)
