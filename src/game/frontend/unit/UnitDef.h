@@ -36,6 +36,21 @@ public:
 	const bool IsArtillery() const;
 
 	sprite::Sprite* GetSprite( const backend::unit::morale_t morale );
+	const std::string& GetIdForObservation() const { return m_id; }
+	const sprite::Sprite* GetCachedSpriteForObservation( const backend::unit::morale_t morale ) const {
+		if ( m_type != backend::unit::DT_STATIC || !static_.render.is_sprite ) { return nullptr; }
+		if ( m_render.morale_based_xshift ) {
+			if ( !static_.render.morale_based_sprites ) { return nullptr; }
+			const auto found = static_.render.morale_based_sprites->find( morale );
+			return found != static_.render.morale_based_sprites->end() && found->second.instanced_sprite ? &found->second : nullptr;
+		}
+		return static_.render.sprite.instanced_sprite ? &static_.render.sprite : nullptr;
+	}
+	size_t GetCachedSpriteCountForObservation() const {
+		if ( m_type != backend::unit::DT_STATIC || !static_.render.is_sprite ) { return 0; }
+		if ( m_render.morale_based_xshift ) { return static_.render.morale_based_sprites ? static_.render.morale_based_sprites->size() : 0; }
+		return static_.render.sprite.instanced_sprite ? 1 : 0;
+	}
 
 	const bool IsImmovable() const;
 

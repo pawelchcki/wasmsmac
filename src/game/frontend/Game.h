@@ -174,6 +174,7 @@ CLASS( Game, common::Module )
 	static const consts_t s_consts;
 
 	::game::backend::Game* const GetBackend() const;
+	bool CanObserveUnitBodies() const { return m_is_initialized && m_um && m_world_scene; }
 	tile::TileManager* GetTM() const;
 	unit::UnitManager* GetUM() const;
 	base::BaseManager* GetBM() const;
