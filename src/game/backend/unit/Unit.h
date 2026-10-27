@@ -71,6 +71,10 @@ public:
 		int64_t owner = 0, issued_turn = 0, fee = 0, source_elevation = 0;
 		bool source_water = false;
 	};
+	struct cooperative_job_t {
+		std::string policy, terrain_identity;
+		int64_t owner = 0;
+	};
 	// Script-owned work policy, stored with the native unit so progress survives
 	// wrapper recreation, synchronization and manager serialization.
 	struct work_state_t {
@@ -81,6 +85,7 @@ public:
 		bool previous_moved = false;
 		int64_t tile_x = 0, tile_y = 0;
 		height_payment_t height;
+		cooperative_job_t job;
 	};
 
 	// Versioned pure-data automation intent. No wrapper, callback or route cache

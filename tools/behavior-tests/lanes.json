@@ -3,6 +3,9 @@
   "kinds": {
     "regression": {
       "hot": [
+        "terraforming-cooperation-capacity",
+        "terraforming-cooperation",
+        "terraforming-cooperation-owners",
         "script-stages",
         "sea-worker-home-port",
         "normal-worker-routes",

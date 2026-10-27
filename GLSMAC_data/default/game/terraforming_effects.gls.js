@@ -53,9 +53,9 @@ const aquifer_route = (game,unit) => {
 	}
 	return result;
 };
-const validate = (game,unit,action) => {
+const validate = (game,unit,action,read_state) => {
 	if (!supports(action)) { return 'Terraforming effect is not implemented'; }
-	const tile = unit.get_tile(); const data = game.get_tm().get_terrain_state(tile.x,tile.y);
+	const tile = unit.get_tile(); const data = #is_defined(read_state) ? read_state(tile.x,tile.y) : game.get_tm().get_terrain_state(tile.x,tile.y);
 	if (tile.get_base() != null) { return 'Terraforming a base tile is not supported'; }
 	if (tile.is_water != unit.is_water) { return 'Worker must occupy its compatible terrain'; }
 	if (tile.is_water && (action == 'farm' || action == 'mine' || action == 'solar') && data.elevation.center < (0-1000)) { return 'Sea improvements require an ocean shelf'; }
@@ -107,10 +107,10 @@ return {
 	supports:supports,
 	validate:validate,
 	replacements:(game,unit,action) => { const tile = unit.get_tile(); return replacements(game.get_tm().get_terrain_state(tile.x,tile.y),action); },
-	plan:(game,unit,action) => {
-		const reason = validate(game,unit,action); if (#is_defined(reason)) { throw Error(reason); }
+	plan:(game,unit,action,read_state) => {
+		const reason = validate(game,unit,action,read_state); if (#is_defined(reason)) { throw Error(reason); }
 		if (action == 'aquifer') { return aquifer_route(game,unit); }
-		const tile = unit.get_tile(); const data = game.get_tm().get_terrain_state(tile.x,tile.y);
+		const tile = unit.get_tile(); const data = #is_defined(read_state) ? read_state(tile.x,tile.y) : game.get_tm().get_terrain_state(tile.x,tile.y);
 		const patch = {x:tile.x + 0,y:tile.y + 0};
 		if (action == 'level') { patch.rockiness = tile.rockiness - 1; }
 		else if (action == 'remove_fungus') { data.features.xenofungus = false; patch.features = data.features; }

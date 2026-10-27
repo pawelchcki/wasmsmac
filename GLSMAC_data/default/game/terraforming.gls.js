@@ -4,6 +4,7 @@ const source_rules = #include('./terraforming_rules');
 const effects = #include('./terraforming_effects');
 const height = #include('./terraforming_height');
 const height_group = #include('./terraforming_height_group');
+const cooperation = #include('./terraforming_cooperation');
 const describe = (game, unit, action) => {
 	const rules = game.get('terraforming_rules');
 	if (height.known(action) && unit.is_water && #is_defined(rules[action])) { return rules[action].sea; }
@@ -44,10 +45,21 @@ const eligible = (game, unit, action) => {
 	if (!def.can_terraform || (!unit.is_land && !unit.is_water) || unit.health <= 0.0) { return 'Only a living land or sea terraforming unit can do this work'; }
 	if (tile.is_locked()) { return 'Terraforming tile is locked'; }
 	let height_plan = null; if (height.known(action)) { height_plan = height.plan(game,unit,action); if (!height_plan.supported) { return height_plan.reason; } }
+	let cooperative_plan = null;
 	for (other of tile.get_units()) {
 		const state = other.get_terraforming();
 		if (other.id != unit.id && state.active) {
-			if (!height.known(action) || other.owner != unit.owner || state.action != action || !#is_defined(state.height) || state.height.terrain_identity != height_plan.identity || state.required_work != rule.turns * 2) { return 'Another incompatible terraforming job is active on this square'; }
+			if (height.known(action)) {
+				if (other.owner != unit.owner || state.action != action || !#is_defined(state.height) || state.height.terrain_identity != height_plan.identity || state.required_work != rule.turns * 2) { return 'Another incompatible terraforming job is active on this square'; }
+			} else {
+				if (cooperative_plan == null) {
+					let failure = '';
+					try { cooperative_plan = cooperation.prepare(game,unit,action,rule.turns * 2); }
+					catch { : (error) => { failure = error.reason + ''; } }
+					if (failure != '') { return failure; }
+				}
+				if (!cooperation.matches(other,state,action,rule.turns * 2,cooperative_plan.job,tile.x,tile.y,unit.is_water)) { return 'Another incompatible terraforming job is active on this square'; }
+			}
 		}
 	}
 	if (height.known(action)) { return; }
@@ -78,7 +90,7 @@ const validate_selection = (e) => {
 	// budget and consent check; selection itself never changes the intent.
 	return orders.automation_cancel_error(e,unit);
 };
-const tick_apply = (game, unit, action, receipt) => {
+const tick_apply = (game, unit, action, receipt, prepared_job) => {
 	const tile = unit.get_tile(); const rule = describe(game,unit,action); const required = rule.turns * 2;
 	const previous = unit.get_terraforming();
 	let completed = 0;
@@ -86,6 +98,20 @@ const tick_apply = (game, unit, action, receipt) => {
 	if (height.known(action)) {
 		receipt.group = height_group.collect(unit,action);
 		for (member of receipt.group) { completed = #max(completed,member.work.work_units); }
+	}
+	let cooperative_plan = null; let own_completed = completed;
+	if (!height.known(action) && (#is_defined(prepared_job) || #is_defined(previous.job))) {
+		cooperative_plan = #is_defined(prepared_job) ? prepared_job : cooperation.prepare(game,unit,action,required);
+		if (!#is_defined(prepared_job) && previous.job != cooperative_plan.job) { throw Error('Terrain changed during cooperative work; issue a new order'); }
+		// Existing observed manual switching carries this worker's own credit.
+		// It never carries another participant's work or stale same-job terrain.
+		if (#is_defined(previous.job) && previous.action == action && previous.job != cooperative_plan.job) { own_completed = 0; }
+		receipt.cohort = cooperation.collect(unit,action,required,cooperative_plan.job);
+		completed = own_completed; let found = false;
+		for (member of receipt.cohort) {
+			if (member.unit.id == unit.id) { found = true; } else { completed = completed + member.work.work_units; }
+		}
+		if (!found) { receipt.cohort :+ cooperation.capture(unit); }
 	}
 	const movement = unit.movement + 0.0; const moved = unit.moved_this_turn == true;
 	if (movement == 0.0) {
@@ -101,8 +127,8 @@ const tick_apply = (game, unit, action, receipt) => {
 	}
 	if (completed + 2 >= required) {
 		const worker_ids = [];
-		if (height.known(action)) { for (member of receipt.group) { worker_ids :+ (member.unit.id + 0); } } else { worker_ids :+ unit.id + 0; }
-		terrain_receipt = game.get_tm().apply_terrain(height.known(action) ? prepared_height.patches : effects.plan(game,unit,action),worker_ids);
+		if (height.known(action)) { for (member of receipt.group) { worker_ids :+ (member.unit.id + 0); } } else if (cooperative_plan != null) { for (member of receipt.cohort) { worker_ids :+ (member.unit.id + 0); } } else { worker_ids :+ unit.id + 0; }
+		terrain_receipt = game.get_tm().apply_terrain(height.known(action) ? prepared_height.patches : (cooperative_plan != null ? cooperative_plan.patches : effects.plan(game,unit,action)),worker_ids);
 		receipt.terrain = terrain_receipt;
 		if (height.known(action)) {
 			for (member of receipt.group) {
@@ -111,10 +137,16 @@ const tick_apply = (game, unit, action, receipt) => {
 				worker.set_terraforming(empty());
 			}
 		}
+		if (cooperative_plan != null) {
+			receipt.cohort_modified = true;
+			for (member of receipt.cohort) { const worker = member.unit; worker.set_terraforming(empty()); if (member.order != 'TERRAFORM' && member.order != 'AUTOMATE') { worker.set_order(member.order); } }
+		}
 		unit.set_terraforming(empty());
 	} else {
-		const next = {action: action, work_units: completed + 2, required_work: required, last_turn: game.get_turn(),
-			previous_work_units: completed, previous_movement: movement, previous_moved: moved, tile_x: tile.x, tile_y: tile.y, active: true};
+		const own_next = cooperative_plan != null ? own_completed : completed;
+		const next = {action: action, work_units: own_next + 2, required_work: required, last_turn: game.get_turn(),
+			previous_work_units: own_next, previous_movement: movement, previous_moved: moved, tile_x: tile.x, tile_y: tile.y, active: true};
+		if (cooperative_plan != null) { next.job = cooperative_plan.job; }
 		if (height.known(action)) { next.height = previous.height; }
 		unit.set_terraforming(next);
 		if (height.known(action)) {
@@ -124,16 +156,22 @@ const tick_apply = (game, unit, action, receipt) => {
 	unit.movement = 0.0; unit.moved_this_turn = true;
 	return terrain_receipt;
 };
-const tick = (game,unit,action,output) => {
+const tick = (game,unit,action,output,prepared_job) => {
 	const original = unit.get_terraforming(); const order = unit.get_order(); const movement = unit.movement + 0.0;
-	const moved = unit.moved_this_turn == true; const recovery = unit.get_terraforming_recovery(); const receipt = {terrain:0,group:[]};
+	const moved = unit.moved_this_turn == true; const recovery = unit.get_terraforming_recovery(); const receipt = {terrain:0,group:[],cohort:[],cohort_modified:false};
 	try {
-		const result = tick_apply(game,unit,action,receipt);
+		const result = tick_apply(game,unit,action,receipt,prepared_job);
 		if (#is_defined(output)) { output.group = []; for (member of receipt.group) { if (member.unit.id != unit.id) { output.group :+ #clone(member); } } height_group.seal(output.group); }
+		if (#is_defined(output)) {
+			output.cohort = [];
+			if (receipt.cohort_modified) { for (member of receipt.cohort) { if (member.unit.id != unit.id) { output.cohort :+ #clone(member); } } }
+			cooperation.seal(output.cohort);
+		}
 		return result;
 	} catch { : (error) => {
 		if (receipt.terrain > 0) { game.get_tm().validate_terrain_rollback(receipt.terrain); game.get_tm().rollback_terrain(receipt.terrain); }
 		height_group.rollback(receipt.group);
+		if (receipt.cohort_modified) { cooperation.rollback(receipt.cohort); }
 		unit.set_terraforming(original); unit.set_terraforming_recovery(recovery);
 		if (order != 'TERRAFORM' && order != 'AUTOMATE') { unit.set_order(order); }
 		unit.movement = movement; unit.moved_this_turn = moved; throw Error('Terraforming failed: ' + error.reason);
@@ -147,6 +185,7 @@ return {
 		return height.quote(e.game,#include('./unit_orders').resolve(e.game,e.data),e.data.action);
 	},
 	describe: describe,
+	cohort_state:cooperation.state,
 	prerequisite_error: prerequisite_error,
 	needs_confirmation: needs_confirmation,
 	validate_selection: (e) => { return validate_selection(e); },
@@ -201,6 +240,12 @@ return {
 					e.unit.set('terraforming_failure',{policy:height.policy,action:state.action,turn:game.get_turn() + 0,reason:reason,paid_fee:#is_defined(state.height) ? state.height.fee : 0});
 					e.unit.set_terraforming(empty()); game.message('Elevation work stopped: ' + reason); return;
 				}
+			}
+			if (#is_defined(state.job)) {
+				let reason = '';
+				try { if (cooperation.prepare(game,e.unit,state.action,state.required_work).job != state.job) { reason = 'Terrain changed during cooperative work; issue a new order'; } }
+				catch { : (error) => { reason = error.reason + ''; } }
+				if (reason != '') { e.unit.set('terraforming_failure',{policy:cooperation.policy,action:state.action,turn:game.get_turn() + 0,reason:reason}); e.unit.set_terraforming(empty()); game.message('Terraforming work stopped: ' + reason); return; }
 			}
 			if (tile.x != state.tile_x || tile.y != state.tile_y || e.unit.movement != e.unit.get_def().movement_per_turn || #is_defined(eligible(game, e.unit, state.action))) {
 				e.unit.set_terraforming(empty()); return;

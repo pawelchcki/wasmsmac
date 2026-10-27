@@ -2,11 +2,12 @@ const orders = #include('../unit_orders');
 const work = #include('../terraforming');
 const height = #include('../terraforming_height');
 const height_group = #include('../terraforming_height_group');
+const cooperation = #include('../terraforming_cooperation');
 const begin = (game,unit,action,height_quote,manual) => {
 	const tile = unit.get_tile();
 	const receipt = {owner:unit.owner,turn:game.get_turn() + 0,manual:manual,original_plan:unit.get_automation(),original_order:unit.get_order(),original_work:unit.get_terraforming(),
 		movement:unit.movement + 0.0,moved:unit.moved_this_turn == true,tile_x:tile.x,tile_y:tile.y,terrain:work.flags(game,tile)};
-	receipt.unit = unit; receipt.original_recovery = unit.get_terraforming_recovery(); receipt.energy_receipt = 0; receipt.terrain_receipt = 0; receipt.group = [];
+	receipt.unit = unit; receipt.original_recovery = unit.get_terraforming_recovery(); receipt.energy_receipt = 0; receipt.terrain_receipt = 0; receipt.group = []; receipt.cohort = [];
 	try {
 		if (manual && receipt.original_plan.command != '') { #include('../terraforming_automation').cancel(game,unit); }
 		if (height.known(action)) {
@@ -20,7 +21,9 @@ const begin = (game,unit,action,height_quote,manual) => {
 			initial.active = false; initial.last_turn = 0;
 			initial.height = height.payment(game,unit,height_quote); unit.set_terraforming(initial);
 		}
-		receipt.terrain_receipt = work.start(game,unit,action,receipt);
+		let prepared_job = undefined;
+		if (!height.known(action)) { prepared_job = cooperation.prepare(game,unit,action,work.describe(game,unit,action).turns * 2); }
+		receipt.terrain_receipt = work.start(game,unit,action,receipt,prepared_job);
 	} catch { : (error) => {
 		const payer = height.owner(game,unit.owner);
 		if (receipt.terrain_receipt > 0) { game.get_tm().validate_terrain_rollback(receipt.terrain_receipt); }
@@ -44,6 +47,7 @@ const validate_undo = (game,unit,prior) => {
 	orders.rollback_unit(event);
 	const tile = unit.get_tile(); const tm = game.get_tm();
 	height_group.validate(game,prior.group);
+	cooperation.validate(game,prior.cohort);
 	if (game.get_turn() != prior.turn || (prior.manual && unit.get_automation() != prior.expected_plan)) { throw Error('Terraforming plan receipt is stale'); }
 	if (tile.x != prior.tile_x || tile.y != prior.tile_y || unit.get_terraforming() != prior.expected_work ||
 		unit.get_order() != prior.expected_order || unit.get_terraforming_recovery() != prior.expected_recovery || unit.movement != prior.expected_movement || unit.moved_this_turn != prior.expected_moved ||
@@ -56,6 +60,7 @@ const undo = (game,unit,prior,restore_order) => {
 	const tm = game.get_tm();
 	if (prior.terrain_receipt > 0) { tm.rollback_terrain(prior.terrain_receipt); }
 	height_group.rollback(prior.group);
+	cooperation.rollback(prior.cohort);
 	if (prior.manual) { unit.set_automation(prior.original_plan); }
 	unit.set_terraforming(prior.original_work); unit.set_terraforming_recovery(prior.original_recovery);
 	if (restore_order && prior.original_order != 'TERRAFORM' && prior.original_order != 'AUTOMATE') { unit.set_order(prior.original_order); }

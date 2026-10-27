@@ -1,6 +1,9 @@
 {
   "version": 1,
   "suites": [
+    {"id":"terraforming-cooperation-capacity","script":"GLSMAC_data/tests/terraforming_cooperation_capacity.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
+    {"id":"terraforming-cooperation","script":"GLSMAC_data/tests/terraforming_cooperation.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
+    {"id":"terraforming-cooperation-owners","script":"GLSMAC_data/tests/terraforming_cooperation_owners.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"normal-worker-tubes","script":"GLSMAC_data/tests/normal_worker_tubes.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"script-stages","script":"GLSMAC_data/tests/script_stages.gls.js","domains":["gameplay","ui"],"evidence":"glsmac-regression"},
     {"id":"sea-worker-home-port","script":"GLSMAC_data/tests/sea_worker_home_port.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
