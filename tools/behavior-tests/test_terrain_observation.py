@@ -25,7 +25,7 @@ def packet():
         terrain_trace=dict(schema=t.SCHEMA, elevation_units='native-engine-elevation', terrain_units=deepcopy(t.TERRAIN_UNITS), tiles=tiles,
             unit_details={}, base_details={}, player_details={owner: dict(raw_id=i, role='declared', name='Declared',
                 identity=['Declared'] * 6, energy=dict(credits=0, last_income_turn=0)) for i, owner in enumerate(owners)},
-            ui=None, coverage={name: name not in {'ui', 'animation_timing', 'audio', 'original_height_byte', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase', 'home_identity', 'improvement_owners'} for name in t.COVERAGE},
+            ui=None, coverage={name: name not in {'ui', 'animation_timing', 'audio', 'original_height_byte', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase', 'home_identity', 'improvement_owners', 'terrain_epoch', 'paid_height_work', 'naval_recovery', 'energy_revision'} for name in t.COVERAGE},
             policy=dict(version=1, ignore_technologies=True)))
 
 
@@ -34,6 +34,27 @@ class TerrainSchemaTests(unittest.TestCase):
         value = packet(); self.assertIs(t.validate_snapshot(value), value)
         self.assertFalse(value['terrain_trace']['coverage']['original_height_byte'])
         self.assertFalse(value['terrain_trace']['coverage']['ui'])
+
+    def test_v2_is_readable_without_fabricating_v3_capabilities(self):
+        value = packet(); trace = value['terrain_trace']; trace['schema'] = t.LEGACY_SCHEMA
+        trace['coverage'] = {key: trace['coverage'][key] for key in t.LEGACY_COVERAGE}
+        self.assertIs(t.validate_snapshot(value), value)
+        trace['coverage']['terrain_epoch'] = False
+        with self.assertRaises(ProtocolError): t.validate_snapshot(value)
+
+    def test_native_epoch_revision_capability_requires_every_actual_field(self):
+        value = packet(); trace = value['terrain_trace']
+        trace['coverage']['terrain_epoch'] = trace['coverage']['energy_revision'] = True
+        for tile in trace['tiles'].values(): tile['terrain_epoch'] = 17
+        for owner in trace['player_details'].values(): owner['energy_revision'] = 4
+        self.assertIs(t.validate_snapshot(value), value)
+        for kind in ('missing-tile', 'wrong-type', 'missing-opponent', 'hidden-capability'):
+            broken = deepcopy(value); trace = broken['terrain_trace']
+            if kind == 'missing-tile': del trace['tiles']['1,1']['terrain_epoch']
+            elif kind == 'wrong-type': trace['tiles']['1,1']['terrain_epoch'] = False
+            elif kind == 'missing-opponent': del trace['player_details']['player:7']['energy_revision']
+            else: trace['coverage']['terrain_epoch'] = False
+            with self.subTest(kind=kind), self.assertRaises(ProtocolError): t.validate_snapshot(broken)
 
     def test_missing_duplicate_or_hidden_opponent_state_fails(self):
         for change in ('roster', 'raw-id', 'details', 'research', 'resources'):

@@ -35,6 +35,9 @@ class LaneTests(unittest.TestCase):
     def test_hot_scope_is_bounded_and_pending_is_separate(self):
         self.assertEqual(set(self.manifest['kinds']['regression']['hot']), {
             'base-operations', 'base-operations-lifecycle', 'base-operations-selection', 'startup-rule-sources',
+            'terraform-automation-lifecycle', 'mag-tube-movement', 'worker-routes',
+            'terraform-automation', 'terraforming-height', 'terraforming-support', 'terraforming-controls-all',
+            'worker-order-cancellation', 'normal-worker-routes', 'normal-worker-tubes', 'script-stages', 'sea-worker-home-port',
             'trace-float-transport', 'unit-automation-state', 'former-level', 'terraforming-primitives',
             'terraforming-native', 'terrain-journal-lifecycle', 'energy-receipt-lifecycle', 'aquifer-capacity', 'aquifer-routing', 'terrain-geometry', 'terraforming-rules', 'land-unit-production', 'former-work',
             'native-input-state', 'unit-work-state',
@@ -79,7 +82,7 @@ class LaneTests(unittest.TestCase):
                 self.assertFalse(identifiers & set(self.manifest['kinds'][kind]['hot']))
         self.assertEqual((len(self.manifest['kinds']['regression']['hot']),
                           len(self.manifest['kinds']['regression']['stable']),
-                          len(self.known['regression'])), (58, 104, 162))
+                          len(self.known['regression'])), (70, 104, 174))
         for lane, expected in [('hot', (11, 44)), ('stable', (49, 711)), ('all', (60, 755))]:
             inventory = lanes.describe('ui', lanes.select('ui', self.known['ui'], lane, self.manifest))
             self.assertEqual((inventory['suites'], inventory['cases']), expected)

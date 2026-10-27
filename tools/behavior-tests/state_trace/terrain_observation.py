@@ -1,4 +1,4 @@
-"""Strict native terrain observation v2; no terrain or movement rules live here.
+"""Strict native terrain observations v2/v3; no terrain or movement rules live here.
 
 This validates captured native data, not agreement with an original executable.
 The frozen state-trace comparator can compare a separately bound projection;
@@ -11,16 +11,18 @@ from fast import parse_output
 from protocol import ProtocolError, canonical, decode_json
 from state_trace.schema import validate_state
 
-SCHEMA = 'game.terrain_observation.v2'
+LEGACY_SCHEMA = 'game.terrain_observation.v2'
+SCHEMA = 'game.terrain_observation.v3'
 DIRECTIONS = ('W', 'NW', 'N', 'NE', 'E', 'SE', 'S', 'SW')
 FEATURES = ('river', 'monolith', 'xenofungus', 'jungle', 'uranium', 'geothermal',
             'unity_pod', 'volcano', 'sunny_mesa', 'garland_crater', 'fossil_field_ridge',
             'unity_energy', 'unity_chopper', 'unity_radar', 'dunes')
 IMPROVEMENTS = ('road', 'mag_tube', 'forest', 'farm', 'soil_enricher', 'solar', 'mine',
                 'condenser', 'mirror', 'borehole', 'sensor', 'bunker', 'airbase')
-COVERAGE = ('all_players', 'terrain_height', 'terrain_type', 'terrain_resources',
+LEGACY_COVERAGE = ('all_players', 'terrain_height', 'terrain_type', 'terrain_resources',
             'traverse_quotes', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase', 'home_identity', 'improvement_owners',
             'ui', 'animation_timing', 'audio', 'original_height_byte')
+COVERAGE = LEGACY_COVERAGE + ('terrain_epoch', 'paid_height_work', 'naval_recovery', 'energy_revision')
 TERRAIN_UNITS = dict(rockiness='native-enum-0-none-1-flat-2-rolling-3-rocky',
                      moisture='native-enum-0-none-1-arid-2-moist-3-rainy',
                      original_raw_height_class='unsupported', original_raw_rockiness='unsupported')
@@ -121,17 +123,21 @@ def validate_snapshot(snapshot):
         integer(row['target_id'], 'research.target_id'); integer(row['accumulated'], 'research.accumulated')
     trace = snapshot['terrain_trace']
     fields(trace, ('schema', 'elevation_units', 'terrain_units', 'tiles', 'unit_details', 'base_details', 'player_details', 'ui', 'coverage', 'policy'), 'terrain_trace')
-    require(trace['schema'] == SCHEMA and trace['elevation_units'] == 'native-engine-elevation', 'Unknown terrain observation schema/units')
+    require(trace['schema'] in (LEGACY_SCHEMA, SCHEMA) and trace['elevation_units'] == 'native-engine-elevation', 'Unknown terrain observation schema/units')
     require(trace['terrain_units'] == TERRAIN_UNITS, 'Engine enums must not be relabeled as original raw bytes/classes')
     fields(trace['policy'], ('version', 'ignore_technologies'), 'policy')
     require(type(trace['policy']['version']) is int and trace['policy']['version'] == 1 and
             type(trace['policy']['ignore_technologies']) is bool, 'Actual serialized policy identity missing')
-    fields(trace['coverage'], COVERAGE, 'coverage')
+    modern = trace['schema'] == SCHEMA
+    fields(trace['coverage'], COVERAGE if modern else LEGACY_COVERAGE, 'coverage')
+    capabilities = trace['coverage']
+    has = lambda name: modern and capabilities[name]
     require(all(type(value) is bool for value in trace['coverage'].values()), 'Coverage must be explicit booleans')
     require(trace['coverage']['all_players'], 'All-player observation cannot be omitted')
     require(type(trace['player_details']) is dict and set(trace['player_details']) == owners, 'Per-owner details omitted')
     for owner, row in trace['player_details'].items():
-        fields(row, ('raw_id', 'role', 'name', 'identity', 'energy'), owner)
+        fields(row, ('raw_id', 'role', 'name', 'identity', 'energy') + (('energy_revision',) if has('energy_revision') else ()), owner)
+        if has('energy_revision'): integer(row['energy_revision'], owner + '.energy_revision', 0)
         require(row['raw_id'] == next(p['raw_id'] for p in snapshot['players'] if p['id'] == owner), 'Player raw identity differs')
         require(type(row['role']) is str and type(row['name']) is str and type(row['identity']) is list and
                 len(row['identity']) == 6 and all(type(text) is str for text in row['identity']), 'Incomplete native player identity')
@@ -149,7 +155,9 @@ def validate_snapshot(snapshot):
                       'moisture', 'rockiness', 'bonus', 'features_raw', 'features', 'terraforming_raw',
                       'terraforming', 'imported', 'resources', 'native_height_band', 'native_type', 'locked')
         fields(tile, tile_fields + (('canonical',) if trace['coverage']['canonical_height'] else ()) +
-               (('terraforming_owners',) if trace['coverage']['improvement_owners'] else ()), 'tile:' + key)
+               (('terraforming_owners',) if trace['coverage']['improvement_owners'] else ()) +
+               (('terrain_epoch',) if has('terrain_epoch') else ()), 'tile:' + key)
+        if has('terrain_epoch'): integer(tile['terrain_epoch'], 'tile:' + key + '.terrain_epoch', 0)
         require(type(tile['version']) is int and tile['version'] == 1 and tile['width'] == width and tile['height'] == height,
                 'Native terrain API version/dimensions differ')
         coordinate(dict(x=tile['x'], y=tile['y']), width, height, 'tile:' + key)
@@ -205,7 +213,13 @@ def validate_snapshot(snapshot):
     require(type(trace['unit_details']) is dict and set(trace['unit_details']) == set(units), 'Every native unit requires detail/quotes')
     for unit_id, detail in trace['unit_details'].items():
         unit = units[unit_id]
-        fields(detail, ('definition_id', 'morale_set', 'movement_kind', 'nominal_mp_per_turn', 'can_terraform', 'moved_this_turn', 'work', 'automation', 'home_base_id', 'quotes', 'combat'), 'unit:' + unit_id)
+        fields(detail, ('definition_id', 'morale_set', 'movement_kind', 'nominal_mp_per_turn', 'can_terraform', 'moved_this_turn', 'work', 'automation', 'home_base_id', 'quotes', 'combat') + (('terraforming_recovery',) if has('naval_recovery') else ()), 'unit:' + unit_id)
+        if has('naval_recovery'):
+            recovery = detail['terraforming_recovery']
+            fields(recovery, ('active', 'x', 'y'), 'unit.recovery')
+            require(type(recovery['active']) is bool, 'Native naval recovery activity missing')
+            if recovery['active']: coordinate(dict(x=recovery['x'], y=recovery['y']), width, height, 'unit.recovery')
+            else: require(type(recovery['x']) is int and type(recovery['y']) is int and recovery['x'] == recovery['y'] == 0, 'Inactive naval recovery retained a target')
         if trace['coverage']['home_identity']: integer(detail['home_base_id'], 'unit.home_base_id', 0)
         else: require(detail['home_base_id'] is None, 'Missing home capability must not invent an identity')
         if trace['coverage']['automation_context']:
@@ -240,6 +254,17 @@ def validate_snapshot(snapshot):
         for field in ('action', 'work_units', 'required_work', 'last_turn', 'previous_work_units',
                       'previous_movement', 'previous_moved', 'active', 'tile_x', 'tile_y'):
             require(field in detail['work'], 'Native work progress omits ' + field)
+        if 'height' in detail['work']:
+            require(has('paid_height_work'), 'Paid native height metadata cannot hide behind absent capability')
+            paid = detail['work']['height']
+            fields(paid, ('version', 'policy', 'fee_policy', 'owner', 'issued_turn', 'fee', 'source_elevation', 'source_water', 'terrain_identity'), 'work.height')
+            require(type(paid['version']) is int and paid['version'] == 1 and
+                    type(paid['policy']) is str and bool(paid['policy']) and type(paid['fee_policy']) is str and bool(paid['fee_policy']) and
+                    type(paid['terrain_identity']) is str and bool(paid['terrain_identity']), 'Missing paid height policy/terrain identity')
+            for field in ('owner', 'issued_turn', 'fee'): integer(paid[field], 'work.height.' + field, 0)
+            integer(paid['source_elevation'], 'work.height.source_elevation')
+            require(type(paid['source_water']) is bool and detail['work']['action'] in ('raise', 'lower'), 'Paid metadata belongs to incompatible work')
+            require(paid['owner'] == next(row['raw_id'] for row in snapshot['players'] if row['id'] == unit['owner']), 'Paid height owner differs from unit')
         require(type(detail['work']['action']) is str and type(detail['work']['active']) is bool, 'Native work action/lifecycle malformed')
         for field in ('work_units', 'required_work', 'last_turn', 'previous_work_units', 'tile_x', 'tile_y'):
             integer(detail['work'][field], 'work.' + field, 0)

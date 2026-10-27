@@ -15,7 +15,7 @@ const get_movement_cost = (unit, src_tile, dst_tile) => {
 	const is_native = true; // TODO: non-native units
 
 	if (
-		dst_tile.is_land &&
+		unit.is_land && dst_tile.is_land &&
 		src_tile.features.river &&
 		dst_tile.features.river
 	) {
@@ -40,7 +40,7 @@ const get_movement_aftercost = (unit, src_tile, dst_tile) => {
 	if (is_native && dst_tile.features.xenofungus) {
 		return 0.0;
 	}
-	if (dst_tile.is_land && dst_tile.rockiness >= 3) {
+	if (unit.is_land && dst_tile.is_land && dst_tile.rockiness >= 3) {
 		return 1.0;
 	}
 	return 0.0;
@@ -49,9 +49,21 @@ const get_movement_aftercost = (unit, src_tile, dst_tile) => {
 // Read-only evaluation of the same live policy used by resolve/apply.
 // Actual debit/result must still be sampled after the authoritative command;
 // this quote is not an observed outcome or proof of original movement parity.
-return (e) => {
- const unit = e.data.unit; const source = unit.get_tile(); const destination = e.data.tile;
+const evaluate_at = (game, unit, source, destination) => {
+ // Installed manual p48: connected mag tubes cost no movement while the
+ // actual command still requires positive remaining MP. No implicit city
+ // connection, original terrain exception or pixel/timing parity is inferred.
+ if (unit.is_land && source.is_land && destination.is_land) {
+  const from = game.get_tm().get_terraforming(source.x,source.y);
+  const to = game.get_tm().get_terraforming(destination.x,destination.y);
+  if (from.mag_tube && to.mag_tube) { return {road_rate:0,base_cost:0.0,after_cost:0.0,total_cost:0.0}; }
+ }
+ const event = {}; event.game = game; event.data = {}; event.data.unit = unit;
  const base_cost = get_movement_cost(unit, source, destination);
  const after_cost = get_movement_aftercost(unit, source, destination);
- return {road_rate: get_road_rate(e, source, destination), base_cost: base_cost, after_cost: after_cost, total_cost: base_cost + after_cost};
+ return {road_rate:get_road_rate(event,source,destination),base_cost:base_cost,after_cost:after_cost,total_cost:base_cost + after_cost};
+};
+return {
+ evaluate:(e) => { return evaluate_at(e.game,e.data.unit,e.data.unit.get_tile(),e.data.tile); },
+ evaluate_at:evaluate_at,
 };
