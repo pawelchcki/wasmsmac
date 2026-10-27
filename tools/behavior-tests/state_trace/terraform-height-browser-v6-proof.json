@@ -779,6 +779,67 @@
         "seconds": 55.649,
         "new_engine_or_browser_executions": 0
       }
+    },
+    {
+      "id": "complete-input-source-and-artifact-binding-v6",
+      "kind": "read-only unchanged capture re-audit; zero new game/browser cases",
+      "auditor_source": "tools/behavior-tests/state_trace/terraform_height_browser_audit.py",
+      "auditor_source_sha256": "4756fdf5a8dba262eb2d301654cea6e429a2b2b39e94f274a71590e7407f1e2b",
+      "code_freeze": "21888784885c192e4102b5219e9c3fe8555b2cb6",
+      "result_path": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-inputs.json",
+      "result_sha256": "cf8cd801bb5dd08601e908ad7fbbec8814656f778e1878133148c7c0484e9845",
+      "raw_sha256": "7877baed15b88c2700f3042fe5c31f64c6ee66517dcef04541c1ced832bad473",
+      "report_sha256": "7f196c8f5de67e76355f3f49cff0ac20a4a4f3ef35fc7021c90d993f73f76f3c",
+      "preflight_sha256": "791b078abf2949ddb1fb2efcd322b05dc41198e6114f31aa1ad2816375264622",
+      "preflight_schema": "historical-prelaunch-input-binding:791b078a",
+      "complete_worlds": 6,
+      "per_world": {
+        "players": 7,
+        "units": 8,
+        "bases": 7,
+        "tiles": 128
+      },
+      "finalization": {
+        "sealed_complete": true,
+        "native_exit_verified": true,
+        "actual_main_ack": true,
+        "actual_worker_acks": 8,
+        "actual_exit_key_and_request": true,
+        "full_raw_fatal_scan": "clean",
+        "continuous_native_callbacks": 936,
+        "callback_utf16_covered": 14465994,
+        "lossless_trace_packets": 50,
+        "unique_contiguous_trace_events": 82661,
+        "exit_order_scope": "this fixture drains Q ingress/begin/end before its owned-timer TH_EXIT_REQUEST"
+      },
+      "pointer_route": {
+        "physical_clicks_verified": 8,
+        "raw_button_actions_exhausted": true,
+        "scope": "MENU/terraform/raise/Cancel/reopen/Expend/confirm; actual native geometry and input receipts"
+      },
+      "frames": {
+        "retained_frame_digests_verified": 5,
+        "scope": "actual file bytes; no original pixels/pose/mesh agreement"
+      },
+      "external_node_exit": {
+        "supported": true,
+        "external_raw_exit_code": 0,
+        "tool_session_id": 40314,
+        "completion_chunk_id": "0ae251",
+        "artifact_sha256": "6ab902e12ee6a6d0f3a4a4f52868a0bf5232a00ea408475ddbba1afd2850673d"
+      },
+      "historical_cleanliness_scope": "legacy tracked_diff/source bindings only; no retrospective untracked-source cleanliness receipt",
+      "validation": {
+        "all_python_checks": 124,
+        "public_protocol_checks": 63,
+        "retained_actual_checks": 61,
+        "skipped": 0,
+        "seconds": 72.849,
+        "node_metadata_checks": 6,
+        "node_skipped": 0,
+        "new_engine_browser_executions": 0
+      },
+      "command": "python3 tools/behavior-tests/state_trace/terraform_height_browser_audit.py --artifacts /tmp/terraform-land-height-v6-second --outer-outcome /tmp/terraform-land-height-v6-second/raw-outcome.json --output tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-inputs.json"
     }
   ],
   "historical_preflight_creation": {

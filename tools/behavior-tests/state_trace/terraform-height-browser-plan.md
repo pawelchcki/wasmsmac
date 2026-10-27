@@ -393,3 +393,46 @@ Coherent raw/report Boolean counterexamples were accepted by the previous v4
 validator and are rejected by this version, including both down and up paths.
 The accepted original capture still passes unchanged; no new browser case or
 native input was executed and no historical callback/receipt was fabricated.
+
+## Complete input, source and artifact binding v6
+
+`terraform-height-browser-v6-reaudit-inputs.json` is a further independent
+source-versioned read-only replay. Earlier source/result hashes and all capture
+files remain unchanged. The exact six P-query ingress/begin/end triples each
+belong to one native drain carrier: this fixture prints `TH_NATIVE` **before**
+that `TH_TRACE` in the same owned timer. The audit requires Native < carrier <
+next Native (or exit for the final query), never a fictional key-packet-before-
+Native order. Events retain their actual native sequence; unrelated bootstrap
+drains are not forced into checkpoint intervals.
+
+Every raw pointer down/up ingress/begin must be exhausted by the recorded eight
+physical clicks. Extra unreported button actions cannot be hidden by keeping
+only the expected report entries. Actor8's native owner joins payer0's logical
+identity; exact Int actor coordinates join the quoted8,8. Actual opening source
+reserves10 plus Gaian bonus0 must equal the initialized native payer energy10,
+with captured last-income turn0. No changed source-funded treasury is inferred.
+
+The admitted installed-asset profile requires actual override readsInt1 and the
+captured original/executed opaque manifest IDs12743b42…888e3→740c1c9f…3ae10,
+alongside its original/executed rule hashes, source-driver and20 shared-duration
+rows. No missing historical manifest payload is synthesized; other asset
+profiles need explicit support. All five named PNG files must exist and match
+their actual SHA256. This validates file bytes, not original pixels or pose.
+
+The future metadata producer rejects relevant dirty tracked/staged Native,
+Default, fixture/helper or driver source, including relevant untracked and
+ignored loader-visible inputs, before emitting any HEAD-labelled artifacts.
+Real temporary Git tests exercise clean and dirty full producer calls; unrelated
+notes can stay dirty. The old historical preflight remains immutable: its
+tracked-diff/source bindings are retained, but it receives **no invented proof
+of an untracked-clean worktree**. The new guard does not run a browser or game.
+
+The final check set passed124 Python cases with zero skips (63 public protocol,
+61 actual retained mutations), plus6 metadata-only Node cases. Public CI should
+select its public classes explicitly, including `FrameFileTests`, rather than
+counting private skipped classes. Corrected test-fixture carrier selection uses
+the recorded P fence's containing packet, not the first bootstrap drain. Old-
+accept/new-reject counterexamples cover foreign/remote actors, contradictory
+funding, relocated query carriers, unreported buttons, loader identity loss,
+missing frames and ambiguous source cleanliness. These add no new capture,
+native execution, original agreement or Sea coverage.
