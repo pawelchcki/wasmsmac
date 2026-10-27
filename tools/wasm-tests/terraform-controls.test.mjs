@@ -94,10 +94,22 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const browser=await chromium.launch({headless:true,executablePath:process.env.WASM_BROWSER_EXECUTABLE||undefined,
     args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const page=await browser.newPage({viewport:{width:1100,height:1000}}); page.setDefaultTimeout(60000);
+  await page.addInitScript(()=>{
+    window.__terraformDomReceipt={events:[],dropped:0};
+    for(const type of ['keydown','keyup'])window.addEventListener(type,event=>{
+      const receipt=window.__terraformDomReceipt;
+      if(receipt.events.length>=512){receipt.dropped++;return;}
+      receipt.events.push({type,key:event.key,code:event.code,keyCode:event.keyCode,ctrl:event.ctrlKey,alt:event.altKey,shift:event.shiftKey,meta:event.metaKey,
+        repeat:event.repeat,isTrusted:event.isTrusted,defaultPrevented:event.defaultPrevented,phase:'capture',timestamp:event.timeStamp,
+        target:{tag:event.target?.tagName??null,id:event.target?.id??null},activeElement:{tag:document.activeElement?.tagName??null,id:document.activeElement?.id??null},
+        documentFocus:document.hasFocus(),visibility:document.visibilityState});
+    },{capture:true,passive:true});
+  });
   const errors=[]; page.on('pageerror',error=>errors.push(error.stack||String(error))); page.on('crash',()=>errors.push('Chromium crashed'));
   t.after(async()=>{try{if(report.status!=='passed')report.status='failed-or-incomplete';
     try{const text=await page.locator('#log').textContent({timeout:1000});writeFileSync(`${artifacts}/application.log`,text);report.diagnostic_root_records=text.split('\n').filter(line=>line.includes('TF_DIAGNOSTIC_REGISTRY|')||line.includes('TF_DIAGNOSTIC_ROOT_KEY|')||line.includes('TF_DIAGNOSTIC_ROOT_AFTER|'));}
     catch(error){report.log_capture_error=String(error);}
+    try{report.dom_key_receipts=await page.evaluate(()=>window.__terraformDomReceipt);}catch(error){report.dom_capture_error=String(error);}
     if(report.status!=='passed'){try{await page.locator('#canvas').screenshot({path:`${artifacts}/failed-frame.png`,timeout:1000});}catch(error){report.frame_capture_error=String(error);}}
     writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');}finally{await browser.close();}});
   const fatal=/TF_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i;
@@ -143,7 +155,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     const deadline=performance.now()+60000;
     while(performance.now()<deadline){
       const text=await log();collect(text);
-      const begin=report.input_ledger.events.find(e=>e.seq>fence&&e.kind==='input.dispatch'&&e.data.phase==='begin'&&e.data.code===code);
+      const begin=report.input_ledger.events.find(e=>e.seq>fence&&e.kind==='input.dispatch'&&e.data.phase==='begin'&&e.data.type==='keydown'&&e.data.code===code);
       const end=begin&&report.input_ledger.events.find(e=>e.seq>begin.seq&&e.kind==='input.dispatch'&&e.data.phase==='end'&&e.data.ingress===begin.data.ingress);
       if(end){report.processed_keys??=[];report.processed_keys.push({begin,end,observed_ms:performance.now()});return;}
       const remaining=deadline-performance.now();assert.ok(remaining>0,'Actual native key processing must finish inside existing budget');
