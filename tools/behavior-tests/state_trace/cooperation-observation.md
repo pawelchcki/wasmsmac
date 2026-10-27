@@ -25,7 +25,7 @@ another owner's job. Every capture fences the full native graph, RNG and queues.
 The completion marker follows cleanup and normal Finish. No original cooperation,
 UI, graphics or timing agreement is claimed.
 
-After the matching native schema-2 runtime is built and a worker slot is granted:
+Replay with the matching native schema-2 runtime after reserving a worker slot:
 
 ```sh
 python3 tools/behavior-tests/state_trace/cooperative_capture.py \
@@ -34,6 +34,22 @@ python3 tools/behavior-tests/state_trace/cooperative_capture.py \
 
 The replay preserves requested seed, runtime/worker/fixture/source fingerprints,
 full snapshots, native inventories and raw process status. Pure schema checks
-are transport validation; source staging is not native execution. Native proof
-remains pending until the matching runtime succeeds with its real footer and
-exit zero. Old-runtime failure must not be promoted from structurally valid data.
+are transport validation. Structurally valid data never overrides a failed native
+footer or nonzero process exit.
+
+Verified candidate checkpoint: frozen host `fb64d609` (native source tree
+`115032ffc7f53ff7f0c3a9f997da12674e25e643`), immutable PR2 runtime v6:
+JS `e71036c9365a3ac87bf818e7eb49fb2344077a15aa6836371a436572cedf7f82`,
+WASM `b2c7fa273042f2407335169eb4fca51f131f1f30656301d7b7573a201b28f5b7`.
+The replay passed **1 scenario / 532 assertions**, native exit **0**, in 33.576s.
+All four snapshots contain all seven players, 22 units, seven cities and 128 tiles.
+The actual probe digest is
+`d5e4f9830ce113628811d927f21dfcbbfb28cf0ae990feb1dda00b4db8cc8272`;
+it is bound to executed request bytes before launch. Native setup explicitly
+opens each computer's turn through the shipped `uncomplete_turn` event. The first
+failed probe's native-wrapper array dereference remains preserved; scalar IDs
+now reacquire canonical actors without changing observations or assertions.
+
+This verifies bounded full-world observation and pure foreign cohort binding.
+It does not establish original cooperation agreement, browser rendering, large
+terrain-footprint capacity, or complete autonomous-plan exhaustion.

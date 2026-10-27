@@ -1,7 +1,8 @@
 # Cooperative work preview
 
-Source checkpoint only; the mounted native suite has not yet run on a frozen
-runtime. This adds no original-game agreement or browser-pixel claims.
+The mounted native suite is verified on frozen host `fb64d609` and PR2 runtime
+v6 (native source tree `115032ffc7f53ff7f0c3a9f997da12674e25e643`). This
+adds no original-game agreement or browser-pixel claims.
 
 The selected unit's native contribution remains unchanged. A current multiworker
 cohort renders its actual pure `terraforming.cohort_state` total and requirement,
@@ -33,3 +34,23 @@ and entity/queue inventory. A direct view-revision update also must leave the
 full native snapshot unchanged. Cleanup removes the panel and its owned timers.
 The fixture requires the real `uncomplete_turn` setup correction because natural
 startup intentionally marks offline computer turns complete.
+
+Actual native/mock-mounted result: **1 scenario / 62 assertions**, raw exit **0**,
+17.318s. The original production panel observes native partial total 4, peer total
+6, own contribution 2, retained paused credit, peer completion and true undo,
+selection changes, stale terrain, and improvement-owner apply/undo invalidation.
+Setting the view-only native custom-global revision leaves the complete native
+snapshot unchanged. Unchanged progress polling performs no extra terrain reads;
+the test previews a foreign unit and does not measure local availability costs.
+Cleanup and normal Finish complete with all native tests passing.
+
+Relevant compatibility passed **3 suites / 62 scenarios / 297 assertions** on
+that same host/runtime: Former controls (17/70), all 22 non-height controls
+(22/154), and worker-order cancellation including paid-height undo (23/73).
+The first temporary-catalog invocation was rejected before any engine launch
+because the new ID was not yet classified: zero native passes. The mounted test
+then ran through the existing strict native-capture alias; the actual executed
+probe SHA256 is
+`6e7d289f01f185f8c195183d5545da5ea584656dea9b64572d2338f37b7cf043`.
+The successful result supports subsequent catalog promotion; it is separate
+from real browser input and visual verification, which remain pending.
