@@ -44,6 +44,30 @@ return {
    state.scenarios = state.scenarios + 1; #print('BEHAVIOR_PASS ' + name);
   });
  },
+ // Independent cases keep one real collection boundary per body. Bookkeeping
+ // BEGIN/PASS markers do not need their own empty stages; all PASS markers
+ // remain deferred until native cleanup and Finish have succeeded.
+ group_staged: (cases) => {
+  native_assert(#typeof(test.stage) == 'Callable' && test.stage_version == 1, 'This test requires native script staging v1');
+  native_assert(#typeof(cases) == 'Array' && #sizeof(cases) > 0, 'A staged group requires named cases');
+  const completed = []; let first_name = '';
+  for (entry of cases) {
+   const name = entry.name; const callback = entry.run;
+   native_assert(#typeof(name) == 'String' && name != '' && #typeof(callback) == 'Callable', 'A staged case requires name/run');
+   for (previous of state.names) { native_assert(previous != name, 'Duplicate scenario: ' + name); }
+   state.names :+ name; if (first_name == '') { first_name = name; }
+   const case_state = {name:name,completed:false}; completed :+ case_state;
+   test.stage(name, () => {
+    #print('BEHAVIOR_BEGIN ' + name); callback(); case_state.completed = true;
+   });
+  }
+  test.after_stages('behavior:group-pass:' + first_name, () => {
+   for (case_state of completed) { native_assert(case_state.completed, 'Staged group did not complete every declared case'); }
+   for (case_state of completed) {
+    state.scenarios = state.scenarios + 1; #print('BEHAVIOR_PASS ' + case_state.name);
+   }
+  });
+ },
  finish: () => {
   const has_stages = #typeof(test.stages_pending) == 'Callable' && #typeof(test.after_stages) == 'Callable';
   if (has_stages && test.stages_pending() > 0) { test.after_stages('behavior:summary',emit_summary); }

@@ -134,7 +134,8 @@ have separate passing source-bound results in the current smoke runbook. The
 real controls browser check also passes on `0322db43`; its exact input, native
 exit and sealed-log scope is recorded in
 [terraform-controls-browser-v6-proof.json](terraform-controls-browser-v6-proof.json).
-Height/Sea browser coverage and final CI/review remain separate. Current Hot
-regression/UI failures are not hidden by these trace passes: disband shutdown
-and capacity cleanup remain unresolved. Original passing action
+Height/Sea browser coverage and final CI/review remain separate. The retained
+Hot failures are not hidden by these trace passes: disband and capacity now have
+strict source-bound focused repairs recorded in the smoke runbook, while fresh
+full CI remains required. Original passing action
 cases remain zero; parser tests cannot replace native execution or strict shutdown.
