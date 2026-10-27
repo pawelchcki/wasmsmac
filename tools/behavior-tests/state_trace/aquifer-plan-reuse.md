@@ -24,9 +24,9 @@ It prints exact patch JSON and the real cooperative identity for independent
 old/new byte comparison, preserves native world/terrain/inventory state, and
 checks that an already existing river still produces the same rejection.
 
-At this source checkpoint only the eighteen pure lane checks have run. Native
-old/new parity and the unchanged 4,096-tile capacity and 512 KiB boundary tests
-remain pending; the previous failure is preserved separately.
+Native same-input parity, the unchanged 4,096-tile capacity case and the 512 KiB
+boundary checks now pass on the exact source/runtime below. The original
+allocation failures remain separate retained evidence.
 
 ## Native verification
 

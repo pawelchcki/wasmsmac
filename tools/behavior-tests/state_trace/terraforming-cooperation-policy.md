@@ -1,9 +1,19 @@
 # Nonheight cooperation: application policy v1
 
-This source checkpoint is uncompiled and unexecuted. It adds no original-game
-agreement counts. Frozen original observations and their expected answers remain
-unchanged. Runtime, legacy migration and byte-footprint checks are required before
-reporting functional acceptance.
+Application acceptance is verified on immutable native runtime v6, source tree
+`115032ffc7f53ff7f0c3a9f997da12674e25e643`. The corrected main suite passed
+35 scenarios / 248 assertions, including all 22 variants and actual legacy/receive
+checks. The seven-owner suite passed 1 / 151. The 4,096-tile capacity case passed
+1 / 11 after per-call validated-plan reuse, including native exact 512 KiB
+readback and one-byte-over rejection. These results add no original-game matches;
+frozen original observations and their expected answers remain unchanged.
+
+The main proof is `/tmp/terraform-cooperation-v6-corrected.json` (host
+`9166948c`); ownership is `/tmp/terraform-cooperation-v6-owners-corrected.json`
+(host `0f206c45`). See [aquifer reuse](aquifer-plan-reuse.md) for the exact
+capacity source/runtime and retained failures, [observation](cooperation-observation.md)
+for full seven-owner captures, and [preview](cooperation-preview.md) for mounted
+progress and compatibility. Final-source browser and CI/review gates remain separate.
 
 The policy covers all 17 nonheight land actions and their five sea variants:
 farm, soil enrichment, mine, solar, forest, road, mag tube, bunker, airbase,
@@ -148,8 +158,8 @@ guards true, but the legacy `receiving_owner` flag also requires morale set
 reports separate actual canonical owner and morale registry identity flags,
 retaining its old combined flag unchanged. The cooperation case asserts both
 canonical identities and all old byte/rollback guards, without altering the unit
-input or claiming a stock morale change. A new native fixture runtime is required
-before retry; this source correction is not a passing gate.
+input or claiming a stock morale change. On the matching v6 runtime both actual
+canonical identity flags and all unchanged roundtrip/truncation guards passed.
 
 The subsequent v6 malformed-loop failure is a proven GSE fixture control-flow
 issue: a terminal `try/catch` returns an `Undefined` object, and the array loop
@@ -160,4 +170,5 @@ asserts each actual caught rejection and full byte equality after the catch,
 then increments its counter as a normal statement. All eight invalid inputs and
 the final equality guard remain; per-input atomicity coverage is stronger. No
 GSE engine or production validation behavior changed. Original failures and the
-end-only diagnostic are retained separately from the pending corrected gate.
+end-only diagnostic are retained separately from the corrected 35 / 248 passing
+gate; the original failures have not been relabeled as passes.
