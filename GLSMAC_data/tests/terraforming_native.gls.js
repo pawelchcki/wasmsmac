@@ -390,6 +390,14 @@ behavior.scenario('malformed absent or nonlive enhancement owners reject the ent
 	empty.sensor = f.owner.id + 0;
 	reject(f, () => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,terraforming_owners:empty}],[]); }); });
 });
+behavior.scenario('portable terrain forgets builders while live world attachment validates preserved construction owners', () => {
+	const f = fixture(); f.configure('sensor'); const before = f.snapshot(); const terrain = f.terrain_snapshot();
+	const probe = f.construction_owner_binding_probe();
+	test.assert(probe.detached_codec_preserved && probe.valid_world_preserved && probe.unknown_preserved);
+	test.assert(probe.nonlive_world_rejected && probe.malformed_world_rejected);
+	test.assert(probe.portable_flags_preserved_owners_unknown && probe.source_unchanged);
+	test.assert(f.snapshot() == before && f.terrain_snapshot() == terrain);
+});
 behavior.scenario('equal-state terrain ABA fences old receipts while proper LIFO undo restores the predecessor revision', () => {
 	const f = fixture(); const tm = f.game.get_tm(); const initial = f.terrain_snapshot(); let a = 0; let b = 0; let c = 0;
 	f.with_write(() => {

@@ -1482,15 +1482,15 @@ void Game::InitFailed( const std::string& error_text ) {
 	HideLoader();
 	std::lock_guard startup_guard( m_startup_mutex );
 	// need to delete these here because they weren't passed to main thread
-	if ( m_map->m_textures.terrain ) {
+	if ( m_map && m_map->m_textures.terrain ) {
 		DELETE( m_map->m_textures.terrain );
 		m_map->m_textures.terrain = nullptr;
 	}
-	if ( m_map->m_meshes.terrain ) {
+	if ( m_map && m_map->m_meshes.terrain ) {
 		DELETE( m_map->m_meshes.terrain );
 		m_map->m_meshes.terrain = nullptr;
 	}
-	if ( m_map->m_meshes.terrain_data ) {
+	if ( m_map && m_map->m_meshes.terrain_data ) {
 		DELETE( m_map->m_meshes.terrain_data );
 		m_map->m_meshes.terrain_data = nullptr;
 	}
@@ -2072,9 +2072,10 @@ void Game::InitGame( MT_Response& response, const bool interactive_opening, MT_C
 
 							// map
 							auto b = types::Buffer( buf.ReadString() );
-							NEW( m_map, map::Map, this );
-							const auto ec = m_map->LoadFromBuffer( b );
+							auto incoming_map = map::Map::LoadWorldTerrain( this, b );
+							const auto ec = incoming_map ? map::Map::EC_NONE : map::Map::EC_MAPFILE_FORMAT_ERROR;
 							if ( ec == map::Map::EC_NONE ) {
+								m_map = incoming_map.release();
 
 								// resources
 								{

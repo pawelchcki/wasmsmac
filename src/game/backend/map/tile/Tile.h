@@ -30,6 +30,7 @@ class Base;
 }
 
 namespace map {
+class Map;
 namespace tile {
 
 class Tiles;
@@ -130,6 +131,7 @@ public:
 
 private:
 	friend class TileManager;
+	friend class game::backend::map::Map;
 	int64_t m_terrain_revision = 0;
 	std::array< int8_t, 13 > m_terraforming_owners = [](){ std::array< int8_t, 13 > value; value.fill( -1 ); return value; }();
 	bool m_has_canonical_elevation = false;

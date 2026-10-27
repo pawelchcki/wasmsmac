@@ -7,6 +7,11 @@
 #include <atomic>
 #include <stdexcept>
 #include "gc/Space.h"
+#include "engine/Engine.h"
+#include "config/Config.h"
+#include "util/FS.h"
+#include "util/FinallyGuard.h"
+#include <cstdio>
 #include "gse/value/Array.h"
 #include "gse/value/Bool.h"
 #include "gse/value/Callable.h"
@@ -824,6 +829,54 @@ struct ProductionFixture : gc::Object {
 			{ "roundtrip", VALUE( value::Bool,, roundtrip ) }, { "stable", VALUE( value::Bool,, stable ) },
 			{ "malformed_rejected", VALUE( value::Bool,, rejected ) },
 			{ "independent", VALUE( value::Bool,, original->GetTilesPtr()->Serialize().ToString() == before ) },
+		} );
+	}
+	Value* ConstructionOwnerBindingProbe( GSE_CALLABLE ) {
+		const auto before = game.GetMap()->GetTilesPtr()->Serialize().ToString();
+		const auto wire = [ & ]( const int64_t construction_owner ) {
+			types::Buffer encoded; encoded.WriteInt( game.GetMap()->GetWidth() ); encoded.WriteInt( game.GetMap()->GetHeight() );
+			for ( size_t y = 0; y < game.GetMap()->GetHeight(); ++y ) {
+				for ( size_t x = y % 2; x < game.GetMap()->GetWidth(); x += 2 ) {
+					auto tile = game.GetMap()->GetTile( x, y )->Serialize();
+					if ( x == 2 && y == 2 ) {
+						// Authored sensor input is twelve ordinary fields, with no
+						// existing provenance/owner extension to overwrite or guess.
+						if ( tile.lenw != 12 * 14 ) { THROW( "Owner wire probe requires the declared ownerless sensor profile" ); }
+						tile.WriteBool( false ); tile.WriteString( "terraform-owners-v1" );
+						for ( const auto& name : backend::map::tile::Tile::s_terraforming_names ) { tile.WriteInt( name == "sensor" ? construction_owner : -1 ); }
+					}
+					encoded.WriteString( tile.ToString() );
+				}
+			}
+			encoded.WriteBool( false ); return encoded;
+		};
+		const auto valid_bytes = wire( owner->GetSlot()->GetIndex() ).ToString();
+		auto valid_input = types::Buffer( valid_bytes );
+		auto valid = backend::map::Map::LoadWorldTerrain( &game, valid_input, false );
+		const bool preserved = valid && valid->GetTilesPtr()->Serialize().ToString() == valid_bytes;
+		bool raw_preserved = true, rejected = true;
+		for ( const int64_t absent : { int64_t( 0 ), int64_t( 7 ) } ) {
+			const auto bytes = wire( absent ).ToString(); auto input = types::Buffer( bytes );
+			auto detached = std::unique_ptr< backend::map::Map >( new backend::map::Map( &game, false ) );
+			raw_preserved = raw_preserved && detached->LoadFromBuffer( input ) == backend::map::Map::EC_NONE && detached->GetTilesPtr()->Serialize().ToString() == bytes;
+			input = types::Buffer( bytes );
+			rejected = rejected && !backend::map::Map::LoadWorldTerrain( &game, input, false );
+		}
+		auto legacy_input = types::Buffer( before );
+		auto legacy = backend::map::Map::LoadWorldTerrain( &game, legacy_input, false );
+		const bool unknown_preserved = legacy && legacy->GetTilesPtr()->Serialize().ToString() == before;
+		auto malformed = types::Buffer( valid_bytes.substr( 0, valid_bytes.size() - 1 ) );
+		const bool malformed_rejected = !backend::map::Map::LoadWorldTerrain( &game, malformed, false );
+		const auto prefix = g_engine->GetConfig()->GetPrefix(); util::FS::CreateDirectoryIfNotExists( prefix );
+		const auto path = prefix + "/fixture-construction-owner-import.gsm";
+		util::FinallyGuard cleanup( [ & ](){ std::remove( path.c_str() ); } );
+		auto imported = std::unique_ptr< backend::map::Map >( new backend::map::Map( &game, false ) );
+		const bool portable = valid && valid->SaveToFile( path ) == backend::map::Map::EC_NONE && imported->LoadFromFile( path ) == backend::map::Map::EC_NONE && imported->GetTilesPtr()->Serialize().ToString() == before;
+		return VALUEEXT( value::Object, GSE_CALL, {
+			{ "valid_world_preserved", VALUE( value::Bool,, preserved ) }, { "unknown_preserved", VALUE( value::Bool,, unknown_preserved ) },
+			{ "detached_codec_preserved", VALUE( value::Bool,, raw_preserved ) }, { "nonlive_world_rejected", VALUE( value::Bool,, rejected ) },
+			{ "malformed_world_rejected", VALUE( value::Bool,, malformed_rejected ) }, { "portable_flags_preserved_owners_unknown", VALUE( value::Bool,, portable ) },
+			{ "source_unchanged", VALUE( value::Bool,, game.GetMap()->GetTilesPtr()->Serialize().ToString() == before ) },
 		} );
 	}
 	Value* EnergyCodecProbe( GSE_CALLABLE ) {
@@ -1997,6 +2050,9 @@ Value* MakeProductionFixture( GSE_CALLABLE, bool founding, bool selection, const
 	} ), GSE_CALL );
 	object->Set( "canonical_terrain_codec_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->CanonicalTerrainCodecProbe( GSE_CALL );
+	} ), GSE_CALL );
+	object->Set( "construction_owner_binding_probe", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return session->current->ConstructionOwnerBindingProbe( GSE_CALL );
 	} ), GSE_CALL );
 	object->Set( "energy_codec_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->EnergyCodecProbe( GSE_CALL );

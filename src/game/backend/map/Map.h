@@ -76,6 +76,9 @@ CLASS2( Map, types::Serializable, gse::GCWrappable )
 
 	const error_code_t Generate( settings::MapSettings* map_settings, MT_CANCELABLE );
 	const error_code_t LoadFromBuffer( types::Buffer& buffer );
+	// A live-world snapshot keeps construction ownership and requires the
+	// already-restored canonical player roster before a map is published.
+	static std::unique_ptr< Map > LoadWorldTerrain( Game* game, types::Buffer& buffer, bool initialize_rendering = true );
 	const error_code_t LoadFromFile( const std::string& path );
 	void SaveToBuffer( types::Buffer& buffer ) const;
 	const error_code_t SaveToFile( const std::string& path ) const;

@@ -26,6 +26,7 @@
 #include "game/FrontendRequest.h"
 #include <memory>
 #include "game/backend/State.h"
+#include "game/backend/slot/Slots.h"
 #include "MapState.h"
 #include "SMACMap.h"
 #include "game/backend/map/tile/Tiles.h"
@@ -833,6 +834,22 @@ const Map::error_code_t Map::LoadFromBuffer( types::Buffer& buffer ) {
 	}
 }
 
+std::unique_ptr< Map > Map::LoadWorldTerrain( Game* game, types::Buffer& buffer, const bool initialize_rendering ) {
+	if ( !game || !game->GetState() ) { return nullptr; }
+	auto incoming = std::unique_ptr< Map >( new Map( game, initialize_rendering ) );
+	if ( incoming->LoadFromBuffer( buffer ) != EC_NONE ) { return nullptr; }
+	auto* const slots = game->GetState()->m_slots;
+	for ( const auto& tile : *incoming->m_tiles->GetTilesPtr() ) {
+		for ( const auto owner : tile.m_terraforming_owners ) {
+			if ( owner >= 0 && ( !slots || size_t( owner ) >= slots->GetCount() ||
+				slots->GetSlot( owner ).GetState() != slot::Slot::SS_PLAYER ) ) {
+				return nullptr;
+			}
+		}
+	}
+	return incoming;
+}
+
 const Map::error_code_t Map::LoadFromFile( const std::string& path ) {
 	if ( path.empty() || !util::FS::FileExists( path ) ) {
 		return EC_MAPFILE_NOT_FOUND;
@@ -844,7 +861,13 @@ const Map::error_code_t Map::LoadFromFile( const std::string& path ) {
 		util::FS::ReadFile( bytes, path );
 		if ( !smac::HasSignature( bytes ) ) {
 			auto buffer = types::Buffer( std::string( bytes.begin(), bytes.end() ) );
-			return LoadFromBuffer( buffer );
+			const auto result = LoadFromBuffer( buffer );
+			if ( result == EC_NONE ) {
+				// Reusable terrain files have no saved player-roster mapping.
+				// Keep every physical enhancement; its historical builder is unknown.
+				for ( auto& tile : *m_tiles->GetTilesPtr() ) { tile.m_terraforming_owners.fill( -1 ); }
+			}
+			return result;
 		}
 		const auto source = smac::Parse( bytes );
 		if ( source.flat ) {
