@@ -16,6 +16,10 @@ the executed host. Shared collectors/hooks/input helpers are separately pinned
 to `0322db43`; distinct source ancestries are recorded explicitly. Installed `VT.cvr` fingerprint remains the accepted component hash.
 Asset-derived images, model geometry and pixel masks are not committed.
 
+The exact raw GSE JSON is authoritative for native Float types and bits; Node
+report serialization folds integral Float values into ordinary JSON numbers.
+Delivery independently validated all nine typed snapshots from the raw stream.
+
 Nine fresh queued snapshots covered seven native players, seven bases, eight
 units and 128 terrain tiles, including opponents. Fourteen completed real pointer
 inputs and 13 completed real key inputs drove base opening, CHANGE, WORKSHOP,
