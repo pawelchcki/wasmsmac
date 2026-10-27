@@ -184,7 +184,8 @@ void Test::AddMocks( gc::Space* const gc_space, context::GlobalContext* ctx, con
 		{ "natural_startup_fixture", NATIVE_CALL( production_roots ) {
 			N_EXPECT_ARGS( 3 ); N_GETVALUE( width, 0, Int ); N_GETVALUE( height, 1, Int ); N_GETVALUE( terrain, 2, String );
 			if ( width < 4 || width > 256 || height < 4 || height > 256 || width % 2 != 0 ||
-				( terrain != "flat-arid" && terrain != "flat-moist" && terrain != "flat-rainy" ) ) {
+				( terrain != "flat-arid" && terrain != "flat-moist" && terrain != "flat-rainy" && terrain != "aquifer-corridor" ) ||
+				( terrain == "aquifer-corridor" && ( width != 256 || height != 136 ) ) ) {
 				GSE_ERROR( EC.INVALID_CALL, "Invalid declared natural-startup grid or terrain" );
 			}
 			auto* fixture = MakeNaturalStartupFixture( GSE_CALL, width, height, terrain );

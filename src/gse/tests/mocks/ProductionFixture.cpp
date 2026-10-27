@@ -318,7 +318,9 @@ struct ProductionFixture : gc::Object {
 	}
 	void PrepareNaturalStartup( const std::string& terrain ) {
 		backend::map::tile::moisture_t moisture;
-		if ( terrain == "flat-arid" ) { moisture = backend::map::tile::MOISTURE_ARID; }
+		const bool aquifer_corridor = terrain == "aquifer-corridor";
+		if ( aquifer_corridor && ( game.m_map->GetWidth() != 256 || game.m_map->GetHeight() != 136 ) ) { THROW( "Aquifer corridor input requires 256x136 tiles" ); }
+		if ( terrain == "flat-arid" || aquifer_corridor ) { moisture = backend::map::tile::MOISTURE_ARID; }
 		else if ( terrain == "flat-moist" ) { moisture = backend::map::tile::MOISTURE_MOIST; }
 		else if ( terrain == "flat-rainy" ) { moisture = backend::map::tile::MOISTURE_RAINY; }
 		else { THROW( "Unknown declared natural-startup terrain" ); }
@@ -335,6 +337,16 @@ struct ProductionFixture : gc::Object {
 				tile->bonus = tile->features = tile->terraforming = 0;
 				// Native lowland height; exact contour conversion is outside this contract.
 				for ( auto* corner : tile->elevation.corners ) { *corner = 200; }
+				if ( aquifer_corridor ) {
+					// Authored input only: separated flat corridors, alternating
+					// end connectors, high walls, and one sea square. Native
+					// planning/validation supplies every route and action answer.
+					int64_t center = 3500;
+					if ( y >= 2 && y <= 130 && y % 4 == 2 && x >= 2 && x <= 252 ) { center = 0; }
+					if ( y >= 4 && y <= 128 && y % 4 == 0 && x == ( ( ( y - 4 ) / 4 ) % 2 ? 2 : 252 ) ) { center = 0; }
+					if ( x == 252 && y == 132 ) { center = -500; }
+					tile->SetCanonicalElevation( center, center < 0, false );
+				}
 			}
 		}
 		for ( size_t y = 0; y < game.m_map->GetHeight(); ++y ) {
