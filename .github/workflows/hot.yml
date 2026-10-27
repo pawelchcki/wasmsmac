@@ -123,6 +123,7 @@ jobs:
         run: >-
           node --test tools/wasm-tests/browser-log-cursor.test.mjs
           tools/wasm-tests/browser-native-log-hook.test.mjs
+          tools/wasm-tests/runtime-fetch-barrier.test.mjs
           tools/wasm-tests/terraform-browser-geometry.test.mjs
           tools/wasm-tests/terraform-browser-pointer.test.mjs
       - name: Capture all 26 terraforming variants and ten worker commands
