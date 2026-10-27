@@ -55,15 +55,34 @@ world values and reserialize them later, which could hide unrelated mutations.
 The parser requires exactly those three independent immutable boundaries and
 matches their metadata to the final result before evaluating any agreement.
 
-For a future exclusive real run, mount the two exported fixture sources through
-the reviewed candidate browser host with the current exact CDP print barrier,
-cursor, immutable runtime and installed assets. Only the synthetic main/world
-entrypoint changes; keep the product scripts/units and priority unchanged. The
-existing Workshop browser host is still undergoing first-run repair/review, so
-this probe deliberately does not copy its transport or pretend a second launcher
-is verified. That mounting/launch adapter remains a preparation gap. Retain
-runtime/default/observer/helper hashes, actual native exit zero and sealed raw
-logs before invoking:
+The new `unit-stack-order-browser.test.mjs` mounts these sources on an isolated
+branch based on the actually passing Workshop host `54ac6335`. Canonical CDP
+print barrier, native log hook and cursor are imported unchanged. It creates no
+pointer/keyboard coordinate model and changes no Workshop/shared helper source.
+The only application inputs are declared native public selection/Hold requests.
+It waits for actual application exit zero, closes browser/server, stops the CDP
+barrier and seals exact raw chunks before parsing/evaluating the complete log.
+A complete stale-ID result is written as a distinct priority mismatch and fails
+the Node test; unavailable setup, uncontrolled native mutation or missing event
+barriers never count as a proven visible cache defect. The launcher is source
+prepared and has not executed this graphics scenario.
+
+Source audit confirms `select_tile` queues FR_TILE_SELECT with TILE purpose;
+its tile-select event precedes `UpdatePreviews`. The real map callback always
+emits the chosen backend unit wrapper. FR_UNIT_UPDATE sets frontend order then
+calls `Unit::Refresh`, which updates activity and renders/refreshed previews.
+The new preview after the controlled Hold is the bounded frontend barrier. A
+native frontend-request cause ID is not independently exposed, so its relation
+to FR_UNIT_UPDATE is source-backed rather than a separately observed cause tag.
+`UnitPreview::Register` resolves the actual Widget payload to the native unit ID
+used by its frontend renderer. These details justify the HUD binding witness,
+while the rendered map instance identity remains unavailable.
+
+Before a future run, pin exact runtime/Default/observer/helper hashes and acquire
+an explicitly exclusive lease. The standalone test has an overall180second
+budget and runs no engine when installed assets are absent. Its source-only
+import/skip check is not an application passing case. The completed raw log can
+also be evaluated independently with:
 
 ```sh
 node tools/wasm-tests/unit-stack-order-proof.mjs \
@@ -77,3 +96,23 @@ ID. It cannot establish the rendered map instance identity, original pixels,
 facing, movement cadence, tool/limb animation or audio. Those remain explicit
 graphics gaps. A later C++ cache-invalidation change requires actual failing
 evidence first and must preserve the same witness and source priority policy.
+
+## Movement and animation observation plan
+
+| Observable | Current bounded evidence | Capability still needed |
+| --- | --- | --- |
+| HUD unit identity | Native map callback, mounted Widget payload and label ID | This new case still needs actual execution |
+| Rendered map body | Existing static component/fallback source and ordinary interpolation | Actual unit/instance/resource/visibility and render-coordinate observation |
+| Movement trajectory | Native before/after world state can be guarded for every owner | Intermediate render positions, action clock, start/end and camera binding; in-flight sentinel coordinates remain unavailable |
+| Facing and frame | No independent map pose/frame observation | Actual facing/frame fields when implemented, otherwise explicit absent capability |
+| Former tools/limbs | Clean resource metadata only | Clean repeated action/assembly/clip/visibility/transform binding; filenames do not establish action mappings |
+| Sound/music/video | Existing presentation/media packets where supported | Bounded action association and original timing/transition contracts |
+
+Future read-only telemetry should identify actual native unit and sprite/model
+instance, source resource, visibility, render coordinates, camera and action
+sequence. Frame/clip/facing/pose data must be absent when unsupported rather than
+invented as zero. Native all-owner world guards stay independent of rendering;
+a HUD payload does not identify the map instance or prove original pixels.
+No C++ seam, new build, model replacement or action-clip mapping is added here.
+Original-only research is separate and may supply clean observable contracts
+through Root; no candidate implementation details are sent into that track.
