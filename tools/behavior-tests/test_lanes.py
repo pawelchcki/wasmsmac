@@ -39,6 +39,7 @@ class LaneTests(unittest.TestCase):
             'terraform-automation', 'terraforming-height', 'terraforming-support', 'terraforming-controls-all',
             'worker-order-cancellation', 'normal-worker-routes', 'normal-worker-tubes', 'script-stages', 'sea-worker-home-port',
             'terraforming-cooperation', 'terraforming-cooperation-owners', 'terraforming-cooperation-capacity',
+            'terraforming-cooperation-observation', 'terraforming-cooperation-preview',
             'trace-float-transport', 'unit-automation-state', 'former-level', 'terraforming-primitives',
             'terraforming-native', 'terrain-journal-lifecycle', 'energy-receipt-lifecycle', 'aquifer-capacity', 'aquifer-routing', 'terrain-geometry', 'terraforming-rules', 'land-unit-production', 'former-work',
             'native-input-state', 'unit-work-state',
@@ -83,7 +84,7 @@ class LaneTests(unittest.TestCase):
                 self.assertFalse(identifiers & set(self.manifest['kinds'][kind]['hot']))
         self.assertEqual((len(self.manifest['kinds']['regression']['hot']),
                           len(self.manifest['kinds']['regression']['stable']),
-                          len(self.known['regression'])), (73, 104, 177))
+                          len(self.known['regression'])), (75, 104, 179))
         for lane, expected in [('hot', (11, 44)), ('stable', (49, 711)), ('all', (60, 755))]:
             inventory = lanes.describe('ui', lanes.select('ui', self.known['ui'], lane, self.manifest))
             self.assertEqual((inventory['suites'], inventory['cases']), expected)

@@ -3,6 +3,8 @@
   "kinds": {
     "regression": {
       "hot": [
+        "terraforming-cooperation-observation",
+        "terraforming-cooperation-preview",
         "terraforming-cooperation-capacity",
         "terraforming-cooperation",
         "terraforming-cooperation-owners",

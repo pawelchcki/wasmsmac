@@ -124,6 +124,11 @@ jobs:
           python3 tools/behavior-tests/state_trace/terraform_actions.py
           --runtime build/wasm/bin/GLSMAC.js
           --artifacts build/hot-artifacts/terraform-actions
+      - name: Validate complete seven-owner cooperative observation packets
+        run: >-
+          python3 tools/behavior-tests/state_trace/cooperative_capture.py
+          --runtime build/wasm/bin/GLSMAC.js
+          --artifacts build/hot-artifacts/cooperative-observation
       - uses: actions/upload-artifact@v4
         if: always()
         with:
