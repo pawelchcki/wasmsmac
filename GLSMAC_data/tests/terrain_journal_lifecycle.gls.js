@@ -43,7 +43,7 @@ behavior.scenario('repeated accepted native jobs retain a flat journal while an 
  const f = fixture(1); let direct = 0;
  f.with_write(() => { direct = patch(f,0,2,true); }); test.assert(f.terrain_journal_count() == 1);
  for (let index = 0; index < 24; index++) {
-  f.with_write(() => { f.game.get_um().get_unit(f.former.id).movement = 1.0; });
+  f.with_write(() => { const worker = f.game.get_um().get_unit(f.former.id); worker.movement = 1.0; });
   f.data.action = index % 2 == 0 ? 'farm' : 'forest';
   f.game.event('unit_terraform',f.data); f.process_events();
   const flags = f.game.get_tm().get_terraforming(2,2);
