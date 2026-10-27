@@ -1,7 +1,9 @@
 # Existing-design Workshop application contract
 
-The base production pane's WORKSHOP button opens a modal browser of its currently
-available unit production choices. Facilities and unsupported project kinds are
+The base production pane's WORKSHOP button opens a modal browser of the owner's
+existing available unit designs with nonnegative production costs. This is the
+same inventory used by the production pane; it does not establish that every
+design can launch from this particular base. Facilities and unsupported project kinds are
 excluded. It starts on the production draft's unit when possible, otherwise the
 first available unit. Arrow keys preview a bounded adjacent choice; pointer
 SELECT or Enter transfers its stable production ID to the existing draft. The
@@ -39,6 +41,10 @@ flows, original Workshop layout and controls, assembled previews, rotation,
 movement facing, work animations and audio remain unsupported. Original Workshop
 agreement adds zero cases; no original Workshop observation is currently supplied
 to this implementation. Full visual and game fidelity remain incomplete.
+Per-base eligibility presentation also remains a gap: an inland base can see a
+globally available naval design, while normal native production confirmation
+rejects it. The observer must retain that inventory and the actual quote error;
+it must not remove the design or reinterpret rejection as a free switch.
 
 Bounded verification on production source `db457e8f` and fixture repair
 `be1db9e1` used the immutable v6 WASM runtime from native source `115032ff`:
