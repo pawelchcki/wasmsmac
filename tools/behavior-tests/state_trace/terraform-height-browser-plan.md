@@ -1,6 +1,7 @@
 # Land height browser proof
 
-Status: source prepared; **no native or browser execution claimed**.
+Status: first actual browser attempt failed in test-only observation before any
+height action or complete native snapshot. **Zero passing height cases.**
 
 The isolated case starts from PR35 `7ee4e80b1c1723f60c3349d2d0456aee70f54873`,
 native tree `115032ffc7f53ff7f0c3a9f997da12674e25e643`, default source tree
@@ -132,3 +133,30 @@ separate plan and grant after this bounded land result.
 
 Pure protocol tests are `terraform-height-observation.test.mjs`; their synthetic
 packets validate harness rejection paths only and add zero native/browser passes.
+
+## Preserved first attempt
+
+Frozen height head `51563751fbfb276c83a1094a116299d85f225900` ran against the
+pinned v6 engine. The single browser attempt stopped with Node exit 1 after
+24.946 seconds: `#clone(preview.height_presentation)` received the initial Null
+in the new observer. `src/gse/builtins/Common.cpp:91` allows clone only for
+Object/Array. The bounded test-only correction retains actual Null directly and
+clones only a present Object. No product change or outcome relaxation follows.
+
+Artifacts remain at `/tmp/terraform-land-height-v6-first`: exact preflight with
+all twenty row ID/name/field/old/new overrides, report, original fixture source,
+failed frame, driver log and raw chunks. The actual rules hashes are original
+`bb01e3ac23793da0a46713f4851d65e63b599c24aef8300ffe45e7e57b332c42`
+and rate-one input
+`7abf62aa4f4f562aaa86c785b67b7af2320e122cbda7901287ee3ed0ab4c5bd0`.
+Raise source row 16 (`Raise Land`, line 127) changes land turn field 4 from 12
+to 1; its `EnvEcon` prerequisite and other fields remain unchanged.
+
+The real main continuation and all eight pthread continuations acknowledged;
+the first actual callback proved out/err capture and callMain presence. Raw and
+joined chunks are exactly 6,783,101 bytes, SHA256
+`e8e6450375feaf09d17c00d2d624ece0ac6b3e7978f627d3a601a14903a1bb51`.
+They are sealed but partial because the application failed. Native exit code
+is unknown. Complete snapshots: 0; height actions: 0; passing cases: 0. Browser,
+server and driver were reaped and the heavy lease released. The Null guard
+requires a separately authorized actual verification; no retry is automatic.

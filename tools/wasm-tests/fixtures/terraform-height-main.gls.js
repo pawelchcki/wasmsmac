@@ -42,7 +42,7 @@
      x:worker.get_tile().x + 0,y:worker.get_tile().y + 0,height_stage:preview.height_presentation == null ? null : preview.height_presentation.stage,
      dialog_generation:height.generation,choice:height.selected};
     if (full) {
-     result.height_presentation = #clone(preview.height_presentation);
+     result.height_presentation = preview.height_presentation == null ? null : #clone(preview.height_presentation);
      result.dialog = popup.popup != null && popup.popup.id == 'terraforming_height' ? #clone(height.definition) : null;
      result.order_label = preview.order_label == null ? null : preview.order_label.text + '';
      result.movement_label = preview.movement_label == null ? null : preview.movement_label.text + '';
