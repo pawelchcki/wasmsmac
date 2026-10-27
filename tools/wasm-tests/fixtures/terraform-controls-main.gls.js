@@ -8,9 +8,6 @@
  const terrain_observer = #include('../tests/_terrain_trace_observer');
  glsmac.on('configure_game',(configured) => {
   const game = configured.game; let actor = null; let armed = false; let focus_pending = false; let serial = 0;
-  const proxy = {}; proxy.um = game.get_um(); proxy.bm = game.get_bm();
-  for (field of ['get_um','get_bm','get_tm','get_players','get_player','get_turn','get_settings','get','is_started','is_turn_complete','get_research_state','get_research_science']) { proxy[field] = game[field]; }
-  proxy.technologies = game.technologies;
   game.on('event_result',(e) => {
    #print('TF_RESULT|' + e.name + '|' + #to_string(e.success) + '|' + #json_text_exact(e.data));
    #print('TF_RECEIPT|' + #json_text_exact({name:e.name,event_id:e.event_id,caller:e.caller,success:e.success,data:e.data}));
@@ -23,6 +20,10 @@
   });
   game.on('error',() => { #print('TF_ERROR|native-game'); });
   game.on('start_ui',() => {
+   // Native managers are created after configure_game, before start_ui.
+   const proxy = {}; proxy.um = game.get_um(); proxy.bm = game.get_bm();
+   for (field of ['get_um','get_bm','get_tm','get_players','get_player','get_turn','get_settings','get','is_started','is_turn_complete','get_research_state','get_research_science']) { proxy[field] = game[field]; }
+   proxy.technologies = game.technologies;
    glsmac.ui.presentation_trace_start(); glsmac.ui.presentation_trace_inputs_start();
    for (unit of game.get_tm().get_tile(8,8).get_units()) { if (unit.owner == game.get_player().id && unit.get_def().can_terraform) { actor = unit; } }
    if (actor == null || !actor.get_def().can_terraform) { throw Error('Missing source-capable worker'); }
