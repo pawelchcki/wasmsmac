@@ -127,13 +127,13 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     // longer responds. A bounded final suffix read never replaces that prefix.
     writeFileSync(`${artifacts}/application.log`,logCursor.text);
     try{let timer;try{await Promise.race([logCursor.read(),new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(Error('Final browser log suffix read timed out')),1000);})]);}finally{clearTimeout(timer);}}
-    catch(error){report.log_capture_error=String(error);}
+    catch(error){report.log_capture_error=String(error);report.status='failed-or-incomplete';}
     writeFileSync(`${artifacts}/application.log`,logCursor.text);
     report.log_transport={offset_unit:'UTF-16-code-units',raw_chunk_file:'application-log-chunks.jsonl',partial:!!report.log_capture_error||report.status!=='passed',unread_tail:report.log_capture_error?'unknown after final read failure':report.status!=='passed'?'possible after final read; application exit not established':false,retained_utf16:logCursor.text.length,retained_utf8:Buffer.byteLength(logCursor.text,'utf8'),reads:logCursor.reads};
     report.diagnostic_root_records=logCursor.text.split('\n').filter(line=>line.includes('TF_DIAGNOSTIC_REGISTRY|')||line.includes('TF_DIAGNOSTIC_ROOT_KEY|')||line.includes('TF_DIAGNOSTIC_ROOT_AFTER|'));
     try{report.dom_key_receipts=await page.evaluate(()=>window.__terraformDomReceipt);}catch(error){report.dom_capture_error=String(error);}
     if(report.status!=='passed'){try{await page.locator('#canvas').screenshot({path:`${artifacts}/failed-frame.png`,timeout:1000});}catch(error){report.frame_capture_error=String(error);}}
-    writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');}finally{await browser.close();}});
+    writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');assert.equal(report.log_capture_error,undefined,'A successful browser proof requires its final raw log suffix');}finally{await browser.close();}});
   const fatal=/TF_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i;
   let fatalLineTail='';
   const log=async()=>{const packet=await logCursor.read();const freshText=fatalLineTail+packet.text;assert.doesNotMatch(freshText,fatal);fatalLineTail=freshText.slice(freshText.lastIndexOf('\n')+1);assert.deepEqual(errors,[]);return logCursor.text;};
