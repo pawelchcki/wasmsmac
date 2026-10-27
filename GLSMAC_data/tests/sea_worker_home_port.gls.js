@@ -75,6 +75,8 @@ behavior.scenario('seven-owner normal native world produces a SeaFormer then ent
  f.with_write(() => { home.restore_production({choice_id:'SEA_FORMERS',minerals:0,last_processed_turn:game.get_turn()-1},''); });
  const ids = f.audit_inspect(); let produced = null;
  f.with_write(() => { produced = home.process_production(game.get_turn(),naval.rows * 10 + 3); }); f.process_events();
+ const population = #sizeof(home.get_pops()); const actual_project = home.get_production();
+ #print('SEA_PRODUCTION_DIAGNOSTIC|' + #json_text_exact({population:population,expected_unit_id:ids.next_unit_id,rows:naval.rows,project:actual_project,result:produced,inventory:f.audit_inspect()}));
  const ship_id = ids.next_unit_id; let ship = game.get_um().get_unit(ship_id);
  test.assert(ship.get_def().id == 'SeaFormers' && ship.is_water && ship.get_def().can_terraform && ship.movement == 4.0);
  test.assert(ship.get_tile() == tm.get_tile(12,row) && ship.get_terraform_home() == home.id && announced_home == home.id);
