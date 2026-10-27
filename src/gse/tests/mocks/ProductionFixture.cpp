@@ -859,8 +859,8 @@ struct ProductionFixture : gc::Object {
 			const auto bytes = wire( absent ).ToString(); auto input = types::Buffer( bytes );
 			auto detached = std::unique_ptr< backend::map::Map >( new backend::map::Map( &game, false ) );
 			raw_preserved = raw_preserved && detached->LoadFromBuffer( input ) == backend::map::Map::EC_NONE && detached->GetTilesPtr()->Serialize().ToString() == bytes;
-			input = types::Buffer( bytes );
-			rejected = rejected && !backend::map::Map::LoadWorldTerrain( &game, input, false );
+			auto live_input = types::Buffer( bytes );
+			rejected = rejected && !backend::map::Map::LoadWorldTerrain( &game, live_input, false );
 		}
 		auto legacy_input = types::Buffer( before );
 		auto legacy = backend::map::Map::LoadWorldTerrain( &game, legacy_input, false );
