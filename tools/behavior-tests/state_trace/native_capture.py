@@ -22,7 +22,7 @@ class NativeCaptureError(ProtocolError):
 def capture_script(runtime, script, *, timeout=180):
     """Execute current host scripts in one immutable runtime, never reference data."""
     execution = {'candidate_executed': False, 'worker_started': False,
-                 'native_execution_confirmed': False}
+                 'native_execution_confirmed': False, 'process_returncode': None}
     started = time.perf_counter()
     log = ''
     try:
@@ -50,9 +50,11 @@ def capture_script(runtime, script, *, timeout=180):
                 except subprocess.TimeoutExpired:
                     process.kill()
                     stdout, stderr = process.communicate()
-                    execution.update(status='timeout', native_execution_confirmed='BEHAVIOR_BEGIN ' in stdout)
+                    execution.update(status='timeout', process_returncode=process.returncode,
+                                     native_execution_confirmed='BEHAVIOR_BEGIN ' in stdout)
                     raise NativeCaptureError('Native observation timed out', execution, stdout + stderr)
         log = stdout + stderr
+        execution['process_returncode'] = process.returncode
         execution['native_execution_confirmed'] = 'BEHAVIOR_BEGIN ' in log
         if any(hashlib.sha256(Path(path).read_bytes()).hexdigest() != digest for path, digest in hashes.items()):
             raise NativeCaptureError('Pinned runtime/probe changed during execution', execution, log)

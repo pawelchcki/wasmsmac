@@ -76,16 +76,39 @@ class PrecisionTests(unittest.TestCase):
             runtime = Path(temporary) / 'GLSMAC.js'; runtime.write_text('loader')
             runtime.with_suffix('.wasm').write_bytes(b'wasm')
             process = MagicMock(); process.__enter__.return_value = process
+            process.returncode = -9
             process.communicate.side_effect = [subprocess.TimeoutExpired('node', 1), ('BEHAVIOR_BEGIN native\n', '')]
             with patch.object(native_capture.subprocess, 'Popen', return_value=process), self.assertRaises(native_capture.NativeCaptureError) as caught:
                 native_capture.capture_script(runtime, codec.SCRIPT, timeout=1)
             self.assertTrue(caught.exception.execution['candidate_executed'])
             self.assertTrue(caught.exception.execution['native_execution_confirmed'])
+            self.assertEqual(caught.exception.execution['process_returncode'], -9)
             process.kill.assert_called_once(); self.assertEqual(process.communicate.call_count, 2)
             with patch.object(native_capture.subprocess, 'Popen', side_effect=FileNotFoundError('node')), self.assertRaises(native_capture.NativeCaptureError) as caught:
                 native_capture.capture_script(runtime, codec.SCRIPT)
             self.assertFalse(caught.exception.execution['candidate_executed'])
             self.assertFalse(caught.exception.execution['native_execution_confirmed'])
+            self.assertIsNone(caught.exception.execution['process_returncode'])
+
+    def test_complete_native_summary_does_not_hide_failed_process_shutdown(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary) / 'GLSMAC.js'; runtime.write_text('loader')
+            runtime.with_suffix('.wasm').write_bytes(b'wasm')
+            complete = 'BEHAVIOR_BEGIN native\nBEHAVIOR_PASS native\nBEHAVIOR_SUMMARY 1 1\nAll tests passed.\n'
+            for returncode in (0, 1):
+                process = MagicMock(); process.__enter__.return_value = process
+                process.returncode = returncode; process.communicate.return_value = (complete, '')
+                with self.subTest(returncode=returncode), patch.object(native_capture.subprocess, 'Popen', return_value=process):
+                    if returncode:
+                        with self.assertRaises(native_capture.NativeCaptureError) as caught:
+                            native_capture.capture_script(runtime, codec.SCRIPT)
+                        execution = caught.exception.execution
+                    else:
+                        log, execution = native_capture.capture_script(runtime, codec.SCRIPT)
+                        self.assertEqual(log, complete)
+                        self.assertEqual(execution['status'], 'ok')
+                    self.assertEqual(execution['process_returncode'], returncode)
+                    self.assertTrue(execution['native_execution_confirmed'])
 
 
 if __name__ == '__main__': unittest.main()
