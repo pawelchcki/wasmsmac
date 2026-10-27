@@ -66,6 +66,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   t.after(async()=>{try{if(report.status!=='passed')report.status='failed-or-incomplete';
     try{writeFileSync(`${artifacts}/application.log`,await page.locator('#log').textContent({timeout:1000}));}
     catch(error){report.log_capture_error=String(error);}
+    if(report.status!=='passed'){try{await page.locator('#canvas').screenshot({path:`${artifacts}/failed-frame.png`,timeout:1000});}catch(error){report.frame_capture_error=String(error);}}
     writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');}finally{await browser.close();}});
   const fatal=/TF_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i;
   const waitLog=async marker=>{await page.waitForFunction(({marker,fatal})=>document.querySelector('#log').textContent.includes(marker)||new RegExp(fatal).test(document.querySelector('#log').textContent)||document.body.dataset.state==='failed',{marker,fatal:fatal.source});
@@ -115,6 +116,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   }while(performance.now()<startupDeadline);
   assert.ok(hud.visible>100&&hud.distinct_rgb>3,'Actual production HUD must render before the first pointer input');
   const initial=await snapshot('before-controls');
+  await page.locator('#canvas').screenshot({path:`${artifacts}/before-controls.png`});
   assert.equal(initial.players.length,7);assert.equal(initial.bases.length,7);assert.equal(initial.units.length,8);assert.equal(Object.keys(initial.terrain_trace.tiles).length,128);
   for(const player of initial.players){assert.ok(initial.bases.some(base=>base.owner===player.id));assert.ok(initial.units.some(unit=>unit.owner===player.id));}
   assert.deepEqual(initial.terrain_trace.policy,{version:1,ignore_technologies:true});
