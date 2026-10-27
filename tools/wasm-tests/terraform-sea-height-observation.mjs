@@ -3,6 +3,52 @@
 import assert from 'node:assert/strict';
 import {nativeHeightWorld} from './terraform-height-observation.mjs';
 
+// A fixed source order can have identical land/sea text. Domain comes from
+// the actual selected native worker and quote, never from that shared label.
+const seaRaiseBinding=(input,record)=>{
+  const rule=input.raise_rule,sea=rule.sea,ui=record.ui,world=record.world;
+  assert.equal(rule.id,'raise');assert.equal(rule.source_row,16);
+  assert.equal(sea.id,'raise');assert.equal(sea.source_row,16);assert.equal(sea.enabled,true);
+  assert.equal(sea.name,'Raise Sea Floor');assert.equal(typeof sea.order,'string');assert.ok(sea.order.length>0);
+  assert.equal(input.actor,8);assert.equal(input.definition,'SeaFormers');assert.equal(input.can_terraform,true);
+  assert.equal(ui.actor,input.actor);assert.equal(ui.selected,input.actor);assert.equal(ui.owner,0);
+  const actor=world.units.find(row=>row.raw_id===input.actor);assert.ok(actor);
+  const owner=world.players.find(row=>row.raw_id===ui.owner);assert.ok(owner);assert.equal(actor.owner,owner.id);
+  const details=world.terrain_trace.unit_details[actor.id];assert.ok(details);
+  assert.equal(details.definition_id,input.definition);assert.equal(details.movement_kind,'sea');assert.equal(details.can_terraform,true);
+  assert.equal(actor.x,ui.x);assert.equal(actor.y,ui.y);
+  const tile=world.terrain_trace.tiles[`${ui.x},${ui.y}`];assert.ok(tile);assert.equal(tile.is_water,true);
+  return{sea,ui,tile};
+};
+
+export function verifySeaRaiseMenu(rows,input,record){
+  const {sea}=seaRaiseBinding(input,record),raise=rows.filter(row=>row.id==='raise');
+  assert.equal(raise.length,1);assert.equal(raise[0].enabled,true);
+  assert.equal(raise[0].label,sea.order,'Menu wording is the actual installed sea command order, not the variant name');
+  return raise[0];
+}
+
+export function verifySeaRaiseQuote(quote,input,record){
+  const {ui,tile}=seaRaiseBinding(input,record);
+  assert.equal(quote.mode,'functional_approximation');
+  assert.equal(quote.policy,'application.band-slope-height.v1');assert.equal(quote.fee_policy,'application.band-fee.v1');
+  assert.equal(quote.supported,true);assert.equal(quote.action,'raise');
+  assert.equal(quote.unit_id,ui.actor);assert.equal(quote.owner,ui.owner);assert.equal(quote.turn,ui.turn);
+  assert.equal(quote.x,ui.x);assert.equal(quote.y,ui.y);
+  assert.equal(quote.source_water,true);assert.equal(quote.destination_water,true);
+  assert.equal(quote.source_elevation,tile.elevation.center);
+  assert.ok(quote.source_elevation < -1000 && quote.destination_elevation < 0 && quote.destination_elevation > quote.source_elevation);
+  assert.equal(quote.credits,input.energy.credits);assert.ok(Number.isSafeInteger(quote.fee)&&quote.fee>0&&quote.fee<=quote.credits);
+  const identity=JSON.parse(quote.unit_identity);
+  assert.equal(identity.unit_id,ui.actor);assert.equal(identity.owner,ui.owner);assert.equal(identity.definition,input.definition);
+  assert.equal(typeof quote.terrain_identity,'string');assert.ok(quote.terrain_identity.length>0);
+  const terrain=JSON.parse(quote.terrain_identity);
+  assert.equal(terrain.version,1);assert.equal(terrain.policy,quote.policy);assert.equal(terrain.fee_policy,quote.fee_policy);
+  assert.ok(Array.isArray(terrain.tiles));
+  const target=terrain.tiles.filter(row=>row.x===ui.x&&row.y===ui.y);assert.equal(target.length,1);
+  assert.equal(target[0].terrain_epoch,tile.terrain_epoch);assert.equal(target[0].elevation.center,tile.elevation.center);assert.equal(target[0].is_water,true);
+}
+
 export function auditPaidSeaHeight(beforeRecord,afterRecord,quote){
   const before=nativeHeightWorld(beforeRecord),after=nativeHeightWorld(afterRecord),expected=structuredClone(before);
   const payer=before.players.find(row=>row.raw_id===quote.owner);assert.ok(payer);
