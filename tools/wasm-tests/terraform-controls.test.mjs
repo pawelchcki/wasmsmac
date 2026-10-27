@@ -103,7 +103,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const state=async()=>{const text=await fresh('TF_STATE|',async()=>{});const line=lines(text,'TF_STATE|').at(-1);return JSON.parse(line.slice(line.indexOf('|')+1));};
   const snapshot=async checkpoint=>{const text=await fresh('TF_NATIVE|',()=>page.keyboard.press('Control+Alt+p'));const value=JSON.parse(lines(text,'TF_NATIVE|').at(-1));report.native_snapshots.push({checkpoint,value});return value;};
   const nativeOnly=value=>{const copy=structuredClone(value);delete copy.terrain_trace.ui;return copy;};
-  const point=async(x,y)=>nativeToCanvas(x,y,report.native_viewport,await page.locator('#canvas').boundingBox());
+  const point=async(x,y)=>{const box=await page.locator('#canvas').boundingBox();const result=nativeToCanvas(x,y,report.native_viewport,box);report.pointer_conversions??=[];report.pointer_conversions.push({native:{x,y},viewport:structuredClone(report.native_viewport),canvas_css_rect:box,css:result});return result;};
   const click=async(x,y)=>{const p=await point(x,y);await page.mouse.click(p.x,p.y);};
   const setup=await fresh('TF_BASE_POINT|',()=>page.keyboard.press('Control+Alt+k'));
   const basePoint=JSON.parse(lines(setup,'TF_BASE_POINT|').at(-1));
