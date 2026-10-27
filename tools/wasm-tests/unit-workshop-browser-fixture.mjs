@@ -73,7 +73,7 @@ export const workshopMain=String.raw`#main((glsmac) => {
     }
    }
    if (former_weapon_source == null) { throw Error('Missing source Former rule'); }
-   let tagged_base_frame = null; let tagged_base_id = null; let base_bar_session = 0; let base_bar_source = null;
+   let tagged_base_frame = null; let tagged_base_owner = null; let tagged_base_id = null; let base_bar_session = 0; let base_bar_source = null;
    const read_ui = () => {
     const result = {base_open:screen.is_open,base_id:screen.base_id,production_open:screen.production_selection != null,
      popup_sliding:popup.sliding_timer != null,popup_hiding:popup.popup_hiding,
@@ -134,13 +134,13 @@ export const workshopMain=String.raw`#main((glsmac) => {
     // The real base production queue belongs to a root-level area, a
     // sibling of the Window. Observe that exact owned native scope separately.
     if (screen.is_open) {
-     if (screen.sections.bottom_bar.frame != tagged_base_frame || screen.base_id != tagged_base_id) {
-      tagged_base_frame = screen.sections.bottom_bar.frame; tagged_base_id = screen.base_id + 0;
+     if (screen.sections.bottom_bar.frame != tagged_base_frame || screen.base_id != tagged_base_id || popup.popups.base_screen.el != tagged_base_owner) {
+      tagged_base_frame = screen.sections.bottom_bar.frame; tagged_base_owner = popup.popups.base_screen.el; tagged_base_id = screen.base_id + 0;
       base_bar_session++; base_bar_source = 'game.popup.base_screen:' + #to_string(tagged_base_id) + ':' + #to_string(base_bar_session);
       tagged_base_frame.presentation_role('workshop-base-bar',base_bar_source);
-      popup.popups.base_screen.el.presentation_part(tagged_base_frame,'workshop-base-bar');
+      tagged_base_owner.presentation_part(tagged_base_frame,'workshop-base-bar');
      }
-    } else { tagged_base_frame = null; tagged_base_id = null; base_bar_source = null; }
+    } else { tagged_base_frame = null; tagged_base_owner = null; tagged_base_id = null; base_bar_source = null; }
     if (screen.is_open && popup.popups.base_screen.el != watched_base) {
      watched_base = popup.popups.base_screen.el; watch(watched_base,'base');
     }

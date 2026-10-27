@@ -89,3 +89,12 @@ test('a valid role cannot substitute for the exact actual native Window owner an
   append('semantic.part',fixture.base_bar,{owner:fixture.base_window,relation:'foreign-relation'});assert.throws(target);
   append('semantic.part',fixture.base_bar,{owner:fixture.base_window,relation:'workshop-base-bar'});assert.equal(target().id,fixture.change_button);
 });
+
+test('same-bar owner replacement rejects the old binding until a fresh session is linked to the new Window',()=>{
+  const{adapter,append,annotate,target}=prepare();annotate();assert.equal(target().id,fixture.change_button);
+  const fresh='game.popup.base_screen:1:2',owner='synthetic-replacement-window';
+  append('node.create',owner,{parent:'n1',tag:'$window'});append('node.show',owner);
+  const current=()=>adapter.buttonInScope('workshop-base-bar',fresh,'CHANGE',fixture.viewport,{owner,relation:'workshop-base-bar'});
+  assert.throws(current);append('semantic.role',fixture.base_bar,{role:'workshop-base-bar',source:fresh});assert.throws(current);
+  append('semantic.part',fixture.base_bar,{owner,relation:'workshop-base-bar'});assert.equal(current().id,fixture.change_button);assert.throws(target);
+});

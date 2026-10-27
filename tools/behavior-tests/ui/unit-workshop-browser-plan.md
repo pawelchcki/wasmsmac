@@ -265,9 +265,11 @@ SELECT/CANCEL/preview; source audit confirms these are Window descendants.
 The tracked `unit-workshop-native-base-queue.json` contains 31 exact retained
 native events, selected from the 84,449-event third-run ledger. Offline replay
 proves the actual sibling ancestry and reproduces the old lookup rejection.
-Eleven named pure boundary cases cover current scope, wrong/foreign/stale or
+Twelve named pure boundary cases cover current scope, wrong/foreign/stale or
 duplicate scope, sibling labels, visibility, destruction, missing bounds, native
-owner/relation and packet loss/replay. The new role/part annotations in these
+owner/relation, same-bar Window-owner replacement and packet loss/replay.
+The observer re-tags on actual bar, base or owning Native Window identity change;
+closed state clears all cached handles so a fresh session is linked on reopening. The new role/part annotations in these
 pure cases are explicitly synthetic. Actual emission of the new annotation and
 Workshop interaction remain unverified until a separately granted execution.
 
