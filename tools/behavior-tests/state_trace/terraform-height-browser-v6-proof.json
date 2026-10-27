@@ -840,6 +840,113 @@
         "new_engine_browser_executions": 0
       },
       "command": "python3 tools/behavior-tests/state_trace/terraform_height_browser_audit.py --artifacts /tmp/terraform-land-height-v6-second --outer-outcome /tmp/terraform-land-height-v6-second/raw-outcome.json --output tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-inputs.json"
+    },
+    {
+      "id": "wrapup-physical-input-and-partial-callback-scope-v7",
+      "source_commits": [
+        "6ff439ae",
+        "80c1579c"
+      ],
+      "source_audit_script_sha256": "0a93139b0496884bceff9bc2f964fba0e63d570a6ef6c14287365da83cb23e08",
+      "result_path": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-wrapup.json",
+      "result_sha256": "eb9e79ba85302387794739c830c1b3ac7fe6acbdd57d6508fb3678d7efe2b7f0",
+      "raw_sha256": "7877baed15b88c2700f3042fe5c31f64c6ee66517dcef04541c1ced832bad473",
+      "report_sha256": "7f196c8f5de67e76355f3f49cff0ac20a4a4f3ef35fc7021c90d993f73f76f3c",
+      "preflight_sha256": "791b078abf2949ddb1fb2efcd322b05dc41198e6114f31aa1ad2816375264622",
+      "status": "partial-readonly-bounded-state-receipt-audit",
+      "browser_cases_audited": 0,
+      "complete_browser_cases_audited": 0,
+      "bounded_state_receipt_cases_audited": 1,
+      "scope": "Supersedes historical full-browser and exact continuous-callback claims; preserves bounded full-world/receipt/source/exit/sealed-byte evidence. No new capture or rewritten historical result.",
+      "unsupported_capabilities": [
+        "exact per-callback message identity; legacy offset-only metadata cannot earn complete-browser case credit"
+      ],
+      "finalization": {
+        "sealed_complete": true,
+        "native_exit_verified": true,
+        "actual_main_ack": true,
+        "actual_worker_acks": 8,
+        "actual_exit_key_and_request": true,
+        "full_raw_fatal_scan": "clean",
+        "callback_metadata_intervals": 936,
+        "callback_utf16_covered": 14465994,
+        "exact_callback_message_identity": {
+          "supported": false,
+          "verified_messages": 0,
+          "scope": "UNSUPPORTED: legacy offset-only metadata cannot prove exact callback message identities/count; sealed-byte journal remains bounded evidence"
+        },
+        "lossless_trace_packets": 50,
+        "unique_contiguous_trace_events": 82661,
+        "exit_order_scope": "this fixture drains Q ingress/begin/end before its owned-timer TH_EXIT_REQUEST"
+      },
+      "keyboard_route": {
+        "shortcuts_verified": 8,
+        "raw_key_edges_exhausted": 48,
+        "scope": "exact K/six P/Q Ctrl+Alt command and modifier/down/up sequence; no additional key actions"
+      },
+      "pointer_route": {
+        "physical_clicks_verified": 8,
+        "raw_button_actions_exhausted": true,
+        "scope": "MENU/terraform/raise/Cancel/reopen/Expend/confirm; actual native geometry and input receipts"
+      },
+      "frames": {
+        "retained_frame_digests_verified": 5,
+        "decoded_frames": [
+          {
+            "width": 1024,
+            "height": 769,
+            "decoded_pixel_bytes": 2362368,
+            "decoded_pixels_sha256": "015aa0dd0e736553ffceb5cd03cbeded4472d57bb28f665e2217f4b7aabb10d4"
+          },
+          {
+            "width": 1024,
+            "height": 769,
+            "decoded_pixel_bytes": 2362368,
+            "decoded_pixels_sha256": "45afefd47617078632e818932b29225a2f9ed701a1e8f0298646b435d5a9cd68"
+          },
+          {
+            "width": 1024,
+            "height": 769,
+            "decoded_pixel_bytes": 2362368,
+            "decoded_pixels_sha256": "81d1be50cba105f95e28034c56b3f4506bfff3a7113185b52e2b598448a188d5"
+          },
+          {
+            "width": 1024,
+            "height": 769,
+            "decoded_pixel_bytes": 2362368,
+            "decoded_pixels_sha256": "4ce6323640861eb44af5d0c065668b4d857b5f85965db476de7a87b156dc9f69"
+          },
+          {
+            "width": 1024,
+            "height": 769,
+            "decoded_pixel_bytes": 2362368,
+            "decoded_pixels_sha256": "ee962425fa979fde1e1336a0d932a1cf4517e421c4768dea692755dbaa002596"
+          }
+        ],
+        "scope": "actual decoded RGB/RGBA file bytes and retained canvas clip; no original pixels/pose/mesh agreement"
+      },
+      "external_node_exit": {
+        "supported": true,
+        "external_raw_exit_code": 0,
+        "tool_session_id": 40314,
+        "completion_chunk_id": "0ae251",
+        "artifact_sha256": "6ab902e12ee6a6d0f3a4a4f52868a0bf5232a00ea408475ddbba1afd2850673d"
+      },
+      "validation": {
+        "all_python_checks": 134,
+        "public_protocol_checks": 72,
+        "retained_actual_checks": 62,
+        "skipped": 0,
+        "seconds": 70.694,
+        "public_only_seconds": 3.134,
+        "actual_cli_seconds": 3.825284655,
+        "actual_test_process": 53628,
+        "actual_test_exit_code": 0,
+        "actual_test_completion_chunk": "ee934a",
+        "new_engine_browser_executions": 0
+      },
+      "source_contract": "Modern message/digest bindings are public protocol models only. Legacy report lacks per-call contents; no missing metadata was invented.",
+      "command": "python3 tools/behavior-tests/state_trace/terraform_height_browser_audit.py --artifacts /tmp/terraform-land-height-v6-second --outer-outcome /tmp/terraform-land-height-v6-second/raw-outcome.json --output tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-wrapup.json"
     }
   ],
   "historical_preflight_creation": {
@@ -848,5 +955,16 @@
     "source_sha256": "b16106ef4a875993bc6bdc6bb89a1dd98d7fb8e92d42c70cd421ce6ee6313880",
     "artifact_sha256": "791b078abf2949ddb1fb2efcd322b05dc41198e6114f31aa1ad2816375264622",
     "new_producer_scope": "committed terraform-height-preflight.mjs emits future fresh preflight files; it did not generate or replace this historical artifact"
+  },
+  "current_acceptance": {
+    "version": "v7",
+    "status": "partial-readonly-bounded-state-receipt-audit",
+    "complete_browser_passing_cases": 0,
+    "bounded_state_receipt_cases": 1,
+    "exact_per_callback_message_identity": "unsupported for this historical offset-only metadata",
+    "latest_result": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-wrapup.json",
+    "latest_result_sha256": "eb9e79ba85302387794739c830c1b3ac7fe6acbdd57d6508fb3678d7efe2b7f0",
+    "historical_proof_before_append_sha256": "a6deef11f8774f93e5115bf2ad7fc974d421eb009f654365895ba156c7822175",
+    "historical_claims": "Earlier fields/results remain historical, not current full-browser passing credit; see latest typed_raw_reaudits entry and wrapup scope document."
   }
 }

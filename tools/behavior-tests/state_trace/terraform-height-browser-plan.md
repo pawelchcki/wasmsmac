@@ -436,3 +436,24 @@ accept/new-reject counterexamples cover foreign/remote actors, contradictory
 funding, relocated query carriers, unreported buttons, loader identity loss,
 missing frames and ambiguous source cleanliness. These add no new capture,
 native execution, original agreement or Sea coverage.
+
+
+## Current wrap-up acceptance: partial bounded evidence, full browser credit0
+
+The v7 read-only result and `terraform-height-browser-v6-wrapup-scope.md`
+supersede earlier complete-browser/exact-callback identity claims. Historical
+raw, report and derived audit files remain unchanged. Exact per-call messages or
+digests were not captured; contiguous offset metadata cannot establish exact
+callback identity/count. The current audit therefore retains one bounded
+state/receipt case and awards **zero complete-browser passing cases**. No
+producer/hook change or replacement browser run was used to hide this gap.
+
+All48 physical modifier/command keyboard edges for K/six P/Q, every one of the
+eight pointer clicks, native coverage capabilities, exact supported modern
+external command, five decoded PNGs and the existing typed source/world/exit
+checks are now required. Modern message/digest positives and legacy unsupported
+classification are public protocol checks, not future actual observations.
+The final134 Python checks passed with zero skips (72 public,62 retained),
+including new `ProtocolKeyboardRouteTests`. The unchanged real14MB replay
+returns explicit partial scope/full0/bounded1. Publication and CI remain
+Delivery-owned; no new feature batch starts after this wrap-up.
