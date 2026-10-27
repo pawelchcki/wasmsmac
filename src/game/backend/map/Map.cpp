@@ -297,8 +297,10 @@ const MapState* Map::GetMapState() const {
 void Map::SetTerraforming( tile::Tile* tile, const tile::terraforming_t flags ) {
 	if ( tile->terraforming == flags ) { return; }
 	ValidateTerrainMutation();
-	tile->terraforming = flags;
-	MarkTerrainChanged( tile );
+	// Reserve publication bookkeeping before changing native fields.
+	auto dirty = m_dirty_tiles;
+	if ( m_map_state ) { dirty.emplace( tile->coord.y, tile->coord.x ); }
+	tile->terraforming = flags; tile->Update(); m_dirty_tiles.swap( dirty );
 }
 
 void Map::ValidateTerrainMutation() const {

@@ -418,3 +418,47 @@ behavior.scenario('received world turn validates every restored energy stamp wit
 	test.assert(probe.roster_and_turn_unchanged && probe.source_unchanged);
 	test.assert(f.snapshot() == before && f.terrain_snapshot() == terrain);
 });
+
+const wrapper_fields = (tile) => { return {water:tile.is_water == true,land:tile.is_land == true,moisture:tile.moisture + 0,rockiness:tile.rockiness + 0,elevation:tile.elevation + 0,features:#clone(tile.features),bonuses:#clone(tile.bonuses),terraforming:#clone(tile.terraforming)}; };
+behavior.scenario('retained Tile handles refresh native terrain while old scalar and dictionary snapshots remain detached',() => {
+ const f = fixture(); f.configure('arid'); const tm = f.game.get_tm(); const held = tm.get_tile(2,2); const second = tm.get_tile(2,2);
+ const original = wrapper_fields(held); const old_moisture = held.moisture; const old_features = held.features; const old_flags = held.terraforming;
+ const terrain = f.terrain_snapshot(); const flags = tm.get_terrain_state(2,2).terraforming; flags.sensor = true;
+ const features = tm.get_terrain_state(2,2).features; features.river = true; let token = 0;
+ f.with_write(() => { held.set('wrapper_probe',{generation:7}); token = tm.apply_terrain([{x:2,y:2,moisture:3,rockiness:2,features:features,terraforming:flags,canonical:{elevation:500,is_water:false}}],[]); });
+ const current = wrapper_fields(tm.get_tile(2,2));
+ test.assert(wrapper_fields(held) == current && wrapper_fields(second) == current && held == second);
+ test.assert(held.get('wrapper_probe') == {generation:7} && old_moisture == original.moisture && old_features == original.features && old_flags == original.terraforming);
+ // Native wrappers keep independent property dictionaries, as before.
+ held.features.river = false; test.assert(second.features.river && tm.get_terrain_state(2,2).features.river);
+ f.with_write(() => { tm.rollback_terrain(token); });
+ test.assert(wrapper_fields(held) == original && wrapper_fields(second) == original && f.terrain_snapshot() == terrain);
+ test.assert(held.get('wrapper_probe') == {generation:7} && old_features == original.features && old_flags == original.terraforming);
+});
+behavior.scenario('held Tile domain and shared geometry fields agree with fresh handles across atomic class change and undo',() => {
+ const f = fixture(); const tm = f.game.get_tm(); const held = tm.get_tile(0,2); const neighbor = tm.get_tile(2,2);
+ const original = wrapper_fields(held); const adjacent = wrapper_fields(neighbor); const terrain = f.terrain_snapshot(); let token = 0;
+ f.with_write(() => { token = tm.apply_terrain([{x:0,y:2,canonical:{elevation:(0-500),is_water:true}}],[]); });
+ test.assert(held.is_water && !held.is_land && held.elevation == (0-500) && wrapper_fields(held) == wrapper_fields(tm.get_tile(0,2)));
+ test.assert(wrapper_fields(neighbor) == wrapper_fields(tm.get_tile(2,2)) && wrapper_fields(neighbor) == adjacent);
+ f.with_write(() => { tm.rollback_terrain(token); });
+ test.assert(wrapper_fields(held) == original && wrapper_fields(neighbor) == adjacent && f.terrain_snapshot() == terrain);
+});
+behavior.scenario('rejected terrain batches and stale undo leave every retained native Tile view unchanged',() => {
+ const f = fixture(); const tm = f.game.get_tm(); const held = tm.get_tile(2,2); const other = tm.get_tile(0,2);
+ const initial = wrapper_fields(held); const adjacent = wrapper_fields(other);
+ reject(f,() => { f.with_write(() => { tm.apply_terrain([{x:2,y:2,moisture:3},{x:0,y:2,rockiness:99}],[]); }); });
+ test.assert(wrapper_fields(held) == initial && wrapper_fields(other) == adjacent);
+ let first = 0; let second = 0;
+ f.with_write(() => { first = tm.apply_terrain([{x:2,y:2,moisture:2}],[]); second = tm.apply_terrain([{x:2,y:2,moisture:3}],[]); });
+ const current = wrapper_fields(held); reject(f,() => { f.with_write(() => { tm.rollback_terrain(first); }); });
+ test.assert(wrapper_fields(held) == current && wrapper_fields(tm.get_tile(2,2)) == current);
+ f.with_write(() => { tm.rollback_terrain(second); }); test.assert(held.moisture == 2);
+ f.with_write(() => { tm.rollback_terrain(first); }); test.assert(wrapper_fields(held) == initial && wrapper_fields(other) == adjacent);
+});
+behavior.scenario('legacy four-improvement setter refreshes retained Tile handles without replacing custom fields',() => {
+ const f = fixture(); const tm = f.game.get_tm(); const held = tm.get_tile(2,2); const original = #clone(held.terraforming);
+ f.with_write(() => { held.set('wrapper_probe',3); tm.set_terraforming(2,2,{road:true,farm:true,mine:false,forest:false}); });
+ test.assert(held.terraforming.road && held.terraforming.farm && held.terraforming == tm.get_terraforming(2,2) && held.get('wrapper_probe') == 3);
+ test.assert(!original.road && !original.farm);
+});

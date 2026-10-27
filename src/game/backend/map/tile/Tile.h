@@ -132,6 +132,21 @@ public:
 private:
 	friend class TileManager;
 	friend class game::backend::map::Map;
+	struct WrappedTerrainFields {
+		elevation_t elevation;
+		bool water;
+		moisture_t moisture;
+		rockiness_t rockiness;
+		feature_t features;
+		bonus_t bonus;
+		terraforming_t terraforming;
+	};
+	struct WrappedTerrainUpdate {
+		gse::value::Object* wrapper;
+		gse::value::object_properties_t fields;
+	};
+	std::vector< WrappedTerrainUpdate > PrepareWrappedTerrain( GSE_CALLABLE, const WrappedTerrainFields& fields );
+	static void PublishWrappedTerrain( const std::vector< WrappedTerrainUpdate >& updates );
 	int64_t m_terrain_revision = 0;
 	std::array< int8_t, 13 > m_terraforming_owners = [](){ std::array< int8_t, 13 > value; value.fill( -1 ); return value; }();
 	bool m_has_canonical_elevation = false;

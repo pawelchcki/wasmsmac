@@ -11,6 +11,7 @@
 #include "gse/value/Int.h"
 #include "gse/value/Bool.h"
 #include <limits>
+#include <iterator>
 
 namespace game::backend::map::tile {
 
@@ -22,6 +23,8 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 	}
 	struct Patch { Tile* tile; moisture_t moisture; rockiness_t rockiness; feature_t features; terraforming_t terraforming; std::array< int8_t, 13 > owners; };
 	std::vector< Patch > prepared;
+	std::map< Tile*, size_t > prepared_indices;
+	std::vector< Tile::WrappedTerrainUpdate > wrapper_updates;
 	std::set< std::pair< size_t, size_t > > targets, region;
 	std::map< elevation_t*, elevation_t > vertices;
 	std::map< Tile*, std::pair< elevation_t, bool > > canonical;
@@ -120,6 +123,7 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 				vertices[corner.second] = number;
 			}
 		}
+		prepared_indices.emplace( patch.tile, prepared.size() );
 		prepared.push_back( patch );
 	}
 	if ( !canonical.empty() && !vertices.empty() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Canonical center edits and direct corner edits need separate transactions" ); }
@@ -185,6 +189,16 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 				}
 			}
 		}
+		if ( apply ) {
+			const auto next_elevation = !canonical.empty() ? ( primary == canonical.end() ? *tile->elevation.center : primary->second.first ) :
+				( tile->m_has_canonical_elevation && !geometry_changed ? tile->m_canonical_elevation : ( retains_import ? tile->m_imported_elevation : sum / 4 ) );
+			const auto position = prepared_indices.find( tile );
+			const auto* patch = position == prepared_indices.end() ? nullptr : &prepared.at( position->second );
+			auto next = tile->PrepareWrappedTerrain( GSE_CALL, { next_elevation, next_water,
+				patch ? patch->moisture : tile->moisture, patch ? patch->rockiness : tile->rockiness,
+				patch ? patch->features : tile->features, tile->bonus, patch ? patch->terraforming : tile->terraforming } );
+			wrapper_updates.insert( wrapper_updates.end(), std::make_move_iterator( next.begin() ), std::make_move_iterator( next.end() ) );
+		}
 		record.entries.push_back( { tile, "", { *tile->elevation.center, *tile->elevation.left, *tile->elevation.top, *tile->elevation.right, *tile->elevation.bottom },
 			tile->moisture, tile->rockiness, tile->features, tile->terraforming, tile->is_water_tile, next_water,
 			tile->m_has_imported_elevation, tile->m_imported_water, tile->m_imported_elevation, tile->m_imported_corners,
@@ -222,6 +236,7 @@ int64_t TileManager::ApplyTerrain( GSE_CALLABLE, const std::vector< gse::Value* 
 	} catch ( ... ) {
 		RestoreTerrain( inserted->second ); map->m_dirty_tiles.swap( dirty_before ); m_terrain_records.erase( inserted ); throw;
 	}
+	Tile::PublishWrappedTerrain( wrapper_updates );
 	m_next_terrain_receipt = token;
 	return token;
 }
@@ -285,7 +300,14 @@ void TileManager::RollbackTerrain( GSE_CALLABLE, const int64_t receipt ) {
 	// a half-restored world. Native field restoration itself allocates nothing.
 	auto dirty = map->m_dirty_tiles;
 	for ( const auto& entry : record.entries ) { dirty.emplace( entry.tile->coord.y, entry.tile->coord.x ); }
-	RestoreTerrain( record ); map->m_dirty_tiles.swap( dirty ); m_terrain_records.erase( receipt );
+	std::vector< Tile::WrappedTerrainUpdate > wrapper_updates;
+	for ( const auto& entry : record.entries ) {
+		auto next = entry.tile->PrepareWrappedTerrain( GSE_CALL, { entry.elevation[0], entry.previous_water,
+			entry.moisture, entry.rockiness, entry.features, entry.tile->bonus, entry.terraforming } );
+		wrapper_updates.insert( wrapper_updates.end(), std::make_move_iterator( next.begin() ), std::make_move_iterator( next.end() ) );
+	}
+	RestoreTerrain( record ); map->m_dirty_tiles.swap( dirty );
+	Tile::PublishWrappedTerrain( wrapper_updates ); m_terrain_records.erase( receipt );
 }
 
 }

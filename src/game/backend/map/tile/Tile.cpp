@@ -21,6 +21,7 @@
 
 #include "util/String.h"
 #include <algorithm>
+#include <utility>
 
 namespace game {
 namespace backend {
@@ -358,6 +359,39 @@ WRAPIMPL_BEGIN( Tile )
 WRAPIMPL_END_PTR()
 
 UNWRAPIMPL_PTR( Tile )
+
+std::vector< Tile::WrappedTerrainUpdate > Tile::PrepareWrappedTerrain( GSE_CALLABLE, const WrappedTerrainFields& fields ) {
+	std::vector< WrappedTerrainUpdate > updates;
+	updates.reserve( m_wrapobjs.size() );
+	// Build independent property objects for each native handle. Retained plain
+	// values/dictionaries remain detached; custom fields and handle identity are
+	// never replaced. All allocation precedes the authoritative mutation.
+	Tile view;
+	view.features = fields.features; view.bonus = fields.bonus; view.terraforming = fields.terraforming;
+	for ( auto* wrapper : m_wrapobjs ) {
+		gse::value::object_properties_t values {
+			{ "is_water", VALUE( gse::value::Bool,, fields.water ) },
+			{ "is_land", VALUE( gse::value::Bool,, !fields.water ) },
+			{ "moisture", VALUE( gse::value::Int,, fields.moisture ) },
+			{ "rockiness", VALUE( gse::value::Int,, fields.rockiness ) },
+			{ "elevation", VALUE( gse::value::Int,, fields.elevation ) },
+			{ "features", view.GetFeatures( GSE_CALL ) },
+			{ "bonuses", view.GetBonuses( GSE_CALL ) },
+			{ "terraforming", view.GetTerraforming( GSE_CALL ) },
+		};
+		for ( const auto& value : values ) { ASSERT( wrapper->value.count( value.first ), "Native terrain wrapper property missing" ); }
+		updates.push_back( { wrapper, std::move( values ) } );
+	}
+	return updates;
+}
+
+void Tile::PublishWrappedTerrain( const std::vector< WrappedTerrainUpdate >& updates ) {
+	// Existing-key pointer assignment allocates nothing and invokes no script
+	// setter or callback. No observer can see a partially applied transaction.
+	for ( const auto& update : updates ) {
+		for ( const auto& field : update.fields ) { update.wrapper->Assign( field.first, field.second ); }
+	}
+}
 
 void Tile::Lock( const size_t initiator_slot ) {
 	ASSERT( !m_is_locked, "tile already locked" );

@@ -274,7 +274,10 @@ WRAPIMPL_BEGIN( TileManager )
 				const terraforming_t flags = ( tile->terraforming & ~mask ) | ( road ? TERRAFORMING_ROAD : 0 ) |
 					( farm ? TERRAFORMING_FARM : 0 ) | ( mine ? TERRAFORMING_MINE : 0 ) | ( forest ? TERRAFORMING_FOREST : 0 );
 				if ( tm->m_next_terrain_receipt == std::numeric_limits< int64_t >::max() ) { GSE_ERROR( gse::EC.INVALID_CALL, "Terrain revision capacity exhausted" ); }
+				auto wrappers = tile->PrepareWrappedTerrain( GSE_CALL, { *tile->elevation.center, tile->is_water_tile,
+					tile->moisture, tile->rockiness, tile->features, tile->bonus, flags } );
 				tm->m_game->GetMap()->SetTerraforming( tile, flags );
+				Tile::PublishWrappedTerrain( wrappers );
 				tile->m_terrain_revision = ++tm->m_next_terrain_receipt;
 				return VALUE( gse::value::Undefined );
 			} )
