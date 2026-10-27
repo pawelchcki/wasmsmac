@@ -132,10 +132,17 @@ behavior.scenario('native job metadata is detached bounded owner-fenced and pres
   {field:'terrain_identity',value:''},{field:'terrain_identity',value:oversized},{field:'terrain_identity',value:'é'},
   {field:'terrain_identity',value:1}]) {
   const bad = f.former.get_terraforming(); bad.job[input.field] = input.value;
-  try { f.with_write(() => { f.former.set_terraforming(bad); }); } catch { : (error) => { rejected++; } }
+  let caught = false;
+  try { f.with_write(() => { f.former.set_terraforming(bad); }); } catch { : (error) => { caught = true; } }
+  // A terminal catch returns Undefined to GSE's array-loop control. Keep this
+  // real post-catch validation so every declared invalid input is exercised.
+  test.assert(caught && f.snapshot() == before,'Every malformed metadata input rejects without changing any native byte');
+  rejected++;
  }
  const extra = f.former.get_terraforming(); extra.job.extra = true;
- try { f.with_write(() => { f.former.set_terraforming(extra); }); } catch { : (error) => { rejected++; } }
+ let extra_caught = false;
+ try { f.with_write(() => { f.former.set_terraforming(extra); }); } catch { : (error) => { extra_caught = true; } }
+ test.assert(extra_caught && f.snapshot() == before,'Extra metadata fields also reject atomically'); rejected++;
  test.assert(rejected == 8 && f.snapshot() == before);
 });
 behavior.scenario('cached guards preserve the real construction owner across same-epoch physical worlds and actual reception',() => {

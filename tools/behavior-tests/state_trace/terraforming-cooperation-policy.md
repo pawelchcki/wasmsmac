@@ -150,3 +150,14 @@ retaining its old combined flag unchanged. The cooperation case asserts both
 canonical identities and all old byte/rollback guards, without altering the unit
 input or claiming a stock morale change. A new native fixture runtime is required
 before retry; this source correction is not a passing gate.
+
+The subsequent v6 malformed-loop failure is a proven GSE fixture control-flow
+issue: a terminal `try/catch` returns an `Undefined` object, and the array loop
+treats that non-null value as a return. Only its first invalid input ran, followed
+by the separate extra-field test (two catches). The captured end-only diagnostic
+proves counter 2 while the complete native bytes remain unchanged. The test now
+asserts each actual caught rejection and full byte equality after the catch,
+then increments its counter as a normal statement. All eight invalid inputs and
+the final equality guard remain; per-input atomicity coverage is stronger. No
+GSE engine or production validation behavior changed. Original failures and the
+end-only diagnostic are retained separately from the pending corrected gate.
