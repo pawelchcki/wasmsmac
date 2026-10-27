@@ -1780,7 +1780,7 @@ Value* MakeNaturalStartupFixture( GSE_CALLABLE, size_t width, size_t height, con
 		N_EXPECT_ARGS( 0 ); return session->current->AuditInspect( GSE_CALL );
 	} ), GSE_CALL );
 	object->Set( "iterate", NATIVE_CALL( session ) {
-		N_EXPECT_ARGS( 0 ); session->current->game.Iterate(); return VALUE( value::Undefined );
+		N_EXPECT_ARGS( 0 ); session->current->EnableRenderCoordinates(); session->current->game.Iterate(); return VALUE( value::Undefined );
 	} ), GSE_CALL );
 	object->Set( "dispatch_tile_target", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 3 ); N_GETVALUE( x, 0, Int ); N_GETVALUE( y, 1, Int ); N_GETVALUE( purpose, 2, String );
