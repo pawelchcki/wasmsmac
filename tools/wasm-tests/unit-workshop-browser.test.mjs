@@ -251,7 +251,10 @@ test('real Workshop Window browses existing designs and commits only normal prod
   const staleWindows=presentation.roles.filter(row=>row.sequence>staleFence&&row.role==='dialog'&&row.source==='game.unit_workshop');assert.equal(staleWindows.length,1);
   assert.ok(presentation.destroyed.has(staleWindows[0].id)&&!presentation.nodes.has(staleWindows[0].id),'The actual invalidated native Workshop Window must be destroyed');report.stale_window=staleWindows[0];
   const dialogId=presentation.unique('dialog','game.popup.base_screen').id;
-  await key('Escape','ESCAPE');await wait(()=>{const ui=latest('WS_STATE')?.ui;return ui?.base_open===false&&!ui.popup_sliding&&!ui.popup_hiding;});assert.equal(presentation.visible(dialogId),false);
+  const closeReceipt=await key('Escape','ESCAPE');
+  await wait(()=>{const ui=latest('WS_STATE')?.ui;return ui?.base_open===false&&!ui.popup_sliding&&!ui.popup_hiding&&presentation.hiddenAfter(dialogId,closeReceipt.begin.seq);});
+  assert.equal(presentation.visible(dialogId),false);
+  report.base_hide_receipt={id:dialogId,key_begin:closeReceipt.begin.seq,key_end:closeReceipt.end.seq,native_hide:presentation.hideEvents.get(dialogId),scope:'Actual same-Window hide after Escape plus settled script state; no visibility inference from script flags'};
   await click(basePoint);await wait(settledBase);const reopened=await observe('reopened-base-has-no-stale-draft');
   assert.equal(reopened.ui.production_open,false);assert.equal(reopened.ui.workshop_open,false);assert.deepEqual(nativeOnly(reopened),nativeOnly(committed));noProductionAfter(initialProductionReceipts+1);
   await capture('final-base');await key('Control+Alt+q','Q',6);await page.waitForFunction(()=>document.body.dataset.state==='exited');

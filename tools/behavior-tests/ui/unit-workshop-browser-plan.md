@@ -361,6 +361,37 @@ native quote/source-reader cases, pending its own exact-runtime execution.
 No production/focus/ordinary-key/input/geometry change or timeout extension is
 part of this observer repair, and no further application attempt is implied.
 
+## Sixth runtime attempt and ordered hide observation
+
+Execution `a7511eb9` exited1 after95.767seconds. The actual production-pane
+listener produced fresh query4 with token2, current Native owner/session and
+coalesced0. Eight complete checkpoints passed known-material pixels, pointer
+and keyboard Cancel, draft transfer, normal authoritative OK, stale Workshop
+Window destruction and all seven-owner world guards. The final base-close
+visibility assertion failed before reopening and native exit. Completed
+browser/original passes remain zero; strict failure and sealed/partial raw are
+retained at `/tmp/unit-workshop-browser-v6/outcome.json`.
+
+The sealed producer prefix ends at WS_STATE serial20: base closed, sliding and
+hiding false. The last logged native drain ends at sequence176168, still before
+a same-Window hide event. The fixture prints script state before draining and
+printing Native presentation packets. Production `popup.clear` calls the bound
+Native `hide` before clearing the hiding flag; Native `Object::Hide` enqueues
+`node.hide`. This source order supports an observation race, while actual final
+hide emission was not captured and is not claimed as a passing observation.
+
+The consumer now waits, within the existing budget, for the conjunction of
+settled closed script state, an actual hide of the same cached Native Window
+after the completed Escape's BEGIN, and observed invisibility. It records that
+Native hide receipt before permitting reopen. A visible, missing, foreign,
+stale, reshown or destroyed node cannot satisfy this cached-Window lifecycle
+check. No expected visibility, product handling, geometry, input or deadline is
+changed. The tracked close fixture retains the actual incomplete prefix;
+subsequent hide events used by pure tests are explicitly synthetic. Fifteen
+presentation boundary cases cover the full adapter, including this ordering
+boundary. Actual later hide, final reopen and native-exit proof remain pending a
+separately authorized run.
+
 ## Concrete graphics and Workshop gaps
 
 | Area | Current bounded support | Unsupported |

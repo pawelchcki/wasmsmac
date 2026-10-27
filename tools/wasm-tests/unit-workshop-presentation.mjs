@@ -4,16 +4,17 @@ import assert from 'node:assert/strict';
 import {TerraformGeometry} from './terraform-browser-geometry.mjs';
 
 export class WorkshopPresentation extends TerraformGeometry {
-  constructor(){super();this.choices=new Map();this.fields=new Map();this.parts=new Map();this.destroyed=new Set();this.roles=[];this.focus=null;this.modal=null;}
+  constructor(){super();this.choices=new Map();this.fields=new Map();this.parts=new Map();this.hideEvents=new Map();this.destroyed=new Set();this.roles=[];this.focus=null;this.modal=null;}
   ingest(packet){
     super.ingest(packet); // The shared adapter alone owns sequence validation.
     for(const event of packet.events){
       if(event.kind==='node.create'&&this.nodes.has(event.target)&&this.nodes.get(event.target).visible===undefined)this.nodes.get(event.target).visible=false;
       if(event.kind==='semantic.role')this.roles.push({id:event.target,role:event.data.role,source:event.data.source,sequence:event.seq});
       if(event.kind==='semantic.part')this.parts.set(event.target,structuredClone(event.data));
-      if(event.kind==='node.destroy'){this.destroyed.add(event.target);this.choices.delete(event.target);this.fields.delete(event.target);this.parts.delete(event.target);}
-      if(event.kind==='node.show'&&this.nodes.has(event.target))this.nodes.get(event.target).visible=true;
-      if(event.kind==='node.hide'&&this.nodes.has(event.target))this.nodes.get(event.target).visible=false;
+      if(event.kind==='node.create')this.hideEvents.delete(event.target);
+      if(event.kind==='node.destroy'){this.hideEvents.delete(event.target);this.destroyed.add(event.target);this.choices.delete(event.target);this.fields.delete(event.target);this.parts.delete(event.target);}
+      if(event.kind==='node.show'){this.hideEvents.delete(event.target);if(this.nodes.has(event.target))this.nodes.get(event.target).visible=true;}
+      if(event.kind==='node.hide'){this.hideEvents.set(event.target,event.seq);if(this.nodes.has(event.target))this.nodes.get(event.target).visible=false;}
       if(event.kind==='semantic.choices'){
         assert.ok(Number.isInteger(event.data.count)&&event.data.count>=0);
         this.choices.set(event.target,{count:event.data.count,items:new Map()});
@@ -43,6 +44,10 @@ export class WorkshopPresentation extends TerraformGeometry {
       visited.add(id);id=node.parent;
     }
     return id==null;
+  }
+  hiddenAfter(id,fence){
+    assert.ok(Number.isSafeInteger(fence)&&fence>=0);
+    return this.nodes.has(id)&&!this.destroyed.has(id)&&!this.visible(id)&&(this.hideEvents.get(id)??0)>fence;
   }
   unique(role,source){
     const matches=[...this.nodes].filter(([id,node])=>node.role===role&&node.source===source&&this.visible(id));

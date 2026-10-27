@@ -98,3 +98,26 @@ test('same-bar owner replacement rejects the old binding until a fresh session i
   assert.throws(current);append('semantic.role',fixture.base_bar,{role:'workshop-base-bar',source:fresh});assert.throws(current);
   append('semantic.part',fixture.base_bar,{owner,relation:'workshop-base-bar'});assert.equal(current().id,fixture.change_button);assert.throws(target);
 });
+
+const closing=JSON.parse(readFileSync(new URL('fixtures/unit-workshop-native-base-close.json',import.meta.url)));
+const closeFixture=()=>{
+  const adapter=new WorkshopPresentation();adapter.ingest({enabled:true,dropped:0,events:structuredClone(closing.events)});
+  let seq=closing.last_logged_native_sequence;
+  // Every appended event is a synthetic protocol boundary. The actual retained
+  // producer ended at closed WS_STATE before a later native drain was captured.
+  const append=(kind,target=closing.dialog_id)=>adapter.ingest({enabled:true,dropped:0,events:[{seq:++seq,kind,target,data:{}}]});
+  return{adapter,append};
+};
+test('actual closed script state and completed Escape do not imply a captured Native hide',()=>{
+  const{adapter}=closeFixture();assert.equal(closing.closed_state.base_open,false);assert.equal(closing.escape.end.data.handled,true);
+  assert.equal(adapter.visible(closing.dialog_id),true);assert.equal(adapter.hiddenAfter(closing.dialog_id,closing.escape.begin.seq),false);
+});
+test('an explicitly synthetic later same-Window hide completes the observation conjunction',()=>{
+  const{adapter,append}=closeFixture();append('node.hide');assert.equal(adapter.hiddenAfter(closing.dialog_id,closing.escape.begin.seq),true);
+});
+test('a foreign, stale, reshown or destroyed node cannot substitute for the fresh same-Window hide',()=>{
+  const{adapter,append}=closeFixture();append('node.hide','foreign-window');assert.equal(adapter.hiddenAfter(closing.dialog_id,closing.escape.begin.seq),false);
+  append('node.hide');const fence=adapter.hideEvents.get(closing.dialog_id);assert.equal(adapter.hiddenAfter(closing.dialog_id,fence),false);
+  append('node.show');assert.equal(adapter.hiddenAfter(closing.dialog_id,closing.escape.begin.seq),false);
+  append('node.hide');append('node.destroy');assert.equal(adapter.hiddenAfter(closing.dialog_id,closing.escape.begin.seq),false);
+});
