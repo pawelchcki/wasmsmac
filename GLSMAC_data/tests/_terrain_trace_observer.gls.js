@@ -2,6 +2,7 @@
 // there is no viewport, fog, selected-player or expected-output filter.
 const state_api = #include('./_state_trace_observer');
 const movement = #include('../default/game/event/move_unit');
+const cooperation = #include('./_terraform_cooperation_observer');
 const kind = (unit) => { return unit.is_immovable ? 'immovable' : (unit.is_land ? 'land' : (unit.is_water ? 'sea' : 'air')); };
 const point = (tile) => { return {x: tile.x + 0, y: tile.y + 0}; };
 const quote = (game, unit, destination) => {
@@ -25,12 +26,12 @@ return (game, read_ui) => {
  const read = () => {
   const state = world.read(); const tm = game.get_tm(); const players = game.get_players();
   if (#sizeof(players) != 7) { throw Error('Terraform audit requires every one of seven native participants'); }
-  const trace = {schema: 'game.terrain_observation.v3', elevation_units: 'native-engine-elevation',
+  const trace = {schema: 'game.terrain_observation.v4', elevation_units: 'native-engine-elevation',
    terrain_units: {rockiness: 'native-enum-0-none-1-flat-2-rolling-3-rocky', moisture: 'native-enum-0-none-1-arid-2-moist-3-rainy', original_raw_height_class: 'unsupported', original_raw_rockiness: 'unsupported'},
    tiles: {}, unit_details: {}, base_details: {}, player_details: {}, ui: null,
    coverage: {all_players: true, terrain_height: true, terrain_type: true, terrain_resources: true,
     traverse_quotes: true, canonical_height: true, energy_initialization: true, automation_context: true, automation_phase: true, home_identity: true, improvement_owners: true,
-    terrain_epoch: true, paid_height_work: true, naval_recovery: true, energy_revision: true,
+    terrain_epoch: true, paid_height_work: true, naval_recovery: true, energy_revision: true, cooperative_work: #sizeof(state.units) > 0,
     ui: has_ui, animation_timing: false, audio: false, original_height_byte: false}};
   trace.policy = game.get_settings().global.rules.get_terraforming_policy();
   for (player of players) {
@@ -54,6 +55,9 @@ return (game, read_ui) => {
     const key = #to_string(x) + ',' + #to_string(y); trace.tiles[key] = raw;
    }
   }
+  // Shared only within this synchronous observation; never retained between
+  // captures/events. Source helper reads native cohorts for every owner.
+  const cohort_cache = {};
   for (entry of state.units) {
    const unit = game.get_um().get_unit(entry.raw_id); const definition = unit.get_def();
    // Keep the native Float directly: adding 0.0 would erase signed zero.
@@ -69,6 +73,8 @@ return (game, read_ui) => {
    else { trace.coverage.home_identity = false; }
    if (#typeof(unit.get_terraforming_recovery) == 'Callable') { detail.terraforming_recovery = #clone(unit.get_terraforming_recovery()); }
    else { trace.coverage.paid_height_work = false; trace.coverage.naval_recovery = false; }
+   detail.cooperative_work = cooperation(game,unit,cohort_cache);
+   if (!detail.cooperative_work.supported) { trace.coverage.cooperative_work = false; }
    detail.combat = #clone(definition.combat);
    const current = tm.get_terrain_state(entry.x, entry.y);
    for (direction in current.neighbors) {
