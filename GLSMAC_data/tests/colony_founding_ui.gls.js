@@ -76,7 +76,15 @@ const fixture = () => {
 	const p = {};
 	p.el = f.view.root; p.ui = f.view.ui; p.game = f.game; p.map = f.map;
 	p.modules = { popup: { is_shown: () => { return f.state.modal; } } };
+	// Capture the real root-sibling hint created by the shipped panel init;
+	// the surrounding display factory remains authoritative and is restored.
+	const root_text = f.view.root.text; let hints = 0; f.target_hint = null;
+	f.view.root.text = (properties) => {
+		const node = root_text(properties); hints++; f.target_hint = node; return node;
+	};
 	preview.init(p);
+	f.view.root.text = root_text;
+	test.assert(hints == 1 && f.target_hint != null, 'Panel init must create exactly one actual root-owned target hint');
 	// Artwork/preview text does not determine which selected unit gets an order.
 	preview.show = (object) => {};
 	f.select = (unit) => { f.game.emit('unit_select', { unit: unit }); };
@@ -171,6 +179,13 @@ behavior.scenario('destroying the panel detaches keyboard input timers and resul
 	preview.frame.remove();
 	test.assert(preview.frame.handler_count('keydown') == 0);
 	test.assert(f.game.count('event_result') == 0);
+	// Root::Clear safety retires this exact sibling on its owned zero-delay
+	// callback. No other leaked timer, including another zero-delay one, may run.
+	test.assert(!f.target_hint.removed && #sizeof(f.target_hint.timers) == 1);
+	const retirement = f.target_hint.timers[0];
+	test.assert(retirement.interval == 0 && retirement.running && f.view.running_timers() == 1);
+	retirement.tick();
+	test.assert(f.target_hint.removed && !retirement.running);
 	test.assert(f.view.running_timers() == 0);
 	f.key('B', {}); test.assert(#sizeof(f.state.orders) == 3);
 });
