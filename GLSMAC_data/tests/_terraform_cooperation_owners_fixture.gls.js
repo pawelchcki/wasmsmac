@@ -1,6 +1,7 @@
 // Shared declared seven-owner setup only. Real production event validation/apply
 // supplies every work contribution; observers never seed job/progress answers.
 const command = #include('../default/game/event/unit_terraform');
+const uncomplete = #include('../default/game/event/uncomplete_turn');
 return () => {
  const f = test.natural_startup_fixture(16,16,'flat-arid'); const pairs = []; let third = null;
  #include('./_natural_startup_mechanics')(f); f.initialize_single_player('GAIANS','Citizen'); f.start_world();
@@ -9,7 +10,19 @@ return () => {
   const error = command.validate(e); if (#is_defined(error)) { throw Error(error); }
   f.with_write(() => { e.applied = command.apply(e); }); return e;
  };
- const game = f.game; game.get_settings().global.rules.set_terraforming_ignore_technologies(true);
+ const game = f.game;
+ // This observation fixture authors simultaneous active turns for every owner.
+ // Normal offline startup correctly completes computer turns; reopen through
+ // the real production event before issuing each owner's actual work order.
+ for (player of game.get_players()) {
+  if (game.is_turn_complete(player.id)) {
+   const e = {caller:player.id + 0,data:{}}; e.game = game;
+   test.assert(!#is_defined(uncomplete.validate(e)));
+   f.with_write(() => { uncomplete.apply(e); });
+  }
+  test.assert(!game.is_turn_complete(player.id));
+ }
+ game.get_settings().global.rules.set_terraforming_ignore_technologies(true);
  const rows = test.parse_smac_text(#include('./_terraform_action_source'),'rules').rows('TERRAIN'); rows[0][4] = '5';
  game.set('terraforming_rules',#include('../default/game/terraforming_rules').parse({rows:(block) => { return rows; }}));
  test.assert(#sizeof(game.get_players()) == 7 && game.get_player().id == 0);
