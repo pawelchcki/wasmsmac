@@ -30,9 +30,8 @@ def load_catalog(path):
     seen = set()
     scripts = set()
     for suite in value["suites"]:
-        if not isinstance(suite, dict) or set(suite) not in (
-                {"id", "script", "domains", "evidence"},
-                {"id", "script", "domains", "evidence", "packets"}):
+        required = {"id", "script", "domains", "evidence"}
+        if not isinstance(suite, dict) or not required <= set(suite) or set(suite) - required - {"packets", "scheduling"}:
             raise ProtocolError("invalid suite fields")
         if not isinstance(suite["id"], str) or not re.fullmatch(r"[a-z][a-z0-9-]*", suite["id"]) or suite["id"] in seen:
             raise ProtocolError("invalid or duplicate suite id")
@@ -43,6 +42,12 @@ def load_catalog(path):
         if script in scripts:
             raise ProtocolError("duplicate suite script")
         scripts.add(script)
+        if "scheduling" in suite:
+            scheduling = suite["scheduling"]
+            if (not isinstance(scheduling, dict) or set(scheduling) != {"mode", "reason"} or
+                    scheduling["mode"] != "exclusive" or not isinstance(scheduling["reason"], str) or
+                    not scheduling["reason"].strip()):
+                raise ProtocolError("invalid exclusive scheduling declaration")
         if "packets" in suite:
             packets = suite["packets"]
             if (not isinstance(packets, dict) or set(packets) != {"parts", "assertions"} or
@@ -166,6 +171,14 @@ def run_suite(suite, runtime, snapshot, temporary, timeout, node="node", worker=
               "execution_prefix": request["prefix"]}
     output = ""
     try:
+        if "scheduling" in suite:
+            paths = {"runtime_js_sha256": Path(runtime), "runtime_wasm_sha256": Path(runtime).with_suffix(".wasm"),
+                     "worker_sha256": worker, "scripts_sha256": Path(snapshot)}
+            result["execution_binding"] = {key: hashlib.sha256(path.read_bytes()).hexdigest() for key, path in paths.items()}
+            sources = decode_json(Path(snapshot).read_text(encoding="utf-8"))
+            if not isinstance(sources, dict) or not isinstance(sources.get(suite["script"]), str):
+                raise ProtocolError("exclusive script is absent from the frozen source snapshot")
+            result["script_sha256"] = hashlib.sha256(sources[suite["script"]].encode("utf-8")).hexdigest()
         process = subprocess.run(
             [node, str(worker)], input=canonical(request), text=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ROOT, timeout=timeout,
@@ -174,6 +187,10 @@ def run_suite(suite, runtime, snapshot, temporary, timeout, node="node", worker=
         result["process_returncode"] = process.returncode
         if process.returncode != 0:
             raise ProtocolError(f"worker exited {process.returncode}")
+        if "scheduling" in suite:
+            for key, path in paths.items():
+                if hashlib.sha256(path.read_bytes()).hexdigest() != result["execution_binding"][key]:
+                    raise ProtocolError("exclusive execution input changed: " + key)
         result.update(parse_output(output), status="passed")
     except subprocess.TimeoutExpired as error:
         result["timed_out"] = True
@@ -186,8 +203,35 @@ def run_suite(suite, runtime, snapshot, temporary, timeout, node="node", worker=
     result["elapsed_ms"] = round((time.perf_counter() - start) * 1000, 2)
     log = Path(temporary) / f"{suite['id']}.log"
     log.write_text(output, encoding="utf-8")
-    result["log"] = output if result["status"] != "passed" else ""
+    result["log"] = output if result["status"] != "passed" or "scheduling" in suite else ""
+    if "scheduling" in suite:
+        result["raw_log_sha256"] = hashlib.sha256(output.encode("utf-8")).hexdigest()
     return result
+
+
+def scheduled_results(suites, runtime, snapshot, temporary, timeout, node, jobs, runner=None):
+    """Drain each ordinary worker block before a declared exclusive suite."""
+    runner = run_suite if runner is None else runner
+    def ordinary(block):
+        if block:
+            with ThreadPoolExecutor(max_workers=jobs) as pool:
+                futures = [pool.submit(runner, suite, runtime, snapshot, temporary, timeout, node)
+                           for suite in block]
+                for future in as_completed(futures):
+                    yield future.result()
+            # run_suite has reaped every child; the pool is also fully closed.
+
+    block = []
+    for suite in suites:
+        if "scheduling" not in suite:
+            block.append(suite)
+            continue
+        yield from ordinary(block)
+        block = []
+        result = runner(suite, runtime, snapshot, temporary, timeout, node)
+        result["scheduling"] = dict(suite["scheduling"], requested_jobs=jobs, suite_worker_limit=1)
+        yield result
+    yield from ordinary(block)
 
 
 def main(argv=None):
@@ -243,15 +287,12 @@ def main(argv=None):
             snapshot_json = canonical(snapshot)
             snapshot_path.write_text(snapshot_json, encoding="utf-8")
             results = []
-            with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-                futures = [pool.submit(run_suite, suite, runtime, snapshot_path, temporary, args.timeout, args.node) for suite in suites]
-                for future in as_completed(futures):
-                    result = future.result()
-                    results.append(result)
-                    if result["status"] == "passed":
-                        print(f"PASS {result['id']}: {result['scenarios']} scenarios, {result['assertions']} assertions ({result['elapsed_ms']} ms)")
-                    else:
-                        print(f"FAIL {result['id']}: {result['reason']}\n{result['log']}", file=sys.stderr)
+            for result in scheduled_results(suites, runtime, snapshot_path, temporary, args.timeout, args.node, args.jobs):
+                results.append(result)
+                if result["status"] == "passed":
+                    print(f"PASS {result['id']}: {result['scenarios']} scenarios, {result['assertions']} assertions ({result['elapsed_ms']} ms)")
+                else:
+                    print(f"FAIL {result['id']}: {result['reason']}\n{result['log']}", file=sys.stderr)
         results.sort(key=lambda result: result["id"])
         if (hashlib.sha256(runtime.read_bytes()).hexdigest() != runtime_hash or
                 hashlib.sha256(wasm.read_bytes()).hexdigest() != wasm_hash):
