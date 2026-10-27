@@ -73,6 +73,19 @@ every field of all 128 tiles:
    worker spends its real movement budget, completes work, retains its native
    definition and logical tile, and every other unit remains intact.
 
+The paid checkpoint also runs a complete allowed-diff audit over the entire
+native world. It starts with the full before-record and changes only payer
+credits/revision, the actor's real movement/order flags and derived exhausted
+movement eligibility, quoted canonical centers, and native shared geometry in
+the actual patch/adjacent footprint. `TerrainMutation.cpp` preserves neighbor
+canonical centers while refreshing shared corners and increments every recorded
+affected tile epoch; `Tile::SetCanonicalElevation` clears imported source data
+only for edited patch tiles. All unknown fields, payer identity/other energy
+fields, actor health/morale/combat/work metadata, all resources in this empty
+arid fixture and terrain outside that footprint must remain exact. Numeric
+shared-corner values remain observed candidate geometry rather than an invented
+original mesh oracle.
+
 `Event.cpp` retains only scalar receipt fields. The driver binds actual
 `name/event_id/caller/unit_id/action/confirmed_height` acceptance to the stored
 live UI quote and resulting native fee/effect. The nested submitted quote is
@@ -90,6 +103,8 @@ actual main continuation ACK, at least one actual pthread continuation ACK,
 first real callback out/err identity and complete sealed raw chunks. Raw GSE
 snapshot text remains available because Node's JSON parser folds integral
 native Float numbers; movement additionally carries actual native Float32 bits.
+The first callback must also prove `runtime_callMain_present === true`, and
+every recorded worker request must have a successful continuation ACK.
 
 ## Known source lead and remaining scope
 

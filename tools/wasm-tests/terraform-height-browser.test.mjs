@@ -13,7 +13,7 @@ import {attachRuntimeLogBarrier} from './runtime-fetch-barrier.mjs';
 import {nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
 import {declaredTerrain,rateOneSource,fixtureSources} from './terraform-browser-inputs.mjs';
-import {HeightPresentation,completedHeightKey,nativeHeightWorld,verifyHeightCapture} from './terraform-height-observation.mjs';
+import {HeightPresentation,completedHeightKey,nativeHeightWorld,verifyHeightCapture,auditPaidLandHeight} from './terraform-height-observation.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const scriptsRoot=process.env.WASM_SCRIPTS_ROOT||root;
 const build=process.env.WASM_APP_DIR||`${root}build/wasm-release/bin`;
@@ -94,9 +94,11 @@ test('real land Raise quote Cancel draft and paid completion preserve the seven-
         assert.deepEqual(errors,[]);assert.equal(report.native_log_configuration.installations,1);
         assert.equal(report.native_log_configuration.barrier.continued,true,'Main runtime continuation must acknowledge success');
         assert.ok(report.native_log_configuration.worker_requests?.some(row=>row.continued===true),'An actual pthread runtime continuation must acknowledge success');
+        assert.ok(report.native_log_configuration.worker_requests.every(row=>row.continued===true),'Every recorded pthread request must acknowledge actual continuation');
         assert.ok(report.native_log_configuration.callbacks?.first_callback);
         assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_out_bound,true);
         assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_err_bound,true);
+        assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_callMain_present,true);
       }
     }catch(error){finalFailure=error;report.final_artifact_error=String(error);report.status='failed-or-incomplete';}
     writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');
@@ -226,6 +228,7 @@ test('real land Raise quote Cancel draft and paid completion preserve the seven-
   report.peer_payload_quote_echo='unsupported: native event_result exposes scalar fields only';
   await wait(()=>{const ui=settled();return ui&&!ui.modal&&ui.pending===null&&!ui.native_pending&&!ui.tile_locked&&ui;});
   const completed=await observe('raise-paid-completion');await capture('raise-paid-completion');
+  report.allowed_native_diff=auditPaidLandHeight(before,completed,quote);
   report.expected_effect_from_live_quote=quote;
   const prior=nativeHeightWorld(before),after=nativeHeightWorld(completed),payer=before.world.players.find(row=>row.raw_id===quote.owner).id;
   assert.equal(after.terrain_trace.player_details[payer].energy.credits,prior.terrain_trace.player_details[payer].energy.credits-quote.fee);
