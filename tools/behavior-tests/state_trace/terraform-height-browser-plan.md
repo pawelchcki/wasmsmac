@@ -331,3 +331,53 @@ and `host_head`. The supplied completion must be an actual external observation;
 the auditor/producer does not create it or authenticate arbitrary operator files.
 Wrong-run, unknown-schema, missing/nonzero completion or unreaped records reject.
 The existing historical receipt is not reusable for another capture.
+
+## Continuous journal and physical-route re-audit v4
+
+`terraform-height-browser-v6-reaudit-route.json` separately identifies the current
+read-only audit. Historical initial/v2/v3 auditors, results and their hashes remain
+unchanged in the proof ledger. The original14,465,994-byte raw/report/preflight,
+external session40314/chunk0ae251 and native/Node exits are reused without a new
+game or browser run. This audit adds no original-game or new browser case.
+
+The recorded936 actual Module output callbacks cover UTF16 offsets0…14465994
+continuously, with the original newline after each append and no missing middle
+callback or final suffix. This successful pinned bootstrap begins with an empty
+log; its normal `onExit` updates status only. Continuous coverage is a contract
+of this capture, **not a universal claim that bootstrap direct-log/error paths
+must use Module callbacks**. A future genuine unjournaled bypass needs separately
+supported evidence; callbacks must never be invented to fill a gap.
+
+All50 presentation drains report enabledtrue/dropped native Int0. Their82661
+native event sequences are unique and continuous from1, validated before any
+lookup map can overwrite a duplicate. Coverage ends at the observed final drain;
+unobserved UI work after exit is not implied. Every native energy revision is
+an exact Int in all6×7 player records before fee/revision arithmetic, excluding
+Python Bool-to-Int coercion.
+
+The actual Q ingress, begin and matching end are joined by native ingress ID;
+end has no code field. Their carrier packet is raw line844 before the line845
+exit marker (zero-based), after the final native checkpoint. This partial order
+is supported specifically by this fixture: its timer drains on source line131,
+then prints `TH_EXIT_REQUEST` and exits on132. It is not a general claim that a
+drained event's raw packet always precedes an exit inside another handler.
+
+Full browser credit also requires the retained eight physical pointer receipts:
+MENU → TERRAFORM → raise → default Cancel/OK → TERRAFORM → raise → Expend →
+confirm/OK. The auditor replays actual native node creation/parent/semantic roles,
+text, visibility and effective geometry at each source fence. It checks exact
+source command/choice semantics, enabled raise rows/native widgets, native-to-CSS
+conversion using retained viewport/canvas bounds, positive intended-node or
+descendant mouseover, matching left ingress/down/up and completed dispatches.
+Each reported receipt must equal its actual native event, and each whole click
+must precede the fresh next observation input. Resulting checkpoint states alone
+cannot substitute for those input observations. The existing scalar payment ACK,
+all-player purity/effects/fee/epochs, raw native types/F32 bits, complete sealing
+and genuine external Node completion checks remain required.
+
+Asset-free and retained-capture mutations cover loss/duplicate/reordered events,
+missing callbacks/suffix, exit-carrier ordering, non-Int revisions, omitted or
+reordered pointers, wrong semantic action, geometry/CSS/hover/ingress/point/
+completed-end/choice and native-disabled widgets despite an enabled source packet.
+These are negative protocol tests, not additional gameplay observations or an
+original UI, mesh, animation, audio or Sea agreement claim.
