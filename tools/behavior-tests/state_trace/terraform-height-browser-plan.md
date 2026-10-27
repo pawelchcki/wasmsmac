@@ -457,3 +457,22 @@ The final134 Python checks passed with zero skips (72 public,62 retained),
 including new `ProtocolKeyboardRouteTests`. The unchanged real14MB replay
 returns explicit partial scope/full0/bounded1. Publication and CI remain
 Delivery-owned; no new feature batch starts after this wrap-up.
+
+
+### Final source-derived Raise footprint audit
+
+The later read-only audit requires the producer report to state Boolean candidate
+execution before assigning any credit. It derives the fixed land Raise plan
+from BEFORE native centers/topology and the installed band/slope policy, then
+requires all nine canonical edits and the exact25-tile affected region. Shared
+Native corner integers are derived from the four incident post-batch centers
+with C++ signed division; neither the live quote nor AFTER geometry supplies
+expected answers. This checks Native state fields, not rendered mesh vertices.
+
+The unchanged retained capture still passes229 exact field changes and96 Native
+Float checks. All140 public/retained checks pass (75public/65retained, zero
+skips), including coherent one-patch/remote/wrong-slope/missing effects that the
+previous audit accepted. The new additive result is
+`terraform-height-browser-v6-reaudit-footprint.json`; prior results remain
+historical. Missing per-callback message identity remains unsupported: complete
+browser count0, bounded state/receipt count1, no new Native or browser execution.
