@@ -39,3 +39,16 @@ flows, original Workshop layout and controls, assembled previews, rotation,
 movement facing, work animations and audio remain unsupported. Original Workshop
 agreement adds zero cases; no original Workshop observation is currently supplied
 to this implementation. Full visual and game fidelity remain incomplete.
+
+Bounded verification on production source `db457e8f` and fixture repair
+`be1db9e1` used the immutable v6 WASM runtime from native source `115032ff`:
+Workshop passed 12 scenarios/42 assertions, existing base-production UI passed
+16/72 and startup rule sources passed 25/75. All three processes returned raw
+zero with the native success marker and complete behavior summaries; runtime
+hashes stayed unchanged. Exact source/runtime/probe hashes and raw logs are in
+`/tmp/unit-workshop-proof/fixed2-*`. The actual old `73ef820b` dead-button red,
+first session-literal setup failure and later mock-descriptor setup failure are
+retained separately under that proof directory. The final test repair only
+materializes plain mock inventory descriptors; it changes no expected output.
+These are application checks, with zero original Workshop/visual cases. Real
+native-window input, resource pixels and final integration CI remain separate.
