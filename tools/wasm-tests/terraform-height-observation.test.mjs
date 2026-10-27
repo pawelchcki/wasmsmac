@@ -2,7 +2,7 @@
 // gameplay or original-game evidence.
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {HeightPresentation,completedHeightKey,verifyHeightCapture,nativeHeightWorld} from './terraform-height-observation.mjs';
+import {HeightPresentation,completedHeightKey,verifyHeightCapture,nativeHeightWorld,auditPaidLandHeight} from './terraform-height-observation.mjs';
 const edge=(seq,kind,data,target='node')=>({seq,kind,data,target});
 
 test('height key receipt links raw SDL ingress to normalized completed dispatch',()=>{
@@ -52,4 +52,37 @@ test('native-only projection removes only UI and preserves every unknown native 
   const native=nativeHeightWorld(row);assert.equal(native.terrain_trace.ui,undefined);
   assert.ok(Object.is(native.unrecognized.float,-0));assert.deepEqual(native.unrecognized.fields,row.world.unrecognized.fields);
   assert.equal(row.world.terrain_trace.ui.native,'retained');
+});
+
+function paidPair(){
+  const tile={x:2,y:2,elevation:{center:240,left:64,top:64,right:64,bottom:64},neighbors:{W:null},terrain_epoch:0,
+    canonical:{active:false,elevation:null,is_water:null,unknown:'preserved'},imported:{active:true,source_corners:[64,64,64,64],source_elevation:240,source_water:false},
+    is_land:true,is_water:false,native_type:{domain:'land'},native_height_band:{below_coast:false,below_ocean:false,below_trench:false},resources:{payer:{energy:0}},unknown_native:'untouched'};
+  const world={players:[{id:'payer',raw_id:0}],units:[{id:'actor',raw_id:8,movement:1,order:'NO_ORDERS',health:1,morale:2}],
+    terrain_trace:{player_details:{payer:{energy:{credits:10,last_income_turn:0,initialized:true},energy_revision:1,unknown:'preserved'}},
+      unit_details:{actor:{moved_this_turn:false,work:{action:'',work_units:0,unknown:'preserved'},quotes:{W:{allowed_now:true,reason:null,cost:1}},combat:{defense:1},unknown:'preserved'}},tiles:{'2,2':tile},ui:{different:'allowed'}}};
+  const quote={owner:0,unit_id:8,fee:4,source_water:false,destination_water:false,plan:[{x:2,y:2,canonical:{elevation:1500,is_water:false}}]};
+  const after=structuredClone(world);after.units[0].movement=0;after.terrain_trace.unit_details.actor.moved_this_turn=true;
+  after.terrain_trace.unit_details.actor.quotes.W.allowed_now=false;after.terrain_trace.unit_details.actor.quotes.W.reason='Unit is out of moves';
+  after.terrain_trace.player_details.payer.energy.credits=6;after.terrain_trace.player_details.payer.energy_revision=2;
+  const changed=after.terrain_trace.tiles['2,2'];changed.elevation.center=1500;changed.terrain_epoch=1;
+  Object.assign(changed.canonical,{active:true,elevation:1500,is_water:false});Object.assign(changed.imported,{active:false,source_corners:null,source_elevation:null,source_water:null});
+  return{before:{world},after:{world:after},quote};
+}
+
+test('full native paid audit permits only the declared fee actor budget and quoted terrain',()=>{
+  const pair=paidPair();assert.deepEqual(auditPaidLandHeight(pair.before,pair.after,pair.quote).quoted_tiles,['2,2']);
+  const corruptions=[r=>r.world.units[0].health=0.5,r=>r.world.units[0].morale=3,
+    r=>r.world.terrain_trace.player_details.payer.unknown='changed',r=>r.world.terrain_trace.player_details.payer.energy.initialized=false,
+    r=>r.world.terrain_trace.unit_details.actor.work.unknown='changed',r=>r.world.terrain_trace.unit_details.actor.combat.defense=2,
+    r=>r.world.terrain_trace.tiles['2,2'].unknown_native='changed',r=>r.world.terrain_trace.tiles['2,2'].canonical.unknown='changed',
+    r=>r.world.terrain_trace.tiles['2,2'].resources.payer.energy=10];
+  for(const corrupt of corruptions){const bad=structuredClone(pair.after);corrupt(bad);assert.throws(()=>auditPaidLandHeight(pair.before,bad,pair.quote));}
+});
+
+test('native paid audit rejects terrain edits beyond actual patch adjacency',()=>{
+  const pair=paidPair();pair.before.world.terrain_trace.tiles['8,8']=structuredClone(pair.before.world.terrain_trace.tiles['2,2']);
+  pair.after.world.terrain_trace.tiles['8,8']=structuredClone(pair.before.world.terrain_trace.tiles['8,8']);
+  pair.after.world.terrain_trace.tiles['8,8'].elevation.left=65;
+  assert.throws(()=>auditPaidLandHeight(pair.before,pair.after,pair.quote));
 });
