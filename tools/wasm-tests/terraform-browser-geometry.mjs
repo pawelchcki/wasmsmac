@@ -20,7 +20,7 @@ export class TerraformGeometry {
   button(role,source,label,viewport){
     const found=[...this.nodes].filter(([,node])=>node.role===role&&node.source===source);
     assert.equal(found.length,1,`Exactly one actual native ${role}/${source}`);
-    const [id,node]=found[0];assert.equal(node.tag,'button');assert.equal(node.properties.text,label);
+    const [id,node]=found[0];assert.equal(node.tag,'$button');assert.equal(node.properties.text,label);
     const bounds=node.effective;assert.ok(bounds,'Native effective bounds are required');
     for(const key of ['left','top','right','bottom'])assert.ok(Number.isFinite(bounds[key]),`Native finite ${key}`);
     assert.ok(bounds.left>=0&&bounds.top>=0&&bounds.right<=viewport.width&&bounds.bottom<=viewport.height,'Native target lies inside the viewport');
