@@ -66,3 +66,37 @@ timing analysis are retained in `/tmp/terraform-pr35-capacity-observational240`.
 The earlier CI timeout remains retained separately. Any resource scheduling or
 producer change requires its own exact-head CI evidence; blindly enlarging the
 global deadline or weakening shutdown checks is not justified by this result.
+
+## Focused resource-policy verification
+
+A capacity-only catalog scheduling declaration now drains and closes the prior
+ordinary worker pool, runs this exact suite alone, then resumes ordinary work at
+the requested parallelism. This leaves the other 75 suite policies unchanged.
+It preserves the same live world, complete case body, 120-second worker deadline,
+2 GiB heap and all 11 assertions. Six focused harness checks passed, including
+actual thread barriers proving before/after parallel work, no overlap with the
+exclusive operation, retained failures without dropping later selected suites,
+strict declaration parsing, complete raw output and rejection of changed runtime
+bytes despite an apparent success footer. This is an explicit resource policy;
+historical CI load contention is not claimed as a proven root cause.
+
+The immutable final-source host
+`84f98f0a03ec24d937305d4aec51b9586f66e10b` was checked through the official CLI:
+`--suite terraforming-cooperation-capacity --jobs 2 --timeout 120`, against the
+same cloud JS/WASM. It **passed 1 scenario / 11 assertions**, raw zero exit and
+actual native success footer, in 79.823 seconds (80.259 including orchestration).
+The result explicitly records requested jobs 2 and this suite's worker limit 1.
+All prelaunch runtime, worker, full snapshot and selected-probe hashes were
+verified after completion. Full GSE snapshot is
+`202127e5bcf7af4cc24bd695c30c1d22412bf50bc7da6aa87748fc818dd260eb`;
+the selected probe, production default and native source remain unchanged.
+
+Its complete footprint JSON matches the earlier failed CI **byte-for-byte**:
+4,096 patches, 4,096 full reads, 261,177 ASCII identity bytes, the same identity
+hash above. Raw output SHA-256 is
+`05210434bf1fb9db8439953628aebd89ae9bf9c9268e1606ba63ebf85664a3fe`.
+Retained official report, independent audit and prelaunch bindings are in
+`/tmp/terraform-pr35-capacity-exclusive-focused`. The worker was reaped before
+resource release. No native C++, production GSE, collector cadence, heap or case
+budget changed. **Fresh full-batch CI is still required** to establish stability;
+this focused pass does not erase the historical timeout or prove its cause.
