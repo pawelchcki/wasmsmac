@@ -1,14 +1,16 @@
 # First static cached-body acceptance
 
-Status: source-only test preparation, zero executed census cases. The Native
+Status: one actual static census case passed; see the
+[audited capture and its limits](unit-body-census-proof-v1.md). The original
+source preparation below preceded that capture. The Native
 observer first source `f0dae99a` remains preserved; its first build failed on the
 private `Game::GetGame` call (exit 2, 309.108 s). Delivery's reviewed two-line
 public-access/non-null readiness repair is
 `11532fef4051690a61f23b2f89a48ba939ecceac`, source tree
-`23e54d08b7dbb00f6b42d325c180a8c868b30ee2`. The forthcoming v8 runtime and actual
-checksums are **pending**. This test preparation adds only new test/doc files atop
-that immutable source; no seven-path observer edits, production-default changes,
-shared lane/catalog/CI changes, build or game launch.
+`23e54d08b7dbb00f6b42d325c180a8c868b30ee2`. The corrected v8 build completed
+successfully and its actual runtime hashes are in the proof. This test source
+preserves those seven observer paths and the production Default. The separate
+portable runner described below has source and pure-test verification only.
 
 The established installed-source stack world is imported from
 `unit-stack-order-browser-fixture.mjs`. It has seven owners, seven cities,
@@ -95,13 +97,22 @@ actual schema validator. Those mocks never enter the browser/CLI production
 validation path. Python and Node syntax checks pass. Direct no-assets launcher
 execution records zero passing cases and one explicit skip, zero engines.
 
-Future execution needs a separately reviewed fixture freeze, actual immutable v8
-runtime/provenance and an exclusive Root grant. No runtime exists merely because
-a source pin or pure test passes. The command will be the standard single-test
-Node runner with `WASM_SCRIPTS_ROOT`, `WASM_APP_DIR`, `SMAC_ASSETS_DIR`,
-`UNIT_BODY_CENSUS_RUNTIME_PROVENANCE` and a fresh
-`UNIT_BODY_CENSUS_ARTIFACTS_DIR`, all pinned in the external execution manifest.
-Preserve the first real failure and stop; no automatic retry or oracle changes.
+The repository now contains the bounded preparation and external process runner:
+`state_trace/unit_body_census_preflight.py` and
+`state_trace/unit_body_census_runner.py`. From `tools/behavior-tests`, inspect
+`python3 -m state_trace.unit_body_census_runner prepare --help` for explicit
+source, web/runtime provenance, installed assets, dependencies, tools and fresh
+artifact paths. Preparation starts no game. The separate `execute` command
+requires the reviewed manifest SHA and an independently authorized exclusive
+lease. It preserves actual OS child wait/exit, observed process identities,
+source/runtime hashes and the lossless raw/chunk boundary.
+
+This portable successor has never run a game. The actual capture remains bound
+to the preserved external `c2a13e` driver and its recorded `0fbb` manifest; its
+passing result is not transferred to the new runner. The runner deliberately
+accepts only the reviewed v8/source profile. Changed source/runtime needs a new
+reviewed profile and evidence. Preserve the first real failure and stop; there
+is no automatic retry or oracle change.
 
 This proves at most cached submitted-body identity and stored normalized
 coordinates in a static current frontend. GPU pixels, camera/projection/world

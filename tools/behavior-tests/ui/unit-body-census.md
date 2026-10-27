@@ -1,8 +1,10 @@
 # First stage: cached native unit-body census
 
-Status: source-only implementation authorized on isolated PR37 base
+Status: the corrected observer build and one bounded static runtime case passed;
+see [the actual proof and its limits](unit-body-census-proof-v1.md). The original
+source plan used isolated PR37 base
 `810c9038646cfa0b416ec7bdb566d700d8354018`, with Trace precision adjustments.
-No build, engine/browser run or asset change is authorized yet. This replaces the first implementation stage of the
+This replaces the first implementation stage of the
 larger movement proposal (source-plan commit `d0055cc1`); its backend
 cause, Scroller lifecycle and clock instrumentation remain deferred. This explicit isolated-source grant supersedes the earlier wait-for-merge plan;
 port only the observer delta to the actual successor main before final delivery.
