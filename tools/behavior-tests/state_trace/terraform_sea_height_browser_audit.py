@@ -342,7 +342,7 @@ def validate_outer(directory, report, raw):
     assert completion['owned_group_absent'] is True and completion['forced_cleanup'] is False and completion['outer_timed_out'] is False
     assert outcome['external_completion_sha256'] == digest(directory / 'external-completion.json')
     assert outcome['external_driver_sha256'] == completion['external_driver_sha256'] == digest(directory / 'run-once.py')
-    return {'external_node_os_exit': 0, 'native_app_exit': 0, 'tool_session': 52401, 'tool_chunk': '60a1a5',
+    return {'supported': True, 'external_node_os_exit': 0, 'native_app_exit': 0, 'tool_session': 52401, 'tool_chunk': '60a1a5',
             'raw_outcome_sha256': digest(directory / 'raw-outcome.json'), 'owned_reaped_without_forced_cleanup': True}
 
 
@@ -357,19 +357,12 @@ def audit_artifacts(directory, source_root):
     chunks = [json.loads(line) for line in (directory / 'application-log-chunks.jsonl').read_text().splitlines() if line]
     result['finalization'] = height.validate_finalization(report, raw, chunks, records)
     result['pointer_route'] = height.validate_pointer_route(records, report)
+    result['keyboard_route'] = height.validate_keyboard_route(records, report)
     result['external_exit'] = validate_outer(directory, report, raw)
-    expected_frames = ['before-height', 'raise-quote', 'raise-cancel', 'raise-payment-draft', 'raise-paid-completion']
-    assert [frame['name'] for frame in report['captures']] == expected_frames
-    # Playwright's element screenshot rounds the fractional document clip
-    # outward (coreBundle Helper.enclosingIntRect), unlike native viewport size.
-    box = report['processed_pointers'][0]['canvas_css_rect']
-    clip = tuple(math.ceil(box[axis] + box[size] - 1e-3) - math.floor(box[axis] + 1e-3)
-                 for axis, size in [('x', 'width'), ('y', 'height')])
-    assert clip == (report['rendered_readiness']['width'], report['rendered_readiness']['height'])
-    for frame in report['captures']:
-        path = directory / (frame['name'] + '.png')
-        assert digest(path) == frame['sha256'] and struct.unpack('>II', path.read_bytes()[16:24]) == clip
-    result.update(status='passed-readonly-full-sea-browser-audit', browser_cases_audited=1, raw_bytes=len(raw), raw_sha256=hashlib.sha256(raw).hexdigest(),
+    result['frames_decoded'] = height.validate_frames(directory, report)
+    clip = [result['frames_decoded']['decoded_frames'][0][key] for key in ('width', 'height')]
+    result.update(height.classify_browser_credit(result['finalization'], result['external_exit']))
+    result.update(raw_bytes=len(raw), raw_sha256=hashlib.sha256(raw).hexdigest(),
                   report_sha256=digest(directory / 'report.json'), preflight_sha256=digest(directory / 'preflight.json'),
                   auditor_sha256=digest(__file__), shared_height_auditor_sha256=digest(SHARED), frames=5,
                   native_viewport={'width': 1024, 'height': 768}, png_clip_dimensions=list(clip),
