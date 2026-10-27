@@ -10,16 +10,17 @@
  const terrain_observer = #include('../tests/_terrain_trace_observer');
  glsmac.on('configure_game',(configured) => {
   const game = configured.game;
-  let production_acks = 0; let resumption_ack = false;
+  let production_acks = 0; let growth_acks = 0; let resumption_ack = false;
   game.on('event_result',(e) => {
    if (#typeof(e.event_id) != 'String' || #typeof(e.caller) != 'Int' || #typeof(e.success) != 'Bool') { throw Error('Unexpected native receipt types'); }
    #print('TH_RECEIPT|' + #json_text_exact({name:e.name,event_id:e.event_id,caller:e.caller,success:e.success,data:e.data}));
    if (!e.success) { #print('TH_ERROR|event-rejected'); }
    if (e.name == 'process_base_production' && e.success && e.caller == 0 && e.data.turn_id == 1) { production_acks = production_acks + 1; }
+   if (e.name == 'process_base_growth' && e.success && e.caller == 0 && e.data.turn_id == 1) { growth_acks = growth_acks + 1; }
    if (e.name == 'set_base_production' && e.success && e.caller == 0) {
     const setup = game.get('sea_browser_setup');
     if (e.data.choice_id == setup.resumed_choice) {
-     if (production_acks != 7 || resumption_ack) { throw Error('Project resumption did not follow seven real production ACKs'); }
+     if (production_acks != 1 || growth_acks != 7 || resumption_ack) { throw Error('Project resumption did not follow one eligible production and seven growth ACKs'); }
      resumption_ack = true;
     }
    }
@@ -147,8 +148,16 @@
    const setup = game.get('sea_browser_setup'); const home = game.get_tm().get_tile(10,8).get_base();
    if (!worker.is_water || worker.is_land || !worker.get_def().can_terraform || worker.get_def().id != setup.recipe.id || worker.get_terraform_home() != home.id) { throw Error('Produced sea worker definition/domain/home mismatch'); }
    if (home.get_production().choice_id != setup.resumed_choice || #sizeof(home.get_pops()) < 1) { throw Error('Sea producer did not settle its real project/population'); }
+   const base_states = [];
+   for (base of game.get_bm().get_bases()) {
+    const state = base.get_production();
+    if (state.last_processed_turn != 1 || state.choice_id != setup.resumed_choice || #sizeof(base.get_pops()) != 1) { throw Error('A native city has not reached its actual current-turn baseline'); }
+    if (state.minerals != (base.id == home.id ? 4 : 0)) { throw Error('Unexpected native city mineral baseline'); }
+    base_states :+ {base_id:base.id + 0,owner:base.get_owner().id + 0,population:#sizeof(base.get_pops()),production:state};
+   }
+   if (#sizeof(base_states) != 7) { throw Error('Seven native city states are required'); }
    const sea_movement = worker.movement;
-   #print('TH_SEA_SETUP|' + #json_text_exact({declared:setup,home_id:home.id + 0,home_owner:home.get_owner().id + 0,
+   #print('TH_SEA_SETUP|' + #json_text_exact({base_states:base_states,declared:setup,home_id:home.id + 0,home_owner:home.get_owner().id + 0,
     home_population:#sizeof(home.get_pops()),production:home.get_production(),actor:actor_id,definition:worker.get_def().id,
     home:worker.get_terraform_home(),is_water:worker.is_water,is_land:worker.is_land,movement:sea_movement}));
    #print('TH_INPUTS|' + #json_text_exact({actor:actor_id,definition:worker.get_def().id,can_terraform:worker.get_def().can_terraform,
@@ -162,7 +171,7 @@
    glsmac.ui.root.timer(100,() => {
     const setup = game.get('sea_browser_setup');
     const home = game.get_tm().get_tile(10,8).get_base();
-    if (!resumption_ack || production_acks != 7 || game.get_turn() != 1 || home == null || home.get_production().choice_id != setup.resumed_choice) { return true; }
+    if (!resumption_ack || production_acks != 1 || growth_acks != 7 || game.get_turn() != 1 || home == null || home.get_production().choice_id != setup.resumed_choice) { return true; }
     let ready = false;
     for (unit of game.get_tm().get_tile(8,8).get_units()) { if (unit.owner == game.get_player().id && unit.get_def().id == setup.recipe.id && unit.get_terraform_home() == home.id) { ready = true; } }
     if (!ready) { return true; }

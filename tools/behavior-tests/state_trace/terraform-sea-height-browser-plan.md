@@ -1,3 +1,5 @@
+> Historical v1 plan: its initial pricing/income/ACK assumptions failed the first setup. See [bootstrap v2](terraform-sea-height-bootstrap-v2.md) for the separately versioned source correction; no Sea height pass exists.
+
 # First coastal SeaFormer height browser case (source preparation)
 
 Status: **source-only; no engine/browser execution and zero passing cases**.
