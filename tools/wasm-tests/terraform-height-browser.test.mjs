@@ -13,7 +13,7 @@ import {attachRuntimeLogBarrier} from './runtime-fetch-barrier.mjs';
 import {nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
 import {declaredTerrain,rateOneSource,fixtureSources} from './terraform-browser-inputs.mjs';
-import {HeightPresentation,completedHeightKey,nativeHeightWorld,verifyHeightCapture,auditPaidLandHeight} from './terraform-height-observation.mjs';
+import {HeightPresentation,completedHeightKey,nativeHeightWorld,verifyHeightCapture,auditPaidLandHeight,heightFatal,verifyHeightFinalization} from './terraform-height-observation.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const scriptsRoot=process.env.WASM_SCRIPTS_ROOT||root;
 const build=process.env.WASM_APP_DIR||`${root}build/wasm-release/bin`;
@@ -37,7 +37,7 @@ test('real land Raise quote Cancel draft and paid completion preserve the seven-
   const runtime=readFileSync(`${build}/GLSMAC.js`,'utf8');
   for(const statement of ['if (Module["print"]) out = Module["print"];','if (Module["printErr"]) err = Module["printErr"];'])assert.ok(runtime.includes(statement));
   const originalRules=readFileSync(`${assets}/alphax.txt`),rules=rateOneSource(originalRules);
-  const report={version:1,status:'running',candidate_executed:false,scope:'actual land height application UI; explicit approximate height/fee policy',
+  const report={version:1,status:'running',candidate_executed:false,native_raw_exit_code:null,scope:'actual land height application UI; explicit approximate height/fee policy',
     original_passing_cases:0,original_visual_agreement:'unsupported',
     host_head:execFileSync('git',['rev-parse','HEAD'],{cwd:scriptsRoot,encoding:'utf8'}).trim(),
     native_source_tree:execFileSync('git',['rev-parse','HEAD:src'],{cwd:scriptsRoot,encoding:'utf8'}).trim(),
@@ -86,29 +86,23 @@ test('real land Raise quote Cancel draft and paid completion preserve the seven-
     const producerClosed=!browser.isConnected();
     const sealed=producerClosed?await cursor.seal():{text:cursor.text,reads:structuredClone(cursor.reads),failure:'Producer close failed; retained prefix only'};
     const chunks=readFileSync(chunksPath,'utf8').split('\n').filter(Boolean).map(line=>JSON.parse(line));
-    const joined=chunks.map(chunk=>chunk.text).join('');if(producerClosed)assert.equal(joined,sealed.text);
+    const joined=chunks.map(chunk=>chunk.text).join('');
     writeFileSync(`${artifacts}/application.log`,sealed.text);report.browser_errors=errors;
-    report.log_transport={sealed:producerClosed,partial:report.status!=='passed'||!!report.log_capture_error||!producerClosed,raw_sha256:hash(sealed.text),joined_chunk_sha256:hash(joined),retained_utf16:sealed.text.length,retained_utf8:Buffer.byteLength(sealed.text),reads:sealed.reads,settled_failure:sealed.failure};
+    report.log_transport={sealed:producerClosed,partial:report.status!=='passed'||!!report.log_capture_error||!producerClosed||sealed.failure!==null||joined!==sealed.text,raw_sha256:hash(sealed.text),joined_chunk_sha256:hash(joined),retained_utf16:sealed.text.length,retained_utf8:Buffer.byteLength(sealed.text),reads:sealed.reads,settled_failure:sealed.failure};
     let finalFailure=null;
     try{
       assert.equal(report.log_capture_error,undefined);assert.equal(report.hook_capture_error,undefined);assert.equal(report.browser_close_error,undefined);assert.ok(producerClosed);
       if(report.status==='passed'){
-        assert.deepEqual(errors,[]);assert.equal(report.native_log_configuration.installations,1);
-        assert.equal(report.native_log_configuration.barrier.continued,true,'Main runtime continuation must acknowledge success');
-        assert.ok(report.native_log_configuration.worker_requests?.some(row=>row.continued===true),'An actual pthread runtime continuation must acknowledge success');
-        assert.ok(report.native_log_configuration.worker_requests.every(row=>row.continued===true),'Every recorded pthread request must acknowledge actual continuation');
-        assert.ok(report.native_log_configuration.callbacks?.first_callback);
-        assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_out_bound,true);
-        assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_err_bound,true);
-        assert.equal(report.native_log_configuration.callbacks.first_callback.runtime_callMain_present,true);
+        verifyHeightFinalization({sealed,joined,producerClosed,errors,configuration:report.native_log_configuration,nativeExit:report.native_exit});
       }
-    }catch(error){finalFailure=error;report.final_artifact_error=String(error);report.status='failed-or-incomplete';}
+    }catch(error){finalFailure=error;report.final_artifact_error=String(error);report.status='failed-or-incomplete';report.log_transport.partial=true;}
+    report.log_transport.unread_tail=report.log_transport.partial?'unknown; complete success/closure/final suffix was not proved':false;
     writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');
     if(finalFailure)throw finalFailure;
   });
   runtimeBarrier=await attachRuntimeLogBarrier(page,browser,{runtimeURL:`${address}/GLSMAC.js`,bootstrapURL:`${address}/bootstrap.js`,originalLogSource,metadata:report.native_log_configuration,onError:error=>errors.push(String(error))});
   const presentation=new HeightPresentation(),records=[],events=[];let consumed=0,fatalTail='';
-  const fatal=/TH_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]/i;
+  const fatal=heightFatal;
   const read=async()=>{
     const packet=await cursor.read(),text=fatalTail+packet.text;assert.doesNotMatch(text,fatal);fatalTail=text.slice(text.lastIndexOf('\n')+1);assert.deepEqual(errors,[]);
     const complete=cursor.text.lastIndexOf('\n')+1;
@@ -245,5 +239,10 @@ test('real land Raise quote Cancel draft and paid completion preserve the seven-
   assert.ok(changed.includes(`${quote.x},${quote.y}`));assert.equal(after.terrain_trace.tiles[`${quote.x},${quote.y}`].elevation.center,quote.destination_elevation);
   report.effect={changed_quote_tiles:changed,actor_logical_position_preserved:true,actual_fee:quote.fee};
   report.unsupported=['original-game-height/fee/contour/climate/dome/victim agreement','coast/sea transitions and SeaFormer production','typed frontend mesh vertices/resident z/facing/tool frames','original animation timing/audio/music','live browser RNG-state getter','external debug-log autoscroll'];
-  await key('Control+Alt+q','Q',6);await page.waitForFunction(()=>document.body.dataset.state==='exited');assert.deepEqual(errors,[]);report.status='passed';
+  await key('Control+Alt+q','Q',6);await page.waitForFunction(()=>document.body.dataset.state==='exited');
+  const exit=await page.evaluate(()=>({body_state:document.body.dataset.state,status_text:document.querySelector('#status').textContent}));
+  assert.equal(exit.body_state,'exited');assert.equal(exit.status_text,'GLSMAC exited (0).');
+  const code=exit.status_text.match(/^GLSMAC exited \((-?\d+)\)\.$/);assert.ok(code);
+  report.native_raw_exit_code=Number(code[1]);report.native_exit={...exit,raw_code:report.native_raw_exit_code};
+  assert.equal(report.native_raw_exit_code,0);assert.deepEqual(errors,[]);report.status='passed';
 });

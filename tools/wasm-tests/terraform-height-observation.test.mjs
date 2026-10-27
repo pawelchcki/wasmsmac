@@ -2,7 +2,7 @@
 // gameplay or original-game evidence.
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {HeightPresentation,completedHeightKey,verifyHeightCapture,nativeHeightWorld,auditPaidLandHeight} from './terraform-height-observation.mjs';
+import {HeightPresentation,completedHeightKey,verifyHeightCapture,nativeHeightWorld,auditPaidLandHeight,verifyHeightFinalization} from './terraform-height-observation.mjs';
 const edge=(seq,kind,data,target='node')=>({seq,kind,data,target});
 
 test('height key receipt links raw SDL ingress to normalized completed dispatch',()=>{
@@ -85,4 +85,17 @@ test('native paid audit rejects terrain edits beyond actual patch adjacency',()=
   pair.after.world.terrain_trace.tiles['8,8']=structuredClone(pair.before.world.terrain_trace.tiles['8,8']);
   pair.after.world.terrain_trace.tiles['8,8'].elevation.left=65;
   assert.throws(()=>auditPaidLandHeight(pair.before,pair.after,pair.quote));
+});
+
+function finalState(){return{sealed:{text:'all retained\n',failure:null},joined:'all retained\n',producerClosed:true,errors:[],
+  configuration:{installations:1,barrier:{continued:true},worker_requests:[{continued:true}],callbacks:{first_callback:{runtime_out_bound:true,runtime_err_bound:true,runtime_callMain_present:true}}},
+  nativeExit:{body_state:'exited',status_text:'GLSMAC exited (0).',raw_code:0}};}
+
+test('final seal rejects unknown tail late errors incomplete worker ACK and nonzero native status',()=>{
+  verifyHeightFinalization(finalState());
+  const corruptions=[r=>r.sealed.failure='late read failed',r=>r.joined+='39 late bytes',
+    r=>{r.sealed.text+='TH_ERROR|late\n';r.joined=r.sealed.text;},r=>r.errors.push('late barrier rejection'),
+    r=>r.configuration.worker_requests.push({continued:false}),r=>r.configuration.callbacks.first_callback.runtime_callMain_present=false,
+    r=>r.nativeExit.raw_code=1,r=>r.nativeExit.status_text='GLSMAC exited (1).',r=>r.producerClosed=false];
+  for(const corrupt of corruptions){const row=finalState();corrupt(row);assert.throws(()=>verifyHeightFinalization(row));}
 });

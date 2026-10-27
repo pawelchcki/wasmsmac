@@ -98,13 +98,21 @@ is sent between them. Frames are candidate evidence, not original pixel matches
 or typed mesh/actor-Z telemetry.
 
 Success additionally requires final Q delivery, the native application's normal
-zero-code exit state, Node process zero, no late browser/barrier/native errors,
+zero-code exit state and actual `#status` text `GLSMAC exited (0).` (recorded as
+`native_raw_exit_code: 0`), Node process zero, no late browser/barrier/native errors,
 actual main continuation ACK, at least one actual pthread continuation ACK,
 first real callback out/err identity and complete sealed raw chunks. Raw GSE
 snapshot text remains available because Node's JSON parser folds integral
 native Float numbers; movement additionally carries actual native Float32 bits.
 The first callback must also prove `runtime_callMain_present === true`, and
 every recorded worker request must have a successful continuation ACK.
+Final verification scans the complete sealed raw suffix for native errors,
+requires `sealed.failure === null` and exact raw/chunk equality. Any final
+verification failure marks the artifact failed/partial with unknown-tail scope.
+Node comparisons preserve parsed values, including signed zero where the JSON
+token provides it. Native integral Float versus Int typing and exact numeric
+wire spelling remain in the retained raw GSE JSON; Node does not claim to
+distinguish those two native types after parsing.
 
 ## Known source lead and remaining scope
 
