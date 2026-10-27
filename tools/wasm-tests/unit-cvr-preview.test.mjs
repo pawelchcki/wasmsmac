@@ -9,6 +9,7 @@ import {chromium} from 'playwright';
 import {PNG} from 'pngjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
+const scriptsRoot = process.env.WASM_SCRIPTS_ROOT || root;
 const build = process.env.WASM_APP_DIR || `${root}build/wasm-release/bin`;
 const assets = process.env.SMAC_ASSETS_DIR;
 const artifacts = process.env.CVR_ARTIFACTS_DIR || `${root}tools/wasm-tests/build/artifacts/unit-cvr`;
@@ -43,6 +44,7 @@ const world = String.raw`return (game) => {
 const main = String.raw`#main((glsmac) => {
  #include('game/game')(glsmac); #include('ui/ui')(glsmac);
  const observers = #include('tests/_state_trace_observer');
+ const mini_map = #include('ui/parts/game/bottom_bar/mini_map');
  glsmac.on('configure_game',(e) => {
   const game = e.game; let selected = null;
   game.on('unit_select',(e) => { selected = e.unit.id + 0; #print('CVR_SELECTED|' + e.unit.def); });
@@ -63,12 +65,14 @@ const main = String.raw`#main((glsmac) => {
    for (unit of source.get_units()) { if (unit.def == 'Formers') { mover = unit; } }
    if (mover == null) { throw Error('Missing installed component unit'); }
    let before = null;
-   #async(0,() => {
-    glsmac.ui.root.on('keydown',(e) => {
+   glsmac.ui.root.on('keydown',(e) => {
      if (e.modifiers != {}) { return false; }
      if (e.code == 'K') { game.select_unit(mover); return true; }
      if (e.code == 'P') {
       const snapshot = observer.read();
+      const treasury = game.get_player().get_energy_state();
+      if (mini_map.info_energy.text != 'Energy: ' + #to_string(treasury.credits)) { throw Error('Actual native treasury differs from mounted HUD label'); }
+      #print('CVR_TREASURY|' + #to_string(treasury.credits) + '|' + mini_map.info_energy.text);
       if (#sizeof(snapshot.players) != 7 || #sizeof(snapshot.bases) != 7 || #sizeof(snapshot.units) != 7) { throw Error('Incomplete all-player native coverage'); }
       #print('CVR_NATIVE|' + #to_string(snapshot));
       if (before == null) {
@@ -88,8 +92,7 @@ const main = String.raw`#main((glsmac) => {
      if (e.code == 'Q') { glsmac.exit(); return true; }
      return false;
     });
-    #print('CVR_READY'); return false;
-   });
+   #print('CVR_READY');
   });
  }); glsmac.run();
 });`;
@@ -98,8 +101,8 @@ test('installed CVR component traverses asset bridge, HUD, billboard and real mo
   skip: !assets && 'Requires installed SMAC assets', timeout: 180000,
 }, async t => {
   mkdirSync(artifacts,{recursive:true});
-  const scripts=Object.fromEntries(readdirSync(`${root}GLSMAC_data/default`,{recursive:true}).filter(n=>n.endsWith('.gls.js')).sort()
-    .map(n=>[`GLSMAC_data/default/${n}`,readFileSync(`${root}GLSMAC_data/default/${n}`,'utf8')]));
+  const scripts=Object.fromEntries(readdirSync(`${scriptsRoot}/GLSMAC_data/default`,{recursive:true}).filter(n=>n.endsWith('.gls.js')).sort()
+    .map(n=>[`GLSMAC_data/default/${n}`,readFileSync(`${scriptsRoot}/GLSMAC_data/default/${n}`,'utf8')]));
   const observer=readFileSync(`${root}GLSMAC_data/tests/_state_trace_observer.gls.js`,'utf8');
   const report={version:1,scope:'production stock Former component application rendering/movement',
     original_visual_agreement:'unsupported', original_passing_cases:0,
@@ -149,7 +152,7 @@ test('installed CVR component traverses asset bridge, HUD, billboard and real mo
   },{scripts,main,world,observer});
   report.candidate_executed=true; await page.locator('#start').click(); await waitLog('CVR_READY');
   await page.keyboard.press('k'); await waitLog('CVR_SELECTED|Formers'); await page.waitForTimeout(500);
-  await page.keyboard.press('p'); await waitLog('CVR_BEFORE');
+  await page.keyboard.press('p'); await waitLog('CVR_BEFORE');await waitLog('CVR_TREASURY|0|Energy: 0');
   const capture=async name=>{const started=performance.now();const bytes=await page.locator('#canvas').screenshot({path:`${artifacts}/${name}.png`});
     report.captures.push({name,acquired_ms:performance.now()-started,sha256:hash(bytes)});return bytes;};
   const rendered=PNG.sync.read(await capture('selected-before'));
