@@ -37,3 +37,27 @@ snapshots and owned repeating timers. Optional runtime-backed Python checks
 require their exact intended failure, actual cleanup, normal failing-test return,
 and the absence of PASS, summary and success markers; these are not passing game
 cases. Native verification of this new source checkpoint is still pending.
+
+## Bounded independent packets
+
+The grouped nine-callback attempt also preserved all seven cases / 47 assertions
+but timed out at the unchanged 120-second gate after its summary at 112.996
+seconds. It remains a failed gate. Therefore the logical catalog suite must run
+three independent packets selecting original indices `[0,3)`, `[3,5)`, `[5,7)`.
+The complete canonical script remains available for direct native callers.
+Packet scripts are underscore producers, not duplicate default-native tests.
+Each uses the same helper and actual original case entries, with an explicit
+indexed-value materialization required by GSE's ArrayRef semantics.
+
+Every packet gets an unchanged 120-second isolated worker and 2 GiB limit. This
+is explicitly up to three worker budgets / 360 seconds of serial worker time,
+plus launch/report overhead, not a larger global timeout. The logical suite can
+pass only after all three workers report their actual native success footer and
+raw zero exits, with exactly the original seven names in source order and 47
+assertions in aggregate. No joined output is reparsed as a fabricated single
+native run, and no synthetic native footer is emitted. A packet never serializes
+or recreates a live case halfway through: each original case already constructs
+and removes its own fixture. Dynamic IDs remain obtained from that case's real
+native entities. Cross-case chronology across different workers is not claimed
+as gameplay timing; the ordered logical corpus and each case's action sequence
+are preserved.
