@@ -96,3 +96,28 @@ assignments. It does not load the runtime or instantiate WASM. It exercises
 both output lanes in a declared alternating replay, since original channel
 boundaries were not recorded. Actual runtime binding and first-callback proof
 remain requirements of the next candidate browser.
+
+## Complete NO-WASM hook integrity replay
+
+Source `9cc24c90` completed both closed and open detail states with all
+883 LF-modeled messages and 11551539 bytes. Both output hashes equal the full
+input SHA256 `24fa026db81f4d4062af5b8f0bd9f11fc9cfd9f653181d619e4955fcfa95ad99`.
+All callback sequences, alternating declared stdout/stderr lanes and DOM
+before/after offsets agree. No runtime script, callMain, WASM resource or
+network request occurred; Node exited 0 and Chromium was reaped.
+
+The hook replay constructs a declared Module configuration model and executes
+only the two independently source-asserted handler assignments. Its first
+callback records bound out/err but callMain absent. That is deliberately not
+actual engine-capture evidence. The candidate route must still acknowledge
+the main script barrier before unmodified runtime execution and record its
+first actual callback with both out/err bound to the configured hooks.
+
+Replay wall times were 1.3354 seconds closed and 0.754 seconds open. They are
+integrity diagnostics, not paired speedup or gameplay timing claims: unlike
+the original logger cost measurement, this replay has no per-row host await.
+The adjacent full-hook replay JSON binds exact source/input/output hashes;
+raw logs and callback records remain `/tmp/terraform-log-hook-full883`.
+Nineteen pure checks also pass, including runtime worker/main classification,
+late/missing/repeated installation rejection and delayed39-byte sealing.
+The actual game-browser smoke remains failed until separately rerun.
