@@ -15,6 +15,7 @@ import {nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
 import {declaredTerrain} from './terraform-browser-inputs.mjs';
 import {WorkshopPresentation} from './unit-workshop-presentation.mjs';
+import {completedWorkshopKey} from './unit-workshop-key-receipt.mjs';
 import {workshopMain,workshopWorld} from './unit-workshop-browser-fixture.mjs';
 
 const root=fileURLToPath(new URL('../../',import.meta.url));
@@ -44,6 +45,7 @@ test('real Workshop Window browses existing designs and commits only normal prod
     native_source_tree:execFileSync('git',['rev-parse','HEAD:src'],{cwd:scriptsRoot,encoding:'utf8'}).trim(),
     production_default_sha256:hash(JSON.stringify(scripts)),runtime_js_sha256:hash(runtime),runtime_wasm_sha256:hash(readFileSync(`${build}/GLSMAC.wasm`)),
     observer_sha256:hash(workshopMain),world_input_sha256:hash(workshopWorld),observer_helpers_sha256:hash(JSON.stringify(helpers)),seed_requested:seed,
+    key_receipt_matcher_sha256:hash(readFileSync(new URL('unit-workshop-key-receipt.mjs',import.meta.url))),
     web_sha256:Object.fromEntries(['index.html','bootstrap.js','asset-store.js'].map(name=>[name,hash(readFileSync(`${build}/${name}`))])),
     shared_helpers_sha256:Object.fromEntries(['browser-log-cursor.mjs','browser-native-log-hook.mjs','runtime-fetch-barrier.mjs','terraform-browser-geometry.mjs','terraform-browser-pointer.mjs'].map(name=>[name,hash(readFileSync(new URL(name,import.meta.url)))])),
     declared_input:{map:'source-declared16x16-arid',players:7,bases:7,units:8,recipes:'actual source basic and optional Sea Former; explicit fixture inventory'},
@@ -126,12 +128,8 @@ test('real Workshop Window browses existing designs and commits only normal prod
   const settledBase=()=>{const ui=latest('WS_STATE')?.ui;return ui?.base_open&&!ui.popup_sliding&&!ui.popup_hiding;};
   const key=async(shortcut,code,modifiers=0)=>{
     await read();const fence=presentation.sequence;await page.keyboard.press(shortcut);
-    const receipt=await wait(()=>{
-      const begin=events.find(event=>event.seq>fence&&event.kind==='input.dispatch'&&event.data.phase==='begin'&&event.data.type==='keydown'&&event.data.code===code&&event.data.modifiers===modifiers);
-      const ingress=begin&&events.find(event=>event.seq>fence&&event.seq<begin.seq&&event.kind==='input.ingress'&&event.data.ingress===begin.data.ingress&&event.data.type==='keydown'&&event.data.code===code&&event.data.modifiers===modifiers);
-      const end=begin&&events.find(event=>event.seq>begin.seq&&event.kind==='input.dispatch'&&event.data.phase==='end'&&event.data.ingress===begin.data.ingress);
-      return ingress&&end?{ingress,begin,end}:null;
-    });report.processed_keys.push({shortcut,...receipt});return receipt;
+    const receipt=await wait(()=>completedWorkshopKey(events,fence,code,modifiers));
+    report.processed_keys.push({shortcut,...receipt});return receipt;
   };
   const click=async target=>{
     await read();const fence=presentation.sequence;const viewport=latest('WS_STATE')?.ui.viewport;assert.ok(viewport);

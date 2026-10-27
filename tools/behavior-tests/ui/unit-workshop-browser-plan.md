@@ -188,6 +188,18 @@ parses or numerically normalizes. The whole new flow was audited separately:
 The corrected embedded GSE fixture remains unexecuted until a newly granted,
 separately frozen attempt. The historical failed execution source is unchanged.
 
+Independent review also caught a pre-run keyboard matcher defect: raw SDL ingress
+contains keycode/scancode/SDL modifier bits, while dispatch BEGIN contains the
+normalized GSE code/modifiers. The bounded key matcher now checks normalized
+fields only on BEGIN, links the preceding raw ingress by identical ingress ID and
+event type, and requires the matching later END. Raw fields remain unchanged.
+Actual pinned P/R packets and wrong-ID/type/fence/completion negatives cover this
+boundary. Replaying the full strict `0322db43` ledger matches all 32 complete
+keydown triples; its final observer-I BEGIN has no retained END and is correctly
+rejected as incomplete. This missing observer completion is outside passing
+input totals. The independently queued Workshop snapshot protocol is designed
+to drain after dispatch, and still needs its actual first successful execution.
+
 ## Concrete graphics and Workshop gaps
 
 | Area | Current bounded support | Unsupported |
