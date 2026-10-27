@@ -637,6 +637,42 @@
       "changed_fields": 229,
       "float_unit_fields": 96,
       "command": "python3 tools/behavior-tests/state_trace/terraform_height_browser_audit.py --artifacts /tmp/terraform-land-height-v6-second --output tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit.json"
+    },
+    {
+      "id": "explicit-schema-and-full-finalization-v3",
+      "kind": "read-only unchanged capture re-audit; zero new engine/browser cases",
+      "auditor_source": "tools/behavior-tests/state_trace/terraform_height_browser_audit.py",
+      "auditor_source_sha256": "ded7433a2e435ab42763dc2425b7e5945c34d226dd015c05af16b3b57182d1d8",
+      "code_freeze": "f7ec363e2568939e7982b0b5a8b77a5f7e2164fd",
+      "result_path": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-finalization.json",
+      "result_sha256": "bbaf5e2c9a11e53deb7833cd9456698df45ed8d755aa41d40098de336c27a57d",
+      "raw_sha256": "7877baed15b88c2700f3042fe5c31f64c6ee66517dcef04541c1ced832bad473",
+      "report_sha256": "7f196c8f5de67e76355f3f49cff0ac20a4a4f3ef35fc7021c90d993f73f76f3c",
+      "preflight_sha256": "791b078abf2949ddb1fb2efcd322b05dc41198e6114f31aa1ad2816375264622",
+      "preflight_schema": "historical-prelaunch-input-binding:791b078a",
+      "complete_worlds": 6,
+      "per_world": {
+        "players": 7,
+        "units": 8,
+        "bases": 7,
+        "tiles": 128
+      },
+      "finalization": {
+        "sealed_complete": true,
+        "native_exit_verified": true,
+        "actual_main_ack": true,
+        "actual_worker_acks": 8,
+        "actual_exit_key_and_request": true,
+        "full_raw_fatal_scan": "clean"
+      },
+      "external_node_exit": {
+        "supported": true,
+        "external_raw_exit_code": 0,
+        "tool_session_id": 40314,
+        "completion_chunk_id": "0ae251",
+        "artifact_sha256": "6ab902e12ee6a6d0f3a4a4f52868a0bf5232a00ea408475ddbba1afd2850673d"
+      },
+      "command": "python3 tools/behavior-tests/state_trace/terraform_height_browser_audit.py --artifacts /tmp/terraform-land-height-v6-second --outer-outcome /tmp/terraform-land-height-v6-second/raw-outcome.json --output tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-finalization.json"
     }
   ],
   "historical_preflight_creation": {

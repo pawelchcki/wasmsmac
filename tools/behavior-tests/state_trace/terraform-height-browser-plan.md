@@ -286,3 +286,48 @@ output/hash. That read-only replay consumes the unchanged14,465,994-byte raw
 capture and original report/preflight, checks all6 worlds/229 changed fields and
 96 native Float tokens, and adds zero game/browser cases. No original-world or
 expected-answer data was regenerated.
+
+## Explicit envelope and complete finalization audit
+
+The current re-audit recognizes exactly two preflight envelopes. The explicit
+`terraform-height-producer-preflight.v1` schema must contain its required fields,
+source/input hashes and report digest binding. The **one historical** kind-less
+`prelaunch-input-binding` record is recognized by its complete declared shape and
+immutable SHA791b078a…64622; absence of `kind` is not a generic fallback. Both
+paths bind available captured source/helper hashes, exact fixture files, head and
+runtime, requested seed/budget, shared-duration rows and actual native Raise
+metadata. An unknown/null kind or a stripped V1 kind rejects. No historical
+preflight or expected world is rewritten.
+
+`terraform-height-browser-v6-reaudit-finalization.json` is a further, separately
+identified read-only re-audit. Older initial and v2 results remain recorded.
+It checks the complete sealed raw/chunks and UTF16 offsets, reported lengths and
+hashes, no read/close/browser/late barrier errors, full final-suffix fatal scan,
+main and all8 pinned-runtime worker continuation ACKs, actual first and recorded
+callback capture identities, actual native Q ingress/dispatch/exit request, and
+actual retained body/status/native code0. Native-field-only `audit_records` has
+**zero full browser case credit**.
+
+Full browser credit additionally requires genuine completion evidence from the
+external launching tool/process. It can never be inferred from native DOM status,
+TAP, the report's `status`, or a producer writing its own assumed future exit.
+For this historical capture the retained actual tool receipt is pinned to
+session40314/chunk0ae251, raw process0, reaping, and its original raw/report/
+preflight/head bindings. The external artifact SHA6ab902e…0673d is unchanged.
+
+```sh
+python3 tools/behavior-tests/state_trace/terraform_height_browser_audit.py \
+  --artifacts /tmp/terraform-land-height-v6-second \
+  --outer-outcome /tmp/terraform-land-height-v6-second/raw-outcome.json \
+  --output /path/to/separate/read-only-audit.json
+```
+
+`--outer-outcome` defaults to `ARTIFACTS/raw-outcome.json`. Missing external
+evidence fails the full audit and adds no browser case. Future externally supplied
+records use explicit `terraform-height-external-process-outcome.v1`, retain actual
+launch command, tool session/chunk and original completion result, native exit and
+reaping, and bind exact capture `raw_sha256`, `report_sha256`, `preflight_sha256`
+and `host_head`. The supplied completion must be an actual external observation;
+the auditor/producer does not create it or authenticate arbitrary operator files.
+Wrong-run, unknown-schema, missing/nonzero completion or unreaped records reject.
+The existing historical receipt is not reusable for another capture.
