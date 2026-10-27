@@ -41,6 +41,8 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const originalScriptsHash=hash(JSON.stringify(scripts));
   const diagnosticPath='GLSMAC_data/default/ui/parts/game/game.gls.js';
   const originalRoot=scripts[diagnosticPath];
+  const rootDiagnosticEnabled=process.env.TERRAFORM_ROOT_DIAGNOSTIC==='1';
+  if(rootDiagnosticEnabled){
   const registry=`const terraform_browser_registry = () => {
     const local_preview = p.modules.bottom_bar.pp.sections.object_preview;
     const root_present = #is_defined(p.modules.terraforming_target);
@@ -65,6 +67,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   scripts[diagnosticPath]=scripts[diagnosticPath].replace(cancelMarker,"p.modules.terraforming_target.cancel(); #print('TF_DIAGNOSTIC_ROOT_AFTER|' + #json_text_exact(terraform_browser_registry())); return true;");
   const quitMarker='p.maybe_quit(true);';assert.equal(scripts[diagnosticPath].split(quitMarker).length,2);
   scripts[diagnosticPath]=scripts[diagnosticPath].replace(quitMarker,"p.maybe_quit(true); #print('TF_DIAGNOSTIC_ROOT_AFTER|' + #json_text_exact(terraform_browser_registry()));");
+  }
   writeFileSync(`${artifacts}/diagnostic-root-original.gls.js`,originalRoot);
   writeFileSync(`${artifacts}/diagnostic-root-overlay.gls.js`,scripts[diagnosticPath]);
   const observer=readFileSync(`${scriptsRoot}/GLSMAC_data/tests/_state_trace_observer.gls.js`,'utf8');
@@ -76,7 +79,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     host_head:execFileSync('git',['rev-parse','HEAD'],{cwd:scriptsRoot,encoding:'utf8'}).trim(),
     native_source_tree:execFileSync('git',['rev-parse','HEAD:src'],{cwd:scriptsRoot,encoding:'utf8'}).trim(),
     initial_seed_requested:initialSeed,seed_binding:'existing Game.Start quickstart-seed path; no public live RNG-state getter',
-    scripts_sha256:hash(JSON.stringify(scripts)),original_production_scripts_sha256:originalScriptsHash,diagnostic_overlay:{path:diagnosticPath,before_sha256:hash(originalRoot),after_sha256:hash(scripts[diagnosticPath])},runtime_sha256:hash(readFileSync(`${build}/GLSMAC.wasm`)),
+    scripts_sha256:hash(JSON.stringify(scripts)),original_production_scripts_sha256:originalScriptsHash,diagnostic_overlay:{enabled:rootDiagnosticEnabled,path:diagnosticPath,before_sha256:hash(originalRoot),after_sha256:hash(scripts[diagnosticPath])},runtime_sha256:hash(readFileSync(`${build}/GLSMAC.wasm`)),
     runtime_js_sha256:hash(readFileSync(`${build}/GLSMAC.js`)),
     fixture_sha256:hash(world+main+observer+terrainObserver+cooperationObserver),
     scripts_root:scriptsRoot,fixture_sources:{world:hash(world),main:hash(main),state_observer:hash(observer),terrain_observer:hash(terrainObserver),cooperation_observer:hash(cooperationObserver)},
@@ -105,8 +108,13 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
         documentFocus:document.hasFocus(),visibility:document.visibilityState});
     },{capture:true,passive:true});
   });
-  const errors=[]; page.on('pageerror',error=>errors.push(error.stack||String(error))); page.on('crash',()=>errors.push('Chromium crashed'));
-  t.after(async()=>{try{if(report.status!=='passed')report.status='failed-or-incomplete';
+  const errors=[];report.navigation_timeline=[];
+  const navigation=(kind,url)=>report.navigation_timeline.push({kind,url,observed_node_ms:performance.now()});
+  page.on('framenavigated',frame=>{if(frame===page.mainFrame())navigation('main-frame-navigated',frame.url());});
+  page.on('requestfailed',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())report.navigation_timeline.push({kind:'main-frame-request-failed',url:request.url(),failure:request.failure(),observed_node_ms:performance.now()});});
+  page.on('request',request=>{if(request.isNavigationRequest()&&request.frame()===page.mainFrame())navigation('main-frame-navigation-request',request.url());});
+  page.on('pageerror',error=>{errors.push(error.stack||String(error));navigation('page-error',page.url());});page.on('crash',()=>errors.push('Chromium crashed'));
+  t.after(async()=>{try{if(report.status!=='passed')report.status='failed-or-incomplete';report.browser_errors=errors;
     try{const text=await page.locator('#log').textContent({timeout:1000});writeFileSync(`${artifacts}/application.log`,text);report.diagnostic_root_records=text.split('\n').filter(line=>line.includes('TF_DIAGNOSTIC_REGISTRY|')||line.includes('TF_DIAGNOSTIC_ROOT_KEY|')||line.includes('TF_DIAGNOSTIC_ROOT_AFTER|'));}
     catch(error){report.log_capture_error=String(error);}
     try{report.dom_key_receipts=await page.evaluate(()=>window.__terraformDomReceipt);}catch(error){report.dom_capture_error=String(error);}
@@ -139,7 +147,8 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   },{scripts,main,world,observer,terrainObserver,cooperationObserver,initialSeed});
   report.candidate_executed=true; await page.locator('#start').click(); await waitLog('TF_READY');
   const log=async()=>{const value=await page.locator('#log').textContent();assert.doesNotMatch(value,fatal);assert.deepEqual(errors,[]);return value;};
-  const fresh=async(prefix,action)=>{const before=(await log()).length;await action();await page.waitForFunction(({before,prefix,fatal})=>{const t=document.querySelector('#log').textContent;return t.slice(before).includes(prefix)||new RegExp(fatal).test(t);},{before,prefix,fatal:fatal.source});return(await log()).slice(before);};
+  let freshFence=null;
+  const fresh=async(prefix,action)=>{const before=(await log()).length;freshFence={marker:prefix,log_offset:before,observed_node_ms:performance.now()};await action();await page.waitForFunction(({before,prefix,fatal})=>{const t=document.querySelector('#log').textContent;return t.slice(before).includes(prefix)||new RegExp(fatal).test(t);},{before,prefix,fatal:fatal.source});return(await log()).slice(before);};
   const lines=(text,prefix)=>text.split('\n').filter(line=>line.includes(prefix)).map(line=>line.slice(line.indexOf(prefix)+prefix.length).trim());
   const geometry=new TerraformGeometry();report.input_ledger={enabled:true,dropped:0,events:[]};let traceCursor=0;
   const collect=text=>{
@@ -151,25 +160,27 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     traceCursor=complete;
   };
   const drain=async()=>{const before=report.input_ledger.events.length;await fresh('TF_INPUT|',()=>page.keyboard.press('Control+Alt+i'));collect(await log());return{enabled:true,dropped:0,events:report.input_ledger.events.slice(before)};};
-  const processedKey=async(code,fence)=>{
+  const processedKey=async(code,modifiers,fence)=>{
     const deadline=performance.now()+60000;
     while(performance.now()<deadline){
       const text=await log();collect(text);
-      const begin=report.input_ledger.events.find(e=>e.seq>fence&&e.kind==='input.dispatch'&&e.data.phase==='begin'&&e.data.type==='keydown'&&e.data.code===code);
+      const begin=report.input_ledger.events.find(e=>e.seq>fence&&e.kind==='input.dispatch'&&e.data.phase==='begin'&&e.data.type==='keydown'&&e.data.code===code&&e.data.modifiers===modifiers);
       const end=begin&&report.input_ledger.events.find(e=>e.seq>begin.seq&&e.kind==='input.dispatch'&&e.data.phase==='end'&&e.data.ingress===begin.data.ingress);
-      if(end){report.processed_keys??=[];report.processed_keys.push({begin,end,observed_ms:performance.now()});return;}
+      if(end){const receipt={begin,end,observed_node_ms:performance.now()};report.processed_keys??=[];report.processed_keys.push(receipt);return receipt;}
       const remaining=deadline-performance.now();assert.ok(remaining>0,'Actual native key processing must finish inside existing budget');
       await page.waitForFunction(length=>document.querySelector('#log').textContent.length>length,text.length,{timeout:remaining});
     }
     assert.fail(`Native ${code} did not produce its actual completed dispatch`);
   };
-  const state=async()=>{const text=await fresh('TF_STATE|',async()=>{});const line=lines(text,'TF_STATE|').at(-1);return JSON.parse(line.slice(line.indexOf('|')+1));};
+  const state=async receipt=>{const text=await fresh('TF_STATE|',async()=>{});const line=lines(text,'TF_STATE|').at(-1);const serial=Number(line.slice(0,line.indexOf('|')));const value=JSON.parse(line.slice(line.indexOf('|')+1));
+    report.state_queries??=[];report.state_queries.push({observer_serial:serial,query_fence:structuredClone(freshFence),after_native_key:receipt?{ingress:receipt.begin.data.ingress,code:receipt.begin.data.code,modifiers:receipt.begin.data.modifiers,dispatch_end_sequence:receipt.end.seq}:null,value});return value;};
+  const keyState=async(shortcut,code,modifiers)=>{collect(await log());const fence=geometry.sequence;await page.keyboard.press(shortcut);const receipt=await processedKey(code,modifiers,fence);return state(receipt);};
   const snapshot=async checkpoint=>{const text=await fresh('TF_NATIVE|',()=>page.keyboard.press('Control+Alt+p'));const value=JSON.parse(lines(text,'TF_NATIVE|').at(-1));report.native_snapshots.push({checkpoint,value});return value;};
   const nativeOnly=value=>{const copy=structuredClone(value);delete copy.terrain_trace.ui;return copy;};
   const point=async(x,y)=>{const box=await page.locator('#canvas').boundingBox();const result=nativeToCanvas(x,y,report.native_viewport,box);report.pointer_conversions??=[];report.pointer_conversions.push({native:{x,y},viewport:structuredClone(report.native_viewport),canvas_css_rect:box,css:result});return result;};
   const click=async(x,y)=>{const p=await point(x,y);await page.mouse.click(p.x,p.y);};
   const setup=await fresh('TF_BASE_POINT|',()=>page.keyboard.press('Control+Alt+k'));
-  const basePoint=JSON.parse(lines(setup,'TF_BASE_POINT|').at(-1));
+  let basePoint=JSON.parse(lines(setup,'TF_BASE_POINT|').at(-1));report.base_point_receipts=[{point:structuredClone(basePoint),query_fence:structuredClone(freshFence)}];
   const selected=await state();assert.equal(selected.selected,selected.actor);report.native_viewport=selected.viewport;
   // Native start_ui precedes browser rendering. Await actual nonblank HUD
   // pixels within the existing startup budget, without extra gameplay input.
@@ -205,13 +216,13 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   report.rejected_pointer=JSON.parse(lines(text,'TF_TILE|').at(-1));
   assert.notEqual(report.rejected_pointer.base_owner,selected.owner,'The declared rejection pointer must hit an empty or foreign-owned tile');
   current=await state();assert.ok(current.target,'Non-owned pointer must keep the owned-base picker active');
-  const escapeFence=geometry.sequence;await page.keyboard.press('Escape');await processedKey('ESCAPE',escapeFence);current=await state();assert.equal(current.target,null);assert.equal(current.modal,false);
+  current=await keyState('Escape','ESCAPE',0);assert.equal(current.target,null);assert.equal(current.modal,false);
   let after=await snapshot('after-pointer-Escape');assert.deepEqual(nativeOnly(after),nativeOnly(initial),'Menu/non-owned target/Escape must preserve every observed owner/tile');
-  await page.keyboard.press('Control+r');current=await state();assert.equal(current.target.command,'road_to');
-  const tabFence=geometry.sequence;await page.keyboard.press('Tab');await processedKey('TAB',tabFence);current=await state();assert.equal(current.target,null);assert.equal(current.modal,false);
+  current=await keyState('Control+r','R',2);assert.equal(current.target.command,'road_to');
+  current=await keyState('Tab','TAB',0);assert.equal(current.target,null);assert.equal(current.modal,false);
   after=await snapshot('after-target-Tab');assert.deepEqual(nativeOnly(after),nativeOnly(initial),'Target Tab cancellation must preserve native state');
-  await page.keyboard.press('Control+Alt+k');await page.waitForTimeout(300);
-  await page.keyboard.press('Control+r');current=await state();assert.equal(current.target.command,'road_to');
+  text=await fresh('TF_BASE_POINT|',()=>page.keyboard.press('Control+Alt+k'));basePoint=JSON.parse(lines(text,'TF_BASE_POINT|').at(-1));report.base_point_receipts.push({point:structuredClone(basePoint),query_fence:structuredClone(freshFence)});
+  current=await keyState('Control+r','R',2);assert.equal(current.target.command,'road_to');
   text=await fresh('TF_RESULT|unit_terraform_plan|true|',()=>click(basePoint.x,basePoint.y));
   const result=JSON.parse(lines(text,'TF_RESULT|unit_terraform_plan|true|').at(-1));
   assert.equal(result.command,'road_to');assert.equal(result.target_x,0);assert.equal(result.target_y,2);
