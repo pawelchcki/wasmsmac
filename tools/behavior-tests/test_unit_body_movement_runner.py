@@ -88,6 +88,68 @@ class MovementRunnerTests(unittest.TestCase):
         self.assertIn("if (sampled < 29)",sample);self.assertIn('receipt_seq != null',sample)
         self.assertIn("timer(10,",fixture);self.assertNotIn('timer(0,',fixture)
 
+    def helper(self,code):
+        root=Path(__file__).resolve().parents[2]
+        uri=(root/'tools/wasm-tests/unit-body-movement-browser-fixture.mjs').as_uri()
+        script="import{movementChild}from"+json.dumps(uri)+";"+code
+        env=dict(os.environ);env.pop('SMAC_ASSETS_DIR',None)
+        completed=subprocess.run(['node','--input-type=module','-e',script],cwd=root,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=5,text=True)
+        self.assertEqual(completed.returncode,0,completed.stdout)
+        line=next(line for line in completed.stdout.splitlines() if line.startswith('RESULT|'))
+        return json.loads(line.removeprefix('RESULT|'))
+
+    def test_async_real_readonly_git_preserves_source_tree_and_waits(self):
+        result=self.helper("const r=await movementChild('git',['rev-parse','HEAD:src'],{cwd:process.cwd()});console.log('RESULT|'+JSON.stringify(r));")
+        self.assertEqual(result['stdout'].strip(),runner.SOURCE);self.assertEqual(result['status'],0)
+        self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertIsNone(result['error'])
+        with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+
+    def test_async_git_in_actual_default_node_worker_has_persisted_body_receipt(self):
+        root=Path(__file__).resolve().parents[2];uri=(root/'tools/wasm-tests/unit-body-movement-browser-fixture.mjs').as_uri()
+        with tempfile.TemporaryDirectory() as directory:
+            folder=Path(directory);receipt=folder/'actual-body.json';source=folder/'metadata-only.test.mjs'
+            source.write_text("import{test}from'node:test';import assert from'node:assert/strict';import{writeFileSync}from'node:fs';import{movementChild}from"+json.dumps(uri)+";test('read-only metadata only',async()=>{const r=await movementChild('git',['rev-parse','HEAD:src'],{cwd:"+json.dumps(str(root))+"});writeFileSync("+json.dumps(str(receipt))+",JSON.stringify(r));assert.equal(r.error,null);assert.equal(r.status,0);assert.equal(r.wait_completed,true);});")
+            env=dict(os.environ);env.pop('SMAC_ASSETS_DIR',None)
+            limits=dict(runner.BUDGETS,outer_seconds=3,term_seconds=.2,kill_wait_seconds=.5,cleanup_seconds=.2,postkill_seconds=.2)
+            outcome,raw=runner.capture_child(['node','--test','--test-concurrency=1',str(source)],cwd=root,env=env,out=folder,limits=limits)
+            self.assertEqual(outcome['raw_node_exit'],0,raw.decode(errors='replace'));self.assertTrue(outcome['os_wait_completed'])
+            self.assertEqual(outcome['owned_group_after_cleanup'],'absent');self.assertEqual(outcome['tracked_descendants_after_cleanup'],[])
+            self.assertTrue(receipt.exists(),'No actual inner body receipt; file PASS alone is insufficient')
+            result=json.loads(receipt.read_text());self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertEqual(result['status'],0)
+            self.assertEqual(result['stdout'].strip(),runner.SOURCE)
+            with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+
+    def test_async_actual_nonzero_is_not_promoted_by_fake_pass_output(self):
+        result=self.helper("const r=await movementChild('python3',['-c',\"print('All tests passed.');raise SystemExit(7)\"],{cwd:process.cwd()});console.log('RESULT|'+JSON.stringify(r));")
+        self.assertEqual(result['status'],7);self.assertTrue(result['wait_completed']);self.assertIn('All tests passed.',result['stdout'])
+        with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+
+    def test_async_spawn_error_status_zero_counterexample_never_reports_exit_zero(self):
+        result=self.helper("import cp from 'node:child_process';import{syncBuiltinESMExports}from'node:module';import{EventEmitter}from'node:events';import{PassThrough}from'node:stream';cp.spawn=()=>{const p=new EventEmitter();p.stdout=new PassThrough();p.stderr=new PassThrough();process.nextTick(()=>{const e=Object.assign(Error('spawn git EPERM'),{code:'EPERM',status:0});p.emit('error',e);});return p;};syncBuiltinESMExports();const r=await movementChild('git',['rev-parse','HEAD:src'],{cwd:process.cwd()});console.log('RESULT|'+JSON.stringify(r));")
+        self.assertIsNone(result['status']);self.assertFalse(result['spawned']);self.assertFalse(result['wait_completed'])
+        self.assertEqual(result['spawn_error_code'],'EPERM');self.assertIn('EPERM',result['error'])
+
+    def test_async_timeout_kills_and_waits_owned_child(self):
+        result=self.helper("const r=await movementChild('python3',['-c','import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);print(123,flush=True);time.sleep(10)'],{cwd:process.cwd(),timeout_ms:400,term_ms:50,kill_wait_ms:500});console.log('RESULT|'+JSON.stringify(r));")
+        self.assertTrue(result['timed_out']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
+        self.assertNotEqual(result['status'],0);self.assertLess(result['elapsed_ms'],2000)
+        with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+
+    def test_async_cancellation_reaps_instead_of_leaving_owned_child(self):
+        result=self.helper("const c=new AbortController();const p=movementChild('python3',['-c','import time;time.sleep(10)'],{cwd:process.cwd(),signal:c.signal,timeout_ms:1000,term_ms:50,kill_wait_ms:500});setTimeout(()=>c.abort(),200);const r=await p;console.log('RESULT|'+JSON.stringify(r));")
+        self.assertTrue(result['cancelled']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
+        with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+
+    def test_async_signal_in_normal_after_hook_remains_usable(self):
+        result=self.helper("import{test}from'node:test';test('cheap helper lifecycle only',async t=>{t.after(async()=>{const r=await movementChild('python3',['-c','print(1)'],{cwd:process.cwd(),signal:t.signal});console.log('RESULT|'+JSON.stringify(r));});});")
+        self.assertFalse(result['cancelled']);self.assertEqual(result['status'],0);self.assertTrue(result['wait_completed'])
+
+    def test_child_audit_rejects_error_status_zero_missing_wait_or_cancel(self):
+        value=dict(command='git',args=['rev-parse','HEAD:src'],cwd='/tmp',pid=123,spawned=True,wait_completed=True,status=0,signal=None,error=None,spawn_error_code=None,timed_out=False,cancelled=False,output_limit=False,unknown_wait=False,timeout_ms=10000,term_ms=1000,kill_wait_ms=1000)
+        runner.audited_child(value,'git',value['args'],'/tmp')
+        for key,replacement in [('error','spawnSync git EPERM'),('spawned',False),('wait_completed',False),('cancelled',True),('timed_out',True),('pid',None),('status',True)]:
+            with self.subTest(key=key),self.assertRaises(AssertionError):runner.audited_child(dict(value,**{key:replacement}),'git',value['args'],'/tmp')
+
     def test_proposed_profile_matches_fixed_executable_boundaries(self):
         self.assertEqual(runner.BUDGETS,dict(node_ms=180000,observation_ms=120000,outer_seconds=190,term_seconds=3,kill_wait_seconds=5,cleanup_seconds=8,postkill_seconds=2,census_calls=32,sample_delay_ms=10))
         self.assertEqual(runner.SOURCE,'23e54d08b7dbb00f6b42d325c180a8c868b30ee2')

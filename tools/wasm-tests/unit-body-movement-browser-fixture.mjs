@@ -1,6 +1,50 @@
 // Candidate-only normal movement. No original oracle, duration/pose override or C++ seam.
+import {spawn} from 'node:child_process';
+import {performance} from 'node:perf_hooks';
 import {declaredTerrain} from './terraform-browser-inputs.mjs';
 import {stackOrderWorld} from './unit-stack-order-browser-fixture.mjs';
+// Metadata/evaluator subprocesses only. Async spawn avoids the independently
+// reproduced spawnSync git EPERM setup blocker. No command is inferred successful
+// from an Error.status property; success requires actual spawn + close + exit0.
+export function movementChild(command,args,{cwd,timeout_ms=10000,term_ms=1000,kill_wait_ms=1000,signal,max_output_bytes=1048576}={}){
+  for(const value of [timeout_ms,term_ms,kill_wait_ms,max_output_bytes]){
+    if(!Number.isSafeInteger(value)||value<=0)throw Error('Invalid movement child limit');
+  }
+  return new Promise(resolve=>{
+    const started=performance.now();let child=null,settled=false,spawned=false;
+    let timeout=null,terminate=null,unknown=null,stopping=false,cancelled=false,timedOut=false,overflow=false;
+    let output=[],errors=[],retained=0,spawnError=null;
+    const finish=(status,exitSignal,waited)=>{
+      if(settled)return;settled=true;clearTimeout(timeout);clearTimeout(terminate);clearTimeout(unknown);
+      signal?.removeEventListener('abort',abort);
+      resolve({command,args:[...args],cwd,pid:child?.pid??null,spawned,
+        status:spawned&&waited?status:null,signal:exitSignal??null,wait_completed:spawned&&waited,
+        timed_out:timedOut,cancelled,output_limit:overflow,unknown_wait:spawned&&!waited,
+        error:spawnError?String(spawnError.stack||spawnError):null,
+        spawn_error_code:spawnError?.code??null,timeout_ms,term_ms,kill_wait_ms,
+        elapsed_ms:performance.now()-started,stdout:Buffer.concat(output).toString('utf8'),stderr:Buffer.concat(errors).toString('utf8')});
+    };
+    const stop=reason=>{
+      if(settled||stopping)return;stopping=true;timedOut=reason==='timeout';cancelled=reason==='cancel';overflow=reason==='output';
+      if(!child?.pid){finish(null,null,false);return;}
+      const send=kind=>{if(child.exitCode!=null||child.signalCode!=null)return;try{child.kill(kind);}catch(error){spawnError??=error;}};
+      send('SIGTERM');
+      terminate=setTimeout(()=>{if(settled)return;send('SIGKILL');unknown=setTimeout(()=>finish(null,null,false),kill_wait_ms);},term_ms);
+    };
+    const abort=()=>stop('cancel');
+    if(signal?.aborted){cancelled=true;finish(null,null,false);return;}
+    signal?.addEventListener('abort',abort,{once:true});
+    try{
+      child=spawn(command,args,{cwd,stdio:['ignore','pipe','pipe']});
+      child.once('spawn',()=>{spawned=true;});
+      child.once('error',error=>{spawnError=error;if(!spawned&&!child.pid)finish(null,null,false);else stop('error');});
+      child.once('close',(code,exitSignal)=>finish(code,exitSignal,true));
+      const collect=(list,data)=>{const available=Math.max(0,max_output_bytes-retained);if(available){list.push(data.subarray(0,available));retained+=Math.min(data.length,available);}if(data.length>available)stop('output');};
+      child.stdout.on('data',data=>collect(output,data));child.stderr.on('data',data=>collect(errors,data));
+      timeout=setTimeout(()=>stop('timeout'),timeout_ms);
+    }catch(error){spawnError=error;finish(null,null,false);}
+  });
+}
 export const movementWorld=stackOrderWorld;
 export function movementTerrain(){
   const bytes=declaredTerrain();const offset=15+0xaa4;

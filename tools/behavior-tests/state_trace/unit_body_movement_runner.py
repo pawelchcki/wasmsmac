@@ -89,6 +89,17 @@ def audit_chunks(text,lines):
     return chunks
 
 
+def audited_child(child,command,args,cwd):
+    # An Error.status===0 (the actual EPERM counterexample) is never evidence
+    # of an OS spawn/exit. Require all lifecycle facts, not a status in isolation.
+    assert child['command']==command and child['args']==args and Path(child['cwd']).resolve()==Path(cwd).resolve()
+    assert type(child['pid']) is int and child['pid']>0 and child['spawned'] is True and child['wait_completed'] is True
+    assert type(child['status']) is int and child['status']==0 and child['signal'] is None
+    assert child['error'] is None and child['spawn_error_code'] is None
+    assert all(child[key] is False for key in ('timed_out','cancelled','output_limit','unknown_wait'))
+    assert child['timeout_ms']==10000 and child['term_ms']==1000 and child['kill_wait_ms']==1000
+
+
 def audit(pre,result,out):
     # These are the actual Popen return/wait facts, not in-game or parsed TAP results.
     assert type(result['raw_node_exit']) is int and result['raw_node_exit']==0,'Actual OS Node exit zero required'
@@ -112,6 +123,12 @@ def audit(pre,result,out):
     assert report['declared_input']['map_bytes_sha256']==pre['fixture_sha256']['terrain']
     assert report['budgets']==pre['budgets']==BUDGETS and report['native_watchdog_supported'] is False
     assert report['runtime_sampling_trigger']==pre['runtime_sampling_trigger'] and report['endpoint_gate']==pre['endpoint_gate']
+    children=report['setup_children']
+    git_args=[['rev-parse','HEAD:src'],['rev-parse','HEAD:GLSMAC_data/default'],['diff','--exit-code','HEAD','--','src','GLSMAC_data/default'],['ls-files','--others','--exclude-standard','--','src','GLSMAC_data/default'],['rev-parse','HEAD']]
+    assert len(children)==len(git_args)
+    for child,args in zip(children,git_args):audited_child(child,'git',args,pre['host'])
+    assert [json.loads(line) for line in (out/'setup-processes.jsonl').read_text().splitlines()]==children
+    audited_child(report['evaluator_process'],'python3',['-m','state_trace.unit_body_movement_proof',str(out/'application.log'),str(out/'receipt-acceptance.json'),str(out/'movement-result.json')],Path(pre['host'])/'tools/behavior-tests')
     assert report['evaluator_exit_code']==0 and report['evaluator_error'] is None and report['evaluator_signal'] is None
     raw=(out/'application.log').read_bytes(); text=raw.decode('utf-8'); digest=hashlib.sha256(raw).hexdigest()
     transport=report['log_transport'];assert transport['sealed'] is True and transport['partial'] is False
@@ -130,7 +147,7 @@ def audit(pre,result,out):
             'selected_unit_id':proof['selected_unit_id'],'unit_count':proof['unit_count'],'census_reads':proof['census_reads'],'sampled_intermediate_ordinals':proof['sampled_intermediate_ordinals'],
             'asset_server_pid':report['asset_server_pid'],'asset_server_exit':report['asset_server_exit'],
             'artifact_sha256':{name:sha(out/name) for name in ('report.json','application.log','application-log-chunks.jsonl',
-                 'receipt-acceptance.json','movement-result.json','node.log','asset-server.stdout','asset-server.stderr')}}
+                 'receipt-acceptance.json','movement-result.json','setup-processes.jsonl','node.log','asset-server.stdout','asset-server.stderr')}}
 
 
 
