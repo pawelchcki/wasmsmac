@@ -114,3 +114,23 @@ cover Unicode/surrogates, concurrent polling, reset/rewrite rejection, offsets,
 lossless chunk persistence and I/O failure. These offline checks grant no
 browser pass. Reproduce with `terraform-browser-log-replay.mjs RAW_LOG
 LATER_TYPED_REPORT OUTPUT_JSON`; its output binds both actual input hashes.
+
+The cursor retry `0ef0b9c4` failed at 44.487 seconds/raw exit 1 when the first
+Road To state was sampled before any corresponding native pointer packet had
+been drained. All 8487854 received raw bytes survived exact chunk reassembly.
+It passed no complete browser case and established no product click defect.
+The pointer followup preserves one move/down/up sequence, but waits for native
+positive hover on the actual semantic node/descendant before the same press and
+release. Native left mousedown and mouseup must share coordinates inside that
+effective rectangle, match their SDL ingresses and finish the mouseup dispatch;
+only then may a fresh state packet be queried. All map clicks also use the
+mouseup completion fence, including the owned-base submission. No extra input,
+sleep, product change or deadline increase is introduced.
+
+The committed small pointer fixture selects exact observations from the earlier
+candidate report: actual road ingresses 32/33 at (299,611), native row n1585
+bounds (139,602)–(459,619), and mouseup end sequence 62032. Its positive hover
+was absent because the coalesced move ran after the click closed the menu;
+tests retain that absence as negative evidence, and replay an independently
+observed header hover for the positive semantic-node predicate. Missing ends,
+missing ingresses, wrong bounds/button, mismatched releases and mouseout fail.

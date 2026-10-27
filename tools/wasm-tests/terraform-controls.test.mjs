@@ -10,6 +10,7 @@ import {PNG} from 'pngjs';
 import {fixtureSources} from './terraform-browser-inputs.mjs';
 import {TerraformGeometry,nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {BrowserLogCursor} from './browser-log-cursor.mjs';
+import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const scriptsRoot = process.env.WASM_SCRIPTS_ROOT || root;
@@ -187,13 +188,36 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
     }
     assert.fail(`Native ${code} did not produce its actual completed dispatch`);
   };
-  const state=async receipt=>{const text=await fresh('TF_STATE|',async()=>{});const line=lines(text,'TF_STATE|').at(-1);const serial=Number(line.slice(0,line.indexOf('|')));const value=JSON.parse(line.slice(line.indexOf('|')+1));
-    report.state_queries??=[];report.state_queries.push({observer_serial:serial,query_fence:structuredClone(freshFence),after_native_key:receipt?{ingress:receipt.begin.data.ingress,code:receipt.begin.data.code,modifiers:receipt.begin.data.modifiers,dispatch_end_sequence:receipt.end.seq}:null,value});return value;};
+  const state=async(receipt,pointer)=>{const text=await fresh('TF_STATE|',async()=>{});const line=lines(text,'TF_STATE|').at(-1);const serial=Number(line.slice(0,line.indexOf('|')));const value=JSON.parse(line.slice(line.indexOf('|')+1));
+    report.state_queries??=[];report.state_queries.push({observer_serial:serial,query_fence:structuredClone(freshFence),after_native_key:receipt?{ingress:receipt.begin.data.ingress,code:receipt.begin.data.code,modifiers:receipt.begin.data.modifiers,dispatch_end_sequence:receipt.end.seq}:null,after_native_pointer:pointer?{ingress:pointer.up.data.ingress,x:pointer.up.data.x,y:pointer.up.data.y,button:pointer.up.data.button,dispatch_end_sequence:pointer.end.seq}:null,value});return value;};
   const keyState=async(shortcut,code,modifiers)=>{collect(await log());const fence=geometry.sequence;await page.keyboard.press(shortcut);const receipt=await processedKey(code,modifiers,fence);return state(receipt);};
   const snapshot=async checkpoint=>{const text=await fresh('TF_NATIVE|',()=>page.keyboard.press('Control+Alt+p'));const value=JSON.parse(lines(text,'TF_NATIVE|').at(-1));report.native_snapshots.push({checkpoint,value});return value;};
   const nativeOnly=value=>{const copy=structuredClone(value);delete copy.terrain_trace.ui;return copy;};
   const point=async(x,y)=>{const box=await page.locator('#canvas').boundingBox();const result=nativeToCanvas(x,y,report.native_viewport,box);report.pointer_conversions??=[];report.pointer_conversions.push({native:{x,y},viewport:structuredClone(report.native_viewport),canvas_css_rect:box,css:result});return result;};
-  const click=async(x,y)=>{const p=await point(x,y);await page.mouse.click(p.x,p.y);};
+  let lastPointerReceipt=null;
+  const click=async(x,y,semantic)=>{
+    collect(await log());const fence=geometry.sequence;const p=await point(x,y);const deadline=performance.now()+60000;
+    const target=semantic??{x,y};
+    const hitNodes=semantic?[...geometry.nodes.keys()].filter(id=>{
+      const seen=new Set();while(id!=null&&!seen.has(id)){if(id===semantic.id)return true;seen.add(id);id=geometry.nodes.get(id)?.parent;}return false;
+    }):[];
+    const awaitNative=async(probe,label)=>{
+      while(performance.now()<deadline){
+        const text=await log();collect(text);const receipt=probe();if(receipt)return receipt;
+        const remaining=deadline-performance.now();assert.ok(remaining>0,`${label} must complete within the existing budget`);
+        await page.waitForFunction(length=>document.querySelector('#log').textContent.length>length,text.length,{timeout:remaining});
+      }
+      assert.fail(`${label} did not produce its actual native receipt`);
+    };
+    // Playwright click already emits move/down/up. Fence that SAME move while
+    // the semantic row is live, before SDL coalescing can defer it past click.
+    await page.mouse.move(p.x,p.y);
+    const hover=semantic?await awaitNative(()=>nativeHover(report.input_ledger.events,fence,hitNodes,semantic.bounds),'Intended native hover'):null;
+    await page.mouse.down({button:'left'});await page.mouse.up({button:'left'});
+    const receipt=await awaitNative(()=>completedNativeClick(report.input_ledger.events,fence,target),'Native left mouseup dispatch');
+    receipt.hover=hover;receipt.target=structuredClone(target);receipt.pre_click_sequence=fence;receipt.observed_node_ms=performance.now();
+    report.processed_pointers??=[];report.processed_pointers.push(receipt);lastPointerReceipt=receipt;return receipt;
+  };
   const setup=await fresh('TF_BASE_POINT|',()=>page.keyboard.press('Control+Alt+k'));
   let basePoint=JSON.parse(lines(setup,'TF_BASE_POINT|').at(-1));report.base_point_receipts=[{point:structuredClone(basePoint),query_fence:structuredClone(freshFence)}];
   const selected=await state();assert.equal(selected.selected,selected.actor);report.native_viewport=selected.viewport;
@@ -218,19 +242,19 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   assert.equal(new Set(report.headers.rows.map(row=>row.id)).size,report.headers.rows.length);
   await drain();const header=geometry.button('terraform-header',headers[0].id,headers[0].label,report.headers.viewport);
   report.header_target=header;
-  text=await fresh('TF_ROWS|',()=>click(header.x,header.y));const rows=JSON.parse(lines(text,'TF_ROWS|').at(-1));
-  const headerPacket=await drain();geometry.assertPointerHit(headerPacket,header);
+  text=await fresh('TF_ROWS|',()=>click(header.x,header.y,header));const rows=JSON.parse(lines(text,'TF_ROWS|').at(-1));
+  const headerPacket=await drain();geometry.assertPointerHit({events:[lastPointerReceipt.hover,...headerPacket.events]},header);
   assert.equal(rows.length,29);assert.equal(new Set(rows.map(row=>row.id)).size,29);
   assert.ok(rows.find(row=>row.id==='soil_enricher'));assert.ok(rows.find(row=>row.id==='mag_tube'));
   assert.equal(rows.filter(row=>row.id==='monolith').length,0);
   for(const row of rows){const target=geometry.button('terraform-row',row.id,row.label,report.headers.viewport);Object.assign(row,{node_id:target.id,bounds:target.bounds,x:target.x,y:target.y});}
   report.rows=rows;await page.locator('#canvas').screenshot({path:`${artifacts}/complete-menu.png`});
-  const road=rows.find(row=>row.id==='road_to');assert.ok(road.enabled);await click(road.x,road.y);
-  let current=await state();assert.equal(current.target.command,'road_to');assert.equal(current.modal,false);
+  const road=rows.find(row=>row.id==='road_to');assert.ok(road.enabled);const roadTarget=geometry.button('terraform-row',road.id,road.label,report.headers.viewport);const roadPointer=await click(road.x,road.y,roadTarget);
+  let current=await state(null,roadPointer);assert.equal(current.target.command,'road_to');assert.equal(current.modal,false);
   text=await fresh('TF_TILE|',()=>click(basePoint.x+100,basePoint.y+100));
   report.rejected_pointer=JSON.parse(lines(text,'TF_TILE|').at(-1));
   assert.notEqual(report.rejected_pointer.base_owner,selected.owner,'The declared rejection pointer must hit an empty or foreign-owned tile');
-  current=await state();assert.ok(current.target,'Non-owned pointer must keep the owned-base picker active');
+  current=await state(null,lastPointerReceipt);assert.ok(current.target,'Non-owned pointer must keep the owned-base picker active');
   current=await keyState('Escape','ESCAPE',0);assert.equal(current.target,null);assert.equal(current.modal,false);
   let after=await snapshot('after-pointer-Escape');assert.deepEqual(nativeOnly(after),nativeOnly(initial),'Menu/non-owned target/Escape must preserve every observed owner/tile');
   current=await keyState('Control+r','R',2);assert.equal(current.target.command,'road_to');
@@ -241,7 +265,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   text=await fresh('TF_RESULT|unit_terraform_plan|true|',()=>click(basePoint.x,basePoint.y));
   const result=JSON.parse(lines(text,'TF_RESULT|unit_terraform_plan|true|').at(-1));
   assert.equal(result.command,'road_to');assert.equal(result.target_x,0);assert.equal(result.target_y,2);
-  await page.waitForTimeout(300);current=await state();assert.equal(current.target,null);assert.equal(current.pending,null);
+  await page.waitForTimeout(300);current=await state(null,lastPointerReceipt);assert.equal(current.target,null);assert.equal(current.pending,null);
   report.final_state=current;await snapshot('after-owned-base-request');
   await drain();
   assert.equal(report.input_ledger.enabled,true);assert.equal(report.input_ledger.dropped,0,'Native input observer must remain complete');
