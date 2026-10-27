@@ -11,27 +11,28 @@ const supports = (action) => { return contains(simple,action); };
 // or claims the original river-routing/RNG policy. No outlet rejects purely.
 const aquifer_route = (game,unit) => {
 	const tm = game.get_tm(); const origin = unit.get_tile(); const queue = [{x:origin.x + 0,y:origin.y + 0,previous_index:(0-1)}];
+	// Compact native geometry v1: [1,x,y,integerCenter,water,patchLimit,neighbors].
+	// The neighbor array has W,NW,N,NE,E,SE,S,SW null-or-[x,y] entries.
 	// Native terrain reads are detached and pure during this synchronous plan.
 	// Reuse each coordinate's complete record only within this invocation;
 	// rejected edges remain eligible for examination from another parent.
 	const states = {};
 	const read = (x,y) => {
 		const key = #to_string(x) + ':' + #to_string(y);
-		if (!#is_defined(states[key])) { states[key] = tm.get_terrain_state(x,y); }
+		if (!#is_defined(states[key])) { states[key] = tm.get_terrain_geometry(x,y); }
 		return states[key];
 	};
 	const seen = {}; seen[#to_string(origin.x) + ':' + #to_string(origin.y)] = true; let index = 0; let outlet = (0-1);
 	while (index < #sizeof(queue) && outlet < 0) {
 		const point = queue[index]; const current = read(point.x,point.y);
-		for (direction of ['W','NW','N','NE','E','SE','S','SW']) {
-			const next = current.neighbors[direction];
+		for (next of current[6]) {
 			if (next != null) {
-				const key = #to_string(next.x) + ':' + #to_string(next.y);
+				const key = #to_string(next[0]) + ':' + #to_string(next[1]);
 				if (!#is_defined(seen[key])) {
-					const state = read(next.x,next.y);
-					if (state.elevation.center <= current.elevation.center) {
-						seen[key] = true; queue :+ {x:next.x + 0,y:next.y + 0,previous_index:index + 0};
-						if (state.is_water) { outlet = #sizeof(queue) - 1; break; }
+					const state = read(next[0],next[1]);
+					if (state[3] <= current[3]) {
+						seen[key] = true; queue :+ {x:next[0] + 0,y:next[1] + 0,previous_index:index + 0};
+						if (state[4]) { outlet = #sizeof(queue) - 1; break; }
 					}
 				}
 			}
@@ -41,8 +42,8 @@ const aquifer_route = (game,unit) => {
 	if (outlet < 0) { return null; }
 	const result = []; let cursor = queue[outlet].previous_index;
 	while (cursor >= 0) {
-		const point = queue[cursor]; const state = read(point.x,point.y); state.features.river = true;
-		result :+ {x:point.x + 0,y:point.y + 0,features:#clone(state.features)};
+		const point = queue[cursor]; const features = #clone(tm.get_tile(point.x,point.y).features); features.river = true;
+		result :+ {x:point.x + 0,y:point.y + 0,features:features};
 		cursor = point.previous_index;
 	}
 	return result;

@@ -1,13 +1,17 @@
 const behavior = #include('./_behavior'); const effects = #include('../default/game/terraforming_effects');
 // Count actual native reads without supplying or replacing any terrain answer.
 const counted = (native_tm) => {
- const reads = {}; const tm = {get_terrain_state:(x,y) => {
+ const reads = {}; const full_reads = {};
+ const tm = {get_terrain_geometry:(x,y) => {
   const key = #to_string(x) + ':' + #to_string(y); reads[key] = #is_defined(reads[key]) ? reads[key] + 1 : 1;
+  return native_tm.get_terrain_geometry(x,y);
+ },get_terrain_state:(x,y) => {
+  const key = #to_string(x) + ':' + #to_string(y); full_reads[key] = #is_defined(full_reads[key]) ? full_reads[key] + 1 : 1;
   return native_tm.get_terrain_state(x,y);
  }};
- tm.validate_terrain = native_tm.validate_terrain;
+ tm.validate_terrain = native_tm.validate_terrain; tm.get_tile = native_tm.get_tile;
  const game = {get_tm:() => { return tm; }};
- const result = {}; result.game = game; result.reads = reads; return result;
+ const result = {}; result.game = game; result.reads = reads; result.full_reads = full_reads; return result;
 };
 behavior.scenario('short aquifer planning preserves exact native features Float bits graph and true undo with fewer repeated reads',() => {
  const f = #include('./_terraform_primitives_fixture')('aquifer',false); const tm = f.game.get_tm();
@@ -20,15 +24,15 @@ behavior.scenario('short aquifer planning preserves exact native features Float 
  const plan = effects.plan(proxy.game,f.former,'aquifer');
  test.assert(plan == expected && #json_text_exact(plan) == #json_text_exact(expected),'The ordered complete native feature plan is unchanged');
  let read_count = 0; for (key in proxy.reads) { read_count++; }
- test.assert(proxy.reads['2:2'] == 3 && proxy.reads['0:2'] == 2 && read_count == 2,
-  'Each of the two pure route calls reads each native coordinate once; eligibility also reads its origin');
+ test.assert(proxy.reads['2:2'] == 2 && proxy.reads['0:2'] == 2 && read_count == 2 && proxy.full_reads['2:2'] == 1,
+  'Each of the two pure route calls reads each compact coordinate once; only eligibility reads the full origin record');
  test.assert(f.snapshot() == before && f.terrain_snapshot() == terrain && #float_bits(f.former.movement) == bits);
  f.with_write(() => { const edit = f.game.get_um().get_unit(f.former.id); edit.movement = 1.0; });
  const ready = f.snapshot(); const receipt = f.command('aquifer');
  test.assert(tm.get_terrain_state(2,2).features.river && f.former.movement == 0.0 && !f.former.get_terraforming().active);
  f.with_write(() => { #include('../default/game/event/unit_terraform').rollback(receipt); });
  test.assert(f.snapshot() == ready && f.terrain_snapshot() == terrain,'The normal native river effect and true undo remain exact');
- #print('AQUIFER_CACHE_SHORT|' + #json_text_exact({reads:proxy.reads,movement_bits:bits,ordered_plan:plan}));
+ #print('AQUIFER_CACHE_SHORT|' + #json_text_exact({reads:proxy.reads,full_reads:proxy.full_reads,movement_bits:bits,ordered_plan:plan}));
 });
 behavior.scenario('an uphill rejection is reconsidered from a valid parent and terrain reads never persist into another plan',() => {
  const f = #include('./_aquifer_capacity_fixture')('alternate-parent'); const tm = f.game.get_tm();
