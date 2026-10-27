@@ -1,7 +1,7 @@
 // Declared native wire integrity, not browser or original-game execution.
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {TerraformGeometry} from './terraform-browser-geometry.mjs';
+import {TerraformGeometry,nativeToCanvas} from './terraform-browser-geometry.mjs';
 const events=[
  {seq:1,kind:'node.create',target:'n1',data:{tag:'button',parent:null}},
  {seq:2,kind:'semantic.role',target:'n1',data:{role:'terraform-header',source:'left_menu_terraform'}},
@@ -34,6 +34,12 @@ test('missing duplicated mismatched and invalid native targets fail closed',()=>
 test('unrelated pointer ingress cannot masquerade as a semantic target hit',()=>{
  const geometry=new TerraformGeometry();geometry.ingest(packet(events));
  const target=geometry.button('terraform-header','left_menu_terraform','TERRAFORM',{width:1024,height:768});
- assert.throws(()=>geometry.assertPointerHit(packet([{seq:5,kind:'input.ui-transition',target:'other',data:{}}]),target));
+ assert.throws(()=>geometry.assertPointerHit(packet([{seq:5,kind:'input.ui-transition',target:'other',data:{type:'mouseover'}}]),target));
+ assert.throws(()=>geometry.assertPointerHit(packet([{seq:5,kind:'input.ui-transition',target:'n1',data:{type:'mouseout'}}]),target));
  assert.throws(()=>geometry.ingest(packet(events)));
+});
+
+test('native pointer conversion uses observed viewport dimensions rather than a fixed framebuffer',()=>{
+ assert.deepEqual(nativeToCanvas(640,360,{width:1280,height:720},{x:7,y:11,width:640,height:360}),{x:327,y:191});
+ assert.throws(()=>nativeToCanvas(0,0,{width:0,height:720},{x:0,y:0,width:640,height:360}));
 });

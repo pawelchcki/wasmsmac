@@ -56,7 +56,7 @@
    };
    const observe = () => {
     const movement = actor.movement;
-    #print('TF_STATE|' + #to_string(serial) + '|' + #json_text_exact({selected:preview.selected_unit_id,actor:actor.id,owner:game.get_player().id + 0,
+    #print('TF_STATE|' + #to_string(serial) + '|' + #json_text_exact({selected:preview.selected_unit_id,actor:actor.id,owner:game.get_player().id + 0,viewport:{width:glsmac.ui.get_width(),height:glsmac.ui.get_height()},
      order:actor.get_order(),work:actor.get_terraforming(),movement:movement,policy:game.get_settings().global.rules.get_terraforming_policy(),
      pending:preview.order_pending,target:preview.terraforming_target.snapshot(),modal:popup.is_shown(),root:menu.menus.left_menu.is_open,
      plan:actor.get_automation(),pending_native:game.has_pending_actions(game.get_player().id),

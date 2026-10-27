@@ -29,6 +29,12 @@ export class TerraformGeometry {
   }
   assertPointerHit(packet,target){
     const within=id=>{const visited=new Set();while(id!=null&&!visited.has(id)){if(id===target.id)return true;visited.add(id);id=this.nodes.get(id)?.parent;}return false;};
-    assert.ok(packet.events.some(event=>event.kind==='input.ui-transition'&&within(event.target)),`Actual SDL pointer must enter native ${target.source}`);
+    assert.ok(packet.events.some(event=>event.kind==='input.ui-transition'&&event.data.type==='mouseover'&&within(event.target)),`Actual SDL pointer must enter native ${target.source}`);
   }
+}
+
+export function nativeToCanvas(x,y,viewport,box){
+  assert.ok(Number.isFinite(x)&&Number.isFinite(y));
+  assert.ok(viewport.width>0&&viewport.height>0&&box.width>0&&box.height>0);
+  return {x:box.x+box.width*x/viewport.width,y:box.y+box.height*y/viewport.height};
 }

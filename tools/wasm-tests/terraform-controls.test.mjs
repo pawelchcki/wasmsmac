@@ -8,7 +8,7 @@ import {test} from 'node:test';
 import {chromium} from 'playwright';
 import {PNG} from 'pngjs';
 import {fixtureSources} from './terraform-browser-inputs.mjs';
-import {TerraformGeometry} from './terraform-browser-geometry.mjs';
+import {TerraformGeometry,nativeToCanvas} from './terraform-browser-geometry.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const scriptsRoot = process.env.WASM_SCRIPTS_ROOT || root;
@@ -103,11 +103,11 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   const state=async()=>{const text=await fresh('TF_STATE|',async()=>{});const line=lines(text,'TF_STATE|').at(-1);return JSON.parse(line.slice(line.indexOf('|')+1));};
   const snapshot=async checkpoint=>{const text=await fresh('TF_NATIVE|',()=>page.keyboard.press('Control+Alt+p'));const value=JSON.parse(lines(text,'TF_NATIVE|').at(-1));report.native_snapshots.push({checkpoint,value});return value;};
   const nativeOnly=value=>{const copy=structuredClone(value);delete copy.terrain_trace.ui;return copy;};
-  const point=async(x,y)=>{const box=await page.locator('#canvas').boundingBox();return{x:box.x+box.width*x/1024,y:box.y+box.height*y/768};};
+  const point=async(x,y)=>nativeToCanvas(x,y,report.native_viewport,await page.locator('#canvas').boundingBox());
   const click=async(x,y)=>{const p=await point(x,y);await page.mouse.click(p.x,p.y);};
   const setup=await fresh('TF_BASE_POINT|',()=>page.keyboard.press('Control+Alt+k'));
   const basePoint=JSON.parse(lines(setup,'TF_BASE_POINT|').at(-1));
-  const selected=await state();assert.equal(selected.selected,selected.actor);
+  const selected=await state();assert.equal(selected.selected,selected.actor);report.native_viewport=selected.viewport;
   // Native start_ui precedes browser rendering. Await actual nonblank HUD
   // pixels within the existing startup budget, without extra gameplay input.
   const startupDeadline=performance.now()+60000;let hud;report.rendered_readiness=[];
@@ -124,7 +124,7 @@ test('complete Terraform menu and actual target pointer lifecycle preserve seven
   for(const player of initial.players){assert.ok(initial.bases.some(base=>base.owner===player.id));assert.ok(initial.units.some(unit=>unit.owner===player.id));}
   assert.deepEqual(initial.terrain_trace.policy,{version:1,ignore_technologies:true});
   let text=await fresh('TF_HEADERS|',()=>click(65,539));
-  report.headers=JSON.parse(lines(text,'TF_HEADERS|').at(-1));
+  report.headers=JSON.parse(lines(text,'TF_HEADERS|').at(-1));assert.deepEqual(report.headers.viewport,report.native_viewport);
   const headers=report.headers.rows.filter(row=>row.id==='left_menu_terraform');assert.equal(headers.length,1);
   assert.equal(new Set(report.headers.rows.map(row=>row.id)).size,report.headers.rows.length);
   await drain();const header=geometry.button('terraform-header',headers[0].id,headers[0].label,report.headers.viewport);
