@@ -9,30 +9,8 @@ const order = (unit) => {
  scene.f.with_write(() => { e.applied = command.apply(e); }); return e;
 };
 const setup = () => {
- const f = test.natural_startup_fixture(16,16,'flat-arid'); scene.f = f;
- #include('./_natural_startup_mechanics')(f); f.initialize_single_player('GAIANS','Citizen'); f.start_world();
- const game = f.game; game.get_settings().global.rules.set_terraforming_ignore_technologies(true);
- const rows = test.parse_smac_text(#include('./_terraform_action_source'),'rules').rows('TERRAIN'); rows[0][4] = '5';
- game.set('terraforming_rules',#include('../default/game/terraforming_rules').parse({rows:(block) => { return rows; }}));
- test.assert(#sizeof(game.get_players()) == 7 && game.get_player().id == 0);
- for (player of game.get_players()) {
-  let location = null; const tm = game.get_tm();
-  for (let y = 2; y < 14; y++) {
-   for (let x = 2 + y % 2; x < 14; x = x + 2) {
-    const tile = tm.get_tile(x,y);
-    if (location == null && tile.is_land && tile.get_base() == null && #sizeof(tile.get_units()) == 0 && tile.rockiness < 3) { location = tile; }
-   }
-  }
-  test.assert(location != null);
-  const pair = {owner:player.id + 0};
-  f.with_write(() => {
-   const data = {def:'Formers',health:1.0,morale:2}; data.owner = player; data.tile = location;
-   pair.first = game.get_um().spawn_unit(data); pair.second = game.get_um().spawn_unit(data);
-   if (player.id == 1) { scene.third = game.get_um().spawn_unit(data); }
-  });
-  scene.pairs :+ pair;
- }
- for (pair of scene.pairs) { order(pair.first); order(pair.second); }
+ scene.f = #include('./_terraform_cooperation_owners_fixture')();
+ scene.pairs = scene.f.cooperation_pairs; scene.third = scene.f.cooperation_third;
 };
 const read = (label,total,stale_owner) => {
  const f = scene.f; const before = f.audit_snapshot(); const inventory = #json_text_exact(f.audit_inspect());
