@@ -36,7 +36,7 @@ cover an actual grouped-body exception and a cleanup exception with real native
 snapshots and owned repeating timers. Optional runtime-backed Python checks
 require their exact intended failure, actual cleanup, normal failing-test return,
 and the absence of PASS, summary and success markers; these are not passing game
-cases. Native verification of this new source checkpoint is still pending.
+cases. Actual verification is recorded below.
 
 ## Bounded independent packets
 
@@ -80,8 +80,8 @@ ArrayRef behavior and is retained separately. Materializing the original entry
 before appending fixed that test-only registration error. The subsequent grouped
 whole-corpus attempt reached all nine stage ends and its 7/47 summary but still
 failed the original 120-second gate; it is not reported as a completed suite.
-Actual completion of all three isolated packets through the logical dispatcher
-is pending at this source checkpoint.
+The initial source checkpoint left actual packet completion pending; the final
+verified dispatcher result is recorded below.
 
 The first logical packet attempt naturally completed its first three native
 bodies and native success footer, but the strict protocol rejected its mismatched
@@ -91,3 +91,39 @@ A nested relative include had instantiated a second `_behavior` module under a
 Packet and negative-probe producers now obtain the outer instrumentation once
 and pass that actual object to their helper. No global module-cache behavior,
 case body, expected count or native shutdown check is relaxed.
+
+## Strict logical completion
+
+The immutable full proof host `1d248a66c28cedb87fdabde60fa29a7b23cc1703`
+completed the official `--suite unit-disband-controls --jobs 1 --timeout 120`
+dispatch against the published cloud engine. All three workers returned raw zero,
+their actual native success footer and exact ordered scenario inventories:
+
+| Original indices | Scenarios / assertions | Worker elapsed |
+| --- | --- | --- |
+| `[0,3)` | 3 / 26 | 55.765 s |
+| `[3,5)` | 2 / 7 | 29.711 s |
+| `[5,7)` | 2 / 14 | 30.947 s |
+
+The logical result is **7 scenarios / 47 assertions**, all three packets passed,
+119.828 seconds including orchestration. Each unchanged 120-second worker gate
+passed independently; the declared maximum serial worker budget remains 360
+seconds. The original case factory SHA-256 remains
+`7407e78beddc606c20263dc233a4530e7af1333d07ae38d6a5f41f5545affc01`.
+The complete GSE snapshot hash is
+`202127e5bcf7af4cc24bd695c30c1d22412bf50bc7da6aa87748fc818dd260eb`.
+Runtime JS/WASM hashes are respectively
+`acbc76fbc94b2306a01bce0fa2acf9c30f43f43addea915802f8d07142e5e3ec` /
+`83767fa8acce5c776be47f6298f0e24c5828f2e290722a4d341001f4ecb09a24`.
+The official report retains per-packet raw output, hashes, execution prefixes,
+exit statuses and source/runtime bindings at
+`/tmp/terraform-pr35-disband-logical-packets-v2.json`.
+
+After the instrumentation-object injection, both changed expected-negative
+checks were rerun: **2/2 passed, zero skips**, in 3.978 seconds. Both real error
+paths completed naturally with native-checked cleanup and without PASS, summary
+or native-success markers. The unchanged positive helper test was not repeated.
+Evidence is retained in `/tmp/terraform-pr35-grouped-negative-proof-v2`. All
+workers were reaped. These bounded results repair the disband producer resource
+problem; they do not establish a cause or completion for the separate capacity
+timeout, nor broad game-fidelity agreement.
