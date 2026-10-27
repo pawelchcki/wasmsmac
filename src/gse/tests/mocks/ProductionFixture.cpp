@@ -884,6 +884,43 @@ struct ProductionFixture : gc::Object {
 			{ "source_unchanged", VALUE( value::Bool,, game.GetMap()->GetTilesPtr()->Serialize().ToString() == before ) },
 		} );
 	}
+	Value* ReceivedEnergyTurnProbe( GSE_CALLABLE ) {
+		const auto before = owner->Serialize().ToString();
+		bool past = false, current = false, legacy = false, future = false, decoded_future = false, unchanged = true;
+		for ( const int mode : { 0, 1, 2, 3 } ) {
+			// Match Client's roster-first receive order using actual Slot/Player
+			// wire; only the last player's declared stamp differs in the red case.
+			auto receiving = std::make_unique< ProductionFixture >( GSE_CALL, false, false, "Receiver", 4, 4 );
+			types::Buffer roster; roster.WriteInt( 7 );
+			for ( size_t id = 0; id < 7; ++id ) {
+				auto player = std::make_unique< backend::Player >( owner.get() );
+				player->m_energy_credits = mode == 2 ? 0 : 40 + id;
+				player->m_energy_income_turn = mode == 0 ? 2 : mode == 2 ? 0 : 3;
+				if ( mode == 3 && id == 6 ) { player->m_energy_income_turn = 4; }
+				player->m_energy_initialized = mode != 2;
+				player->m_energy_initialization_allowed = false;
+				types::Buffer slot; slot.WriteInt( backend::slot::Slot::SS_PLAYER );
+				slot.WriteString( player->Serialize().ToString() ); slot.WriteInt( 0 ); slot.WriteString( "" );
+				roster.WriteString( slot.ToString() );
+			}
+			receiving->state->m_slots->Deserialize( roster );
+			for ( auto& slot : receiving->state->m_slots->GetSlots() ) { receiving->state->AddPlayer( slot.GetPlayer() ); }
+			const auto roster_before = receiving->state->m_slots->Serialize().ToString();
+			const auto turn_before = receiving->game.m_current_turn.GetId();
+			const bool valid = receiving->game.ValidateReceivedEnergyTurn( 3 );
+			if ( mode == 0 ) { past = valid; }
+			if ( mode == 1 ) { current = valid; }
+			if ( mode == 2 ) { legacy = valid && !receiving->state->m_slots->GetSlot( 6 ).GetPlayer()->IsEnergyInitialized(); }
+			if ( mode == 3 ) { future = !valid; decoded_future = receiving->state->m_slots->GetSlot( 6 ).GetPlayer()->GetEnergyIncomeTurn() == 4; }
+			unchanged = unchanged && receiving->state->m_slots->Serialize().ToString() == roster_before && receiving->game.m_current_turn.GetId() == turn_before;
+		}
+		return VALUEEXT( value::Object, GSE_CALL, {
+			{ "past_accepted", VALUE( value::Bool,, past ) }, { "current_accepted", VALUE( value::Bool,, current ) },
+			{ "legacy_unfunded_accepted", VALUE( value::Bool,, legacy ) }, { "future_last_player_rejected", VALUE( value::Bool,, future ) },
+			{ "detached_future_preserved", VALUE( value::Bool,, decoded_future ) }, { "roster_and_turn_unchanged", VALUE( value::Bool,, unchanged ) },
+			{ "source_unchanged", VALUE( value::Bool,, owner->Serialize().ToString() == before ) },
+		} );
+	}
 	Value* EnergyCodecProbe( GSE_CALLABLE ) {
 		const auto before = owner->Serialize().ToString();
 		auto copy = std::make_unique< backend::Player >( owner.get() );
@@ -2058,6 +2095,9 @@ Value* MakeProductionFixture( GSE_CALLABLE, bool founding, bool selection, const
 	} ), GSE_CALL );
 	object->Set( "construction_owner_binding_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->ConstructionOwnerBindingProbe( GSE_CALL );
+	} ), GSE_CALL );
+	object->Set( "received_energy_turn_probe", NATIVE_CALL( session ) {
+		N_EXPECT_ARGS( 0 ); return session->current->ReceivedEnergyTurnProbe( GSE_CALL );
 	} ), GSE_CALL );
 	object->Set( "energy_codec_probe", NATIVE_CALL( session ) {
 		N_EXPECT_ARGS( 0 ); return session->current->EnergyCodecProbe( GSE_CALL );

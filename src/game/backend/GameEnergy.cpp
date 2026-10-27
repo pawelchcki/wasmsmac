@@ -4,10 +4,22 @@
 #include "gse/value/Bool.h"
 #include "gse/value/Int.h"
 #include "game/backend/slot/Slot.h"
+#include "game/backend/slot/Slots.h"
 #include <exception>
 #include <utility>
 
 namespace game::backend {
+bool Game::ValidateReceivedEnergyTurn( const int64_t turn ) const {
+	// Player/Slot wire is restored before the world snapshot supplies its turn.
+	// Keep detached Player decoding context-free, but never install a running
+	// world whose income marker would permanently prevent its next turn.
+	if ( turn < 0 || !m_state ) { return false; }
+	for ( auto& slot : m_state->m_slots->GetSlots() ) {
+		if ( slot.GetState() == slot::Slot::SS_PLAYER && slot.GetPlayer()->GetEnergyIncomeTurn() > turn ) { return false; }
+	}
+	return true;
+}
+
 void Game::QueueEnergyChanged( const std::shared_ptr< Player* >& handle ) {
 	auto* player = *handle;
 	if ( !player || !player->GetSlot() || player->GetSlot()->GetPlayer() != player ) { return; }

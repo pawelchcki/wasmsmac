@@ -409,3 +409,12 @@ behavior.scenario('equal-state terrain ABA fences old receipts while proper LIFO
 	f.with_write(() => { tm.rollback_terrain(c); tm.rollback_terrain(b); tm.validate_terrain_rollback(a); tm.rollback_terrain(a); });
 	test.assert(f.terrain_snapshot() == initial);
 });
+
+behavior.scenario('received world turn validates every restored energy stamp without changing balances or legacy funding', () => {
+	const f = fixture(); const before = f.snapshot(); const terrain = f.terrain_snapshot();
+	const probe = f.received_energy_turn_probe();
+	test.assert(probe.past_accepted && probe.current_accepted && probe.legacy_unfunded_accepted);
+	test.assert(probe.detached_future_preserved && probe.future_last_player_rejected);
+	test.assert(probe.roster_and_turn_unchanged && probe.source_unchanged);
+	test.assert(f.snapshot() == before && f.terrain_snapshot() == terrain);
+});

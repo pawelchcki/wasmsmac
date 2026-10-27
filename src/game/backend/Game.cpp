@@ -2117,6 +2117,10 @@ void Game::InitGame( MT_Response& response, const bool interactive_opening, MT_C
 								for ( size_t player = 0; player < technology::Research::PLAYERS; ++player ) {
 									if ( research.Get( player ).income_turn > turn_id ) { THROW( "Future research credit in world snapshot" ); }
 								}
+								if ( !ValidateReceivedEnergyTurn( turn_id ) ) {
+									connection->Disconnect( "Future player income in world snapshot" );
+									return;
+								}
 								m_research = research;
 								if ( turn_id > 0 ) {
 									MTModule::Log( "Received turn ID: " + std::to_string( turn_id ) );

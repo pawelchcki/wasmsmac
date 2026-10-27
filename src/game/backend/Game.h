@@ -485,6 +485,7 @@ private:
 	std::atomic< uint64_t > m_next_event_id = 0;
 
 	std::atomic< size_t > m_rw_counter = 0;
+	bool ValidateReceivedEnergyTurn( int64_t turn ) const;
 	std::mutex m_energy_views_mutex;
 	std::unordered_map< size_t, std::shared_ptr< Player* > > m_pending_energy_views;
 	void WithRW( const std::function< void() >& f );
