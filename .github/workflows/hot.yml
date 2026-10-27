@@ -119,6 +119,8 @@ jobs:
         with:
           name: ${{ inputs.engine-artifact || 'behavior-engine' }}
           path: build/wasm/bin
+      - name: Validate native browser geometry wire and pointer mapping
+        run: node --test tools/wasm-tests/terraform-browser-geometry.test.mjs
       - name: Capture all 26 terraforming variants and ten worker commands
         run: >-
           python3 tools/behavior-tests/state_trace/terraform_actions.py
