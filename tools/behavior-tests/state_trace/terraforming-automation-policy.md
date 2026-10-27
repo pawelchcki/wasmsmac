@@ -44,6 +44,15 @@ stored independently of the plan and survives cancellation. Home assignment has
 a native fenced undo receipt so cancellation/rejection rollback can restore the
 previous value, including a historical base that has since disappeared.
 
+Installed Manual p48 supplies the connected-road rate across land terrain. The
+shared quote and actual debit now retain that rate on wet, rolling and rocky
+endpoints. Existing ground-domain, road/base connectivity and fungus restrictions
+remain in force; naval movement receives no road bonus. Native regression covers
+mixed and uniform endpoints in both directions, three actual movement callbacks
+per point, exhausted/no-road controls and exact graph/RNG restoration on undo.
+These are source-supported application checks; original traversal agreement on
+those terrain combinations remains unmeasured.
+
 The planner recomputes paths against actual native neighbors, domain,
 noncombat occupancy, locks and the shared live movement quote. Weighted graph
 search breaks equal-cost ties by edge count, preventing cycles on an unchanged
