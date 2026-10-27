@@ -1,9 +1,10 @@
 # Existing unit graphics: minimal real frontend cache witness
 
-This independent source-only probe targets the current application's cached unit
-priority after a legitimate Hold order. It changes no C++, game priority policy,
-Workshop production or original observations. No native/browser probe has run;
-the predicted stale visible binding remains a hypothesis.
+This witness began as source preparation at `38255a4b`. It subsequently
+reproduced a complete native HUD mismatch and passed unchanged after the three
+file cache fix. The [before/after proof](unit-stack-order-proof-v1.md) records
+exact runtimes and all supported/excluded claims. The witness itself changes no
+priority policy, Workshop production or original observations.
 
 Source preparation passes Node syntax checks for the two modules and 13 synthetic
 evaluator boundary checks, including a complete stale-ID mismatch, a fresh-ID
@@ -64,8 +65,8 @@ It waits for actual application exit zero, closes browser/server, stops the CDP
 barrier and seals exact raw chunks before parsing/evaluating the complete log.
 A complete stale-ID result is written as a distinct priority mismatch and fails
 the Node test; unavailable setup, uncontrolled native mutation or missing event
-barriers never count as a proven visible cache defect. The launcher is source
-prepared and has not executed this graphics scenario.
+barriers never count as a proven visible cache defect. The exact launcher later executed the baseline red and fixed green scenario,
+as recorded in the separate proof manifest.
 
 Source audit confirms `select_tile` queues FR_TILE_SELECT with TILE purpose;
 its tile-select event precedes `UpdatePreviews`. The real map callback always
@@ -101,7 +102,7 @@ evidence first and must preserve the same witness and source priority policy.
 
 | Observable | Current bounded evidence | Capability still needed |
 | --- | --- | --- |
-| HUD unit identity | Native map callback, mounted Widget payload and label ID | This new case still needs actual execution |
+| HUD unit identity | Native map callback, mounted Widget payload and label ID | Hold case executed red→green; separate health case remains unexecuted |
 | Rendered map body | Existing static component/fallback source and ordinary interpolation | Actual unit/instance/resource/visibility and render-coordinate observation |
 | Movement trajectory | Native before/after world state can be guarded for every owner | Intermediate render positions, action clock, start/end and camera binding; in-flight sentinel coordinates remain unavailable |
 | Facing and frame | No independent map pose/frame observation | Actual facing/frame fields when implemented, otherwise explicit absent capability |
@@ -116,3 +117,18 @@ a HUD payload does not identify the map instance or prove original pixels.
 No C++ seam, new build, model replacement or action-clip mapping is added here.
 Original-only research is separate and may supply clean observable contracts
 through Root; no candidate implementation details are sent into that track.
+
+## Next bounded health-priority case — plan only
+
+Keep the proven Hold witness immutable. A separate case can warm the same two
+healthy, active Scouts, then lower only A's health from 1.0 to 0.5 through an
+explicitly declared, authoritative fixture control. First audit the actual
+health setter/refresh path and its write boundary; do not mutate frontend fields,
+replace product callbacks or pretend the control is an original combat action.
+With both units still active/no-orders, current source priority becomes A=268/B=270
+instead of A=272/B=270. Require an actual fresh frontend preview, reselect the
+same tile, compare the actual HUD/Widget identity and capture complete immediate
+all-owner worlds. Only the declared A health field and any explicitly audited
+native health mirror may differ. No live health case or extra C++ change has
+been made; source review, old-runtime failing evidence and a new lease are
+required before accepting that coverage.

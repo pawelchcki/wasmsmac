@@ -136,5 +136,5 @@
   "build_provenance_sha256": "4c2a997d05e6af99134d0fb9ddb90f5350def1fcef1b1ef30adcc7e3aebac9cd",
   "build_log_sha256": "4e3d1f052cd33711f29c0f020ec2d72f9893bc7a3e372a7916211908a3fad15c",
   "independent_baseline_audit": "/tmp/unit-stack-order-browser-v1/independent-delivery-audit.json",
-  "independent_fixed_audit": "pending Delivery audit"
+  "independent_fixed_audit": "/tmp/unit-stack-order-browser-v2/independent-delivery-audit.json"
 }
