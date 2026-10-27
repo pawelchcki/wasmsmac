@@ -4,13 +4,14 @@ import assert from 'node:assert/strict';
 import {TerraformGeometry} from './terraform-browser-geometry.mjs';
 
 export class WorkshopPresentation extends TerraformGeometry {
-  constructor(){super();this.choices=new Map();this.fields=new Map();this.destroyed=new Set();this.roles=[];this.focus=null;this.modal=null;}
+  constructor(){super();this.choices=new Map();this.fields=new Map();this.parts=new Map();this.destroyed=new Set();this.roles=[];this.focus=null;this.modal=null;}
   ingest(packet){
     super.ingest(packet); // The shared adapter alone owns sequence validation.
     for(const event of packet.events){
       if(event.kind==='node.create'&&this.nodes.has(event.target)&&this.nodes.get(event.target).visible===undefined)this.nodes.get(event.target).visible=false;
       if(event.kind==='semantic.role')this.roles.push({id:event.target,role:event.data.role,source:event.data.source,sequence:event.seq});
-      if(event.kind==='node.destroy'){this.destroyed.add(event.target);this.choices.delete(event.target);this.fields.delete(event.target);}
+      if(event.kind==='semantic.part')this.parts.set(event.target,structuredClone(event.data));
+      if(event.kind==='node.destroy'){this.destroyed.add(event.target);this.choices.delete(event.target);this.fields.delete(event.target);this.parts.delete(event.target);}
       if(event.kind==='node.show'&&this.nodes.has(event.target))this.nodes.get(event.target).visible=true;
       if(event.kind==='node.hide'&&this.nodes.has(event.target))this.nodes.get(event.target).visible=false;
       if(event.kind==='semantic.choices'){
@@ -47,12 +48,14 @@ export class WorkshopPresentation extends TerraformGeometry {
     const matches=[...this.nodes].filter(([id,node])=>node.role===role&&node.source===source&&this.visible(id));
     assert.equal(matches.length,1,`Exactly one visible native ${role}/${source}`);return{id:matches[0][0],node:matches[0][1]};
   }
-  buttonInDialog(dialogSource,label,viewport){
-    const dialog=this.unique('dialog',dialogSource);
-    const matches=[...this.nodes].filter(([id,node])=>node.tag==='$button'&&node.properties.text===label&&this.within(id,dialog.id)&&this.visible(id));
-    assert.equal(matches.length,1,`Exactly one mounted native button ${dialogSource}/${label}`);
+  buttonInScope(role,source,label,viewport,owner=null){
+    const scope=this.unique(role,source);
+    if(owner!==null)assert.deepEqual(this.parts.get(scope.id),owner,'Scope must have the exact observed native owner/relation');
+    const matches=[...this.nodes].filter(([id,node])=>node.tag==='$button'&&node.properties.text===label&&this.within(id,scope.id)&&this.visible(id));
+    assert.equal(matches.length,1,`Exactly one mounted native button ${role}/${source}/${label}`);
     return this.target(matches[0][0],label,viewport);
   }
+  buttonInDialog(dialogSource,label,viewport){return this.buttonInScope('dialog',dialogSource,label,viewport);}
   target(id,label,viewport){
     const node=this.nodes.get(id);assert.ok(node&&!this.destroyed.has(id)&&this.visible(id),'Input target must be a live visible native node');
     assert.equal(node.tag,'$button');assert.equal(node.properties.text,label);

@@ -232,6 +232,45 @@ Terraforming role9 remain unchanged. No installed ordinal is invented, no
 production guard or artwork changes, and actual installed-source/initial-query
 browser validation remains pending.
 
+## Third runtime attempt and actual base-bar scope
+
+The third frozen execution `d5e6ec84` exited 1 after 35.400 seconds. The normal
+installed loader linked the Former to actual weapon row18/token `Formers`/role9.
+All four global recipes survived, including the separately observed inland Sea
+quote rejection. A real SDL base click, completed Window query key and one fresh
+native snapshot reached the seven-owner/seven-base/eight-unit/128-tile guards.
+These are bounded startup observations, with zero completed Workshop browser or
+original passing cases and no established native exit-zero. Exact sealed/partial
+raw evidence remains at `/tmp/unit-workshop-browser-v3/outcome.json`.
+
+The next failure was an observer ancestry assumption. Actual visible native
+CHANGE button `n484` is beneath queue panel `n480`, bottom-bar area `n466`, and
+root `n1`. It is a sibling of the base Window `n208`. This matches production
+`base_screen/bottom_bar.gls.js`, which constructs its frame with `p.ui.root.area`;
+`bottom_bar/queue.gls.js` creates CHANGE below that frame. Visibility, text and
+native bounds were present. They are not changed or inferred by the repair.
+
+The test observer tags only the actual `screen.sections.bottom_bar.frame` with
+a base-ID/session-specific source and links it to the actual base Window through
+`presentation_part`. Both are existing bound Native methods: Object.cpp118 calls
+`TraceRole`; Method561 registers the callable as read-only; TraceRole330 changes
+the actual object's role/source and TraceRegistration350 emits its native DOM ID.
+`presentation_part` validates Native UI wrappers and emits the actual part ID,
+Window owner ID and relation. The browser requires the current base/session,
+visible base Window, exact observed part owner/relation, live scoped native
+button/text/bounds, hover and completed native click. It still uses ordinary
+Window scope for WORKSHOP/production OK and the actual Workshop Window for its
+SELECT/CANCEL/preview; source audit confirms these are Window descendants.
+
+The tracked `unit-workshop-native-base-queue.json` contains 31 exact retained
+native events, selected from the 84,449-event third-run ledger. Offline replay
+proves the actual sibling ancestry and reproduces the old lookup rejection.
+Eleven named pure boundary cases cover current scope, wrong/foreign/stale or
+duplicate scope, sibling labels, visibility, destruction, missing bounds, native
+owner/relation and packet loss/replay. The new role/part annotations in these
+pure cases are explicitly synthetic. Actual emission of the new annotation and
+Workshop interaction remain unverified until a separately granted execution.
+
 ## Concrete graphics and Workshop gaps
 
 | Area | Current bounded support | Unsupported |

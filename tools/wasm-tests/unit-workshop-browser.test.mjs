@@ -155,6 +155,12 @@ test('real Workshop Window browses existing designs and commits only normal prod
     return bytes;
   };
   const baseButton=label=>presentation.buttonInDialog('game.popup.base_screen',label,latest('WS_STATE').ui.viewport);
+  const queueChangeButton=()=>{
+    const ui=latest('WS_STATE').ui;assert.equal(ui.base_open,true);const dialog=presentation.unique('dialog','game.popup.base_screen');
+    const scope=ui.base_bar_scope;assert.equal(scope.base_id,ui.base_id);assert.ok(Number.isSafeInteger(scope.session)&&scope.session>0);
+    assert.equal(scope.source,`game.popup.base_screen:${ui.base_id}:${scope.session}`);
+    return presentation.buttonInScope('workshop-base-bar',scope.source,'CHANGE',ui.viewport,{owner:dialog.id,relation:'workshop-base-bar'});
+  };
   const workshopButton=label=>presentation.buttonInDialog('game.unit_workshop',label,latest('WS_STATE').ui.viewport);
   const choose=async id=>click(presentation.choice('designs',id,latest('WS_STATE').ui.viewport));
   const noProductionAfter=record=>assert.equal(records.filter(row=>row.kind==='WS_RECEIPT'&&row.value.name==='set_base_production').length,record);
@@ -193,7 +199,7 @@ test('real Workshop Window browses existing designs and commits only normal prod
   for(const owner of initial.world.players){assert.ok(initial.world.bases.some(base=>base.owner===owner.id));assert.ok(initial.world.units.some(unit=>unit.owner===owner.id));}
   const baseline=nativeOnly(initial);const former=stockFormer(initial.ui);
   const initialProductionReceipts=records.filter(row=>row.kind==='WS_RECEIPT'&&row.value.name==='set_base_production').length;
-  await click(baseButton('CHANGE'));await wait(()=>latest('WS_STATE')?.ui.production_open);
+  await click(queueChangeButton());await wait(()=>latest('WS_STATE')?.ui.production_open);
   const draft=latest('WS_STATE').ui.draft;await click(baseButton('WORKSHOP'));await wait(()=>latest('WS_STATE')?.ui.workshop_open);
   let shown=await observe('workshop-open');
   assert.deepEqual(presentation.list('designs').items.map(row=>row.key).sort(),shown.ui.choices.map(row=>row.id).sort());
@@ -231,7 +237,7 @@ test('real Workshop Window browses existing designs and commits only normal prod
   assert.equal(detail.production.choice_id,former.id);assert.equal(detail.production.minerals,oldDetail.production.minerals-quote.loss);assert.equal(detail.production.last_processed_turn,baseline.turn);
   city.project=oldCity.project;city.resources.minerals=oldCity.resources.minerals;detail.production=structuredClone(oldDetail.production);
   assert.deepEqual(adjusted,baseline,'Only the source-selected base production fields may change');
-  await key('Control+Alt+j','J',6);await click(baseButton('CHANGE'));const staleFence=presentation.sequence;await click(baseButton('WORKSHOP'));
+  await key('Control+Alt+j','J',6);await click(queueChangeButton());const staleFence=presentation.sequence;await click(baseButton('WORKSHOP'));
   await wait(()=>records.some(row=>row.kind==='WS_CONTEXT'));await wait(()=>settledBase()&&!latest('WS_STATE').ui.workshop_open&&!latest('WS_STATE').ui.production_open);
   const refreshed=await observe('native-base-refresh-cleans-stale-workshop');assert.deepEqual(nativeOnly(refreshed),nativeOnly(committed));noProductionAfter(initialProductionReceipts+1);
   const staleWindows=presentation.roles.filter(row=>row.sequence>staleFence&&row.role==='dialog'&&row.source==='game.unit_workshop');assert.equal(staleWindows.length,1);
