@@ -346,6 +346,11 @@ class ActualCaptureAuditTests(AuditMutations, unittest.TestCase):
     def test_exact_retained_artifact_audit(self):
         result = audit.audit_artifacts(self.directory)
         self.assertEqual(result['parsed_native_world_changed_fields'], 229)
+        self.assertEqual(result['browser_cases_audited'], 0)
+        self.assertEqual(result['complete_browser_cases_audited'], 0)
+        self.assertEqual(result['bounded_state_receipt_cases_audited'], 1)
+        self.assertEqual(result['status'], 'partial-readonly-bounded-state-receipt-audit')
+        self.assertFalse(result['finalization']['exact_callback_message_identity']['supported'])
         self.assertEqual(result['raw_bytes'], 14465994)
         self.assertEqual(result['raw_sha256'], '7877baed15b88c2700f3042fe5c31f64c6ee66517dcef04541c1ced832bad473')
 
