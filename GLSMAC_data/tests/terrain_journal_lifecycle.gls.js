@@ -8,7 +8,7 @@ const fixture = (rate) => {
  for (row of rows) { row[4] = #to_string(rate); }
  f.game.set('terraforming_rules',#include('../default/game/terraforming_rules').parse({rows:(name) => { return rows; }}));
  f.receipt = null; f.results = [];
- f.game.register_event('unit_terraform',{validate:shipped.validate,apply:(e) => { f.receipt = shipped.apply(e); return f.receipt; },rollback:shipped.rollback});
+ f.game.register_event('unit_terraform',{validate:(e) => { const error = shipped.validate(e); if (#is_defined(error)) { #print('JOURNAL_VALIDATE|' + error); } return error; },apply:(e) => { f.receipt = shipped.apply(e); return f.receipt; },rollback:shipped.rollback});
  f.game.on('event_result',(e) => { f.results :+ {name:e.name + '',success:e.success == true}; });
  f.data = {unit_id:f.former.id + 0,action:'farm',replace_existing:true};
  return f;
@@ -22,6 +22,7 @@ const patch = (f,x,y,road) => {
 };
 behavior.scenario('accepted real terraforming commands retire only their no-longer-reversible native journal',() => {
  const f = fixture(1); f.game.event('unit_terraform',f.data); f.process_events();
+ #print('JOURNAL_STATE|' + #json_text_exact({flags:f.game.get_tm().get_terraforming(2,2),results:f.results,owner:f.owner.id + 0,controlled:f.game.get_player().id + 0,worker_owner:f.former.owner + 0,order:f.former.get_order(),mp:f.former.movement + 0.0,work:f.former.get_terraforming(),rule:f.game.get('terraforming_rules').farm}));
  test.assert(f.game.get_tm().get_terraforming(2,2).farm && f.results == [{name:'unit_terraform',success:true}]);
  // This assertion executes on the old runtime before the new count seam is
  // needed: the old accepted command incorrectly leaves this receipt usable.
