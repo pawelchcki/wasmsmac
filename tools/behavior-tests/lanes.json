@@ -3,6 +3,7 @@
   "kinds": {
     "regression": {
       "hot": [
+        "unit-workshop",
         "terraforming-cooperation-observation",
         "terraforming-cooperation-preview",
         "aquifer-plan-reuse",
