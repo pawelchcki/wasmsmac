@@ -66,6 +66,7 @@ const undo = (game,unit,prior,restore_order) => {
 	if (restore_order && prior.original_order != 'TERRAFORM' && prior.original_order != 'AUTOMATE') { unit.set_order(prior.original_order); }
 	unit.movement = prior.movement; unit.moved_this_turn = prior.moved;
 	if (prior.energy_receipt > 0) { height.owner(game,prior.owner).rollback_energy(prior.energy_receipt); }
+	#include('../terraforming_view_revision').changed(game);
 };
 return {
 	validate:work.validate,

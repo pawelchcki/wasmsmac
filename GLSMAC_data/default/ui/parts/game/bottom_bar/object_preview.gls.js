@@ -4,6 +4,7 @@ const work_controls = #include('../../../../game/terraforming_control_policy');
 const work_effects = #include('../../../../game/terraforming_effects');
 const work_shortcuts = #include('../../../../game/terraforming_shortcuts');
 const work_dialog = #include('../../../../game/terraforming_dialog');
+const work_progress = #include('../../../../game/terraforming_progress');
 const activation_dialog = #include('../../../../game/unit_activation_dialog');
 
 return {
@@ -372,6 +373,7 @@ return {
 		this.rendered_unit_id = null;
 		this.movement_label = null;
 		this.order_label = null; this.work_progress_label = null; this.rendered_work = null; this.rendered_plan = null;
+		this.rendered_work_signature = null; this.rendered_cohort = null;
 
 		if (#is_defined(this.lines)) {
 			this.lines.remove(); // TODO: fix this.lines.clear();
@@ -411,6 +413,10 @@ return {
 				this.rendered_movement = object.movement + 0.0;
 				this.rendered_order = object.get_order();
 				this.rendered_work = #clone(object.get_terraforming());
+				if (#is_defined(this.rendered_work.job)) {
+					this.rendered_work_signature = work_progress.signature(this.p.game,object);
+					this.rendered_cohort = work_progress.read(this.p.game,object);
+				}
 				if (#typeof(object.get_automation) == 'Callable') { this.rendered_plan = #clone(object.get_automation()); }
 
 				f_line(def.name, 13, 'center');
@@ -436,7 +442,7 @@ return {
 				}
 				this.order_label = f_line(label, 12, 'left');
 				if (this.rendered_order == 'TERRAFORM' && this.rendered_work.required_work > 0) {
-					this.work_progress_label = f_line('Work: ' + #to_string(this.rendered_work.work_units) + '/' + #to_string(this.rendered_work.required_work), 11, 'left');
+					this.work_progress_label = f_line(work_progress.text(this.rendered_work,this.rendered_cohort), 11, 'left');
 				}
 
 				break;
@@ -468,7 +474,7 @@ return {
 		this.selected_unit_id = null;
 		this.order_focus_id = null;
 		this.order_pending = null;
-		this.rendered_unit_id = null;
+		this.rendered_unit_id = null; this.rendered_work_signature = null; this.rendered_cohort = null;
 		this.is_turn_active = true;
 		this.skip_available = false;
 		this.founding_pending_id = null; this.founding_pending_name = null; this.founding_pending_base_id = null;
@@ -649,7 +655,9 @@ return {
 			if (this.rendered_unit_id != null && this.um.has_unit(this.rendered_unit_id)) {
 				const unit = this.um.get_unit(this.rendered_unit_id);
 				let plan = null; if (#typeof(unit.get_automation) == 'Callable') { plan = unit.get_automation(); }
-				if (unit.movement != this.rendered_movement || unit.get_order() != this.rendered_order || unit.get_terraforming() != this.rendered_work || plan != this.rendered_plan) { this.set_lines(unit); }
+				let signature = null;
+				if (#is_defined(unit.get_terraforming().job)) { signature = work_progress.signature(p.game,unit); }
+				if (unit.movement != this.rendered_movement || unit.get_order() != this.rendered_order || unit.get_terraforming() != this.rendered_work || plan != this.rendered_plan || signature != this.rendered_work_signature) { this.set_lines(unit); }
 			}
 			return true;
 		});

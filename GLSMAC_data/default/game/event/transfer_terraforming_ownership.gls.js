@@ -20,7 +20,8 @@ return {
 		const error = validate(e); if (#is_defined(error)) { throw Error(error); }
 		const tm = e.game.get_tm(); const owners = tm.get_terrain_state(e.data.x,e.data.y).terraforming_owners;
 		owners[e.data.improvement] = e.data.to_owner + 0;
-		return {token:tm.apply_terrain([{x:e.data.x + 0,y:e.data.y + 0,terraforming_owners:owners}],[])};
+		const token = tm.apply_terrain([{x:e.data.x + 0,y:e.data.y + 0,terraforming_owners:owners}],[]);
+		#include('../terraforming_view_revision').changed(e.game); return {token:token};
 	},
-	rollback:(e) => { e.game.get_tm().validate_terrain_rollback(e.applied.token); e.game.get_tm().rollback_terrain(e.applied.token); },
+	rollback:(e) => { e.game.get_tm().validate_terrain_rollback(e.applied.token); e.game.get_tm().rollback_terrain(e.applied.token); #include('../terraforming_view_revision').changed(e.game); },
 };

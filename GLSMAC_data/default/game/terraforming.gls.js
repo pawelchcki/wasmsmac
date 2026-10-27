@@ -5,6 +5,7 @@ const effects = #include('./terraforming_effects');
 const height = #include('./terraforming_height');
 const height_group = #include('./terraforming_height_group');
 const cooperation = #include('./terraforming_cooperation');
+const view_revision = #include('./terraforming_view_revision');
 const describe = (game, unit, action) => {
 	const rules = game.get('terraforming_rules');
 	if (height.known(action) && unit.is_water && #is_defined(rules[action])) { return rules[action].sea; }
@@ -175,6 +176,7 @@ const tick = (game,unit,action,output,prepared_job) => {
 			if (receipt.cohort_modified) { for (member of receipt.cohort) { if (member.unit.id != unit.id) { output.cohort :+ #clone(member); } } }
 			cooperation.seal(output.cohort);
 		}
+		view_revision.changed(game);
 		return result;
 	} catch { : (error) => {
 		if (receipt.terrain > 0) { game.get_tm().validate_terrain_rollback(receipt.terrain); game.get_tm().rollback_terrain(receipt.terrain); }
@@ -218,18 +220,18 @@ return {
 	start: tick,
 	// Accepting a distinct automation job abandons payment identity, without
 	// refunding committed money, restoring movement or clearing safe recovery.
-	abandon_paid_height:(game,unit) => { if (#is_defined(unit.get_terraforming().height)) { unit.set_terraforming(empty()); } },
+	abandon_paid_height:(game,unit) => { if (#is_defined(unit.get_terraforming().height)) { unit.set_terraforming(empty()); view_revision.changed(game); } },
 	cancel: (game, unit) => {
 		const state = unit.get_terraforming();
 		if (!state.active) { return; }
-		if (height.known(state.action)) { state.active = false; state.last_turn = 0; unit.set_terraforming(state); return; }
+		if (height.known(state.action)) { state.active = false; state.last_turn = 0; unit.set_terraforming(state); view_revision.changed(game); return; }
 		if (state.last_turn == game.get_turn() && !state.previous_moved &&
 			state.previous_work_units > 0 && state.work_units > state.previous_work_units) {
 			state.work_units = state.previous_work_units;
 			unit.movement = state.previous_movement; unit.moved_this_turn = state.previous_moved;
 		}
 		state.active = false; state.last_turn = 0; state.previous_work_units = state.work_units;
-		unit.set_terraforming(state);
+		unit.set_terraforming(state); view_revision.changed(game);
 	},
 	configure: (game) => {
 		game.get_um().on('automation_step_pending', (e) => {
@@ -246,17 +248,17 @@ return {
 				if (!prepared.supported || !#is_defined(state.height) || state.height.terrain_identity != prepared.identity) {
 					const reason = prepared.supported ? 'Terrain changed during paid elevation work; issue a new confirmed order' : prepared.reason;
 					e.unit.set('terraforming_failure',{policy:height.policy,action:state.action,turn:game.get_turn() + 0,reason:reason,paid_fee:#is_defined(state.height) ? state.height.fee : 0});
-					e.unit.set_terraforming(empty()); game.message('Elevation work stopped: ' + reason); return;
+					e.unit.set_terraforming(empty()); view_revision.changed(game); game.message('Elevation work stopped: ' + reason); return;
 				}
 			}
 			if (#is_defined(state.job)) {
 				let reason = '';
 				try { if (cooperation.prepare(game,e.unit,state.action,state.required_work).job != state.job) { reason = 'Terrain changed during cooperative work; issue a new order'; } }
 				catch { : (error) => { reason = error.reason + ''; } }
-				if (reason != '') { e.unit.set('terraforming_failure',{policy:cooperation.policy,action:state.action,turn:game.get_turn() + 0,reason:reason}); e.unit.set_terraforming(empty()); game.message('Terraforming work stopped: ' + reason); return; }
+				if (reason != '') { e.unit.set('terraforming_failure',{policy:cooperation.policy,action:state.action,turn:game.get_turn() + 0,reason:reason}); e.unit.set_terraforming(empty()); view_revision.changed(game); game.message('Terraforming work stopped: ' + reason); return; }
 			}
 			if (tile.x != state.tile_x || tile.y != state.tile_y || e.unit.movement != e.unit.get_def().movement_per_turn || #is_defined(eligible(game, e.unit, state.action))) {
-				e.unit.set_terraforming(empty()); return;
+				e.unit.set_terraforming(empty()); view_revision.changed(game); return;
 			}
 			tick(game, e.unit, state.action);
 		});

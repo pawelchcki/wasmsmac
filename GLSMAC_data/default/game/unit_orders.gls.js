@@ -70,6 +70,7 @@ const ordinary_rollback = (e) => {
 	// All native identity/state checks complete before the first restore. No
 	// treasury operation or scheduler enqueue occurs during ordinary order undo.
 	restore_order_state(unit,e.applied.original_state);
+	#include('./terraforming_view_revision').changed(e.game);
 };
 
 return {
