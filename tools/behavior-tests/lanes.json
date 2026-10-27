@@ -57,7 +57,10 @@
         "base-growth-worker-links",
         "base-growth-regression",
         "land-resource-sources",
-        "startup-rule-sources"
+        "startup-rule-sources",
+        "aquifer-capacity",
+        "aquifer-routing",
+        "terrain-geometry"
       ],
       "stable": [
         "base-resource-hud",

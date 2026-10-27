@@ -1,6 +1,9 @@
 {
   "version": 1,
   "suites": [
+    {"id":"aquifer-capacity","script":"GLSMAC_data/tests/aquifer_capacity.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
+    {"id":"aquifer-routing","script":"GLSMAC_data/tests/aquifer_routing.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
+    {"id":"terrain-geometry","script":"GLSMAC_data/tests/terrain_geometry.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"energy-receipt-lifecycle","script":"GLSMAC_data/tests/energy_receipt_lifecycle.gls.js","domains":["gameplay","economy","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"terrain-journal-lifecycle","script":"GLSMAC_data/tests/terrain_journal_lifecycle.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
     {"id":"unit-automation-state","script":"GLSMAC_data/tests/unit_automation_state.gls.js","domains":["gameplay","decision-logic"],"evidence":"glsmac-regression"},
