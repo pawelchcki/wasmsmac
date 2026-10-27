@@ -43,6 +43,8 @@ def node_projection(value):
 def parse_records(raw):
     records = []
     for line_number, line in enumerate(raw.decode('utf8').splitlines()):
+        if 'TH_EXIT_REQUEST' in line:
+            records.append(('TH_EXIT_REQUEST', None, line_number))
         for kind in ('TH_NATIVE', 'TH_RECEIPT', 'TH_INPUTS', 'TH_TRACE', 'TH_HEADERS', 'TH_ROWS'):
             marker = kind + '|'
             if marker in line:
@@ -130,14 +132,14 @@ def validate_sequence(records, report):
     assert len(native) == len(CHECKPOINTS)
     reported = report['native_snapshots']
     assert len(reported) == len(CHECKPOINTS)
-    trace, _ = validate_trace(records)
+    trace, carriers = validate_trace(records)
     events = {event['seq']: event for event in trace}
     packets = []
     actor, owner, turn = native[0][0]['ui']['actor'], native[0][0]['ui']['owner'], native[0][0]['ui']['turn']
     assert all(type(v) is int for v in (actor, owner, turn))
     assert (actor, owner, turn) == (8, 0, 1), 'Different declared actor/owner/turn'
     prior_fence = -1
-    for i, ((row, _), item) in enumerate(zip(native, reported)):
+    for i, ((row, native_line), item) in enumerate(zip(native, reported)):
         ui, request = row['ui'], row['query_owner']
         assert type(row['query']) is int and row['query'] == i + 1
         assert item['checkpoint'] == CHECKPOINTS[i]
@@ -174,6 +176,13 @@ def validate_sequence(records, report):
         ingress = [e for e in events.values() if prior_fence < e['seq'] < begin['seq'] and e['kind'] == 'input.ingress'
                    and e['data'].get('type') == 'keydown' and e['data'].get('ingress') == ingress_id]
         assert len(ingress) == 1
+        carrier = carriers[fence]
+        assert carriers[ingress[0]['seq']] == carriers[begin['seq']] == carrier
+        # This fixture emits TH_NATIVE and then drains TH_TRACE in its owned
+        # timer. Input occurred earlier; its printed carrier follows Native.
+        assert native_line < carrier
+        upper = native[i + 1][1] if i + 1 < len(native) else next((line for kind, _, line in records if kind == 'TH_EXIT_REQUEST'), None)
+        if upper is not None: assert carrier < upper, 'P journal carrier is outside its exact checkpoint interval'
         prior_fence = fence
         packets.append(row)
     return packets, native
@@ -260,6 +269,14 @@ def audit_records(records, report):
     actor_id, actor_idx = actor['id'], base['units'].index(actor)
     payer_row = next(row for row in base['players'] if row['raw_id'] == quote['owner'])
     payer = payer_row['id']
+    assert actor['owner'] == payer
+    assert type(actor['x']) is int and type(actor['y']) is int and (actor['x'], actor['y']) == (quote['x'], quote['y'])
+    assert type(inputs[0]['starting_credits']) is int and inputs[0]['starting_credits'] == 10
+    assert type(inputs[0]['faction_bonus']) is int and inputs[0]['faction_bonus'] == 0
+    opening = base['terrain_trace']['player_details'][payer]['energy']
+    assert equal(inputs[0]['energy'], opening)
+    assert type(opening['credits']) is int and opening['credits'] == inputs[0]['starting_credits'] + inputs[0]['faction_bonus']
+    assert opening['initialized'] is True and type(opening['last_income_turn']) is int and opening['last_income_turn'] == 0
     source = base['terrain_trace']['tiles'][f"{quote['x']},{quote['y']}"]
     assert type(quote['source_elevation']) is int and equal(quote['source_elevation'], source['elevation']['center'])
     assert quote['source_water'] is False and source['is_water'] is False and quote['destination_water'] is False
@@ -334,6 +351,8 @@ V1_KEYS = {'version', 'kind', 'candidate_executed', 'phase', 'head', 'native_tre
            'input_sha256', 'production_default_sha256', 'declared_map', 'seed_requested',
            'browser_budget_ms', 'native_policy_observation'}
 FATAL = re.compile(r'TH_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]', re.I)
+CAPTURE_MANIFESTS = ('12743b42e275842a7ae3862572ec769c6d86f647394f0edb1ff9db6d104888e3',
+                     '740c1c9f418ec24f7f6343087645cdef44fd7b85127cb297f0a453f28ea3ae10')
 
 
 def validate_preflight(directory, preflight, preflight_bytes, report, native_input):
@@ -372,6 +391,11 @@ def validate_preflight(directory, preflight, preflight_bytes, report, native_inp
     assert preflight['runtime'] == {'js': report['runtime_js_sha256'], 'wasm': report['runtime_wasm_sha256']}
     assert preflight['original_rules_sha256'] == report['source_override']['original_sha256']
     assert preflight['executed_rules_sha256'] == report['source_override']['rate_one_sha256']
+    override = report['source_override']
+    assert type(override['reads']) is int and override['reads'] == 1, 'No exact actual override loader response'
+    # This admitted installed-data profile has two actually captured opaque
+    # manifest IDs. No absent historical payload/cleanliness evidence is made up.
+    assert (override['original_manifest_id'], override['manifest_id']) == CAPTURE_MANIFESTS
     files = preflight['source_sha256']
     shared = {'browser-log-cursor.mjs', 'browser-native-log-hook.mjs', 'runtime-fetch-barrier.mjs', 'terraform-browser-geometry.mjs', 'terraform-browser-pointer.mjs'}
     assert set(report['shared_helpers_sha256']) == shared
@@ -552,7 +576,7 @@ def validate_pointer_route(records, report):
                 ('terraform-row', 'raise', command, 0), ('terraform-height-ok', 'confirm', 'OK', 1),
                 ('terraform-header', 'left_menu_terraform', header[0]['label'], 2), ('terraform-row', 'raise', command, 2),
                 ('terraform-height-choice', '1', draft_label, 3), ('terraform-height-ok', 'confirm', 'OK', 4)]
-    nodes, index, prior_end = {}, 0, 0
+    nodes, index, prior_end, used_buttons = {}, 0, 0, set()
 
     def ingest(event):
         target, kind, data = event.get('target'), event['kind'], event['data']
@@ -633,6 +657,7 @@ def validate_pointer_route(records, report):
             assert ingress['data']['button'] == begin['data']['button'] == 1
             assert inside(begin['data'], bounds)
             assert (ingress['data']['x'], ingress['data']['y']) == (begin['data']['x'], begin['data']['y'])
+            used_buttons.update((ingress['seq'], begin['seq']))
         assert (matched['down']['data']['x'], matched['down']['data']['y']) == (matched['up']['data']['x'], matched['up']['data']['y'])
         next_query = report['native_snapshots'][checkpoint + 1]['query_after_native_key']
         query_ingress = event_map[next_query]['data']['ingress']
@@ -644,7 +669,21 @@ def validate_pointer_route(records, report):
             assert rows
             row = [item for item in rows[-1] if item['id'] == 'raise']
             assert len(row) == 1 and row[0]['enabled'] is True and row[0]['label'] == label
-    return {'physical_clicks_verified': len(pointers), 'scope': 'MENU/terraform/raise/Cancel/reopen/Expend/confirm; actual native geometry and input receipts'}
+    actual_buttons = {event['seq'] for event in events if event['kind'] in ('input.ingress', 'input.dispatch')
+                      and event['data'].get('type') in ('mousedown', 'mouseup')}
+    assert actual_buttons == used_buttons, 'Unreported or unused native pointer button action'
+    return {'physical_clicks_verified': len(pointers), 'raw_button_actions_exhausted': True,
+            'scope': 'MENU/terraform/raise/Cancel/reopen/Expend/confirm; actual native geometry and input receipts'}
+
+
+def validate_frames(directory, report):
+    names = ['before-height', 'raise-quote', 'raise-cancel', 'raise-payment-draft', 'raise-paid-completion']
+    assert [row['name'] for row in report['captures']] == names
+    for row in report['captures']:
+        assert type(row['sha256']) is str and re.fullmatch(r'[0-9a-f]{64}', row['sha256'])
+        data = (Path(directory) / (row['name'] + '.png')).read_bytes()
+        assert data.startswith(b'\x89PNG\r\n\x1a\n') and hashlib.sha256(data).hexdigest() == row['sha256'], 'Different/missing retained frame'
+    return {'retained_frame_digests_verified': 5, 'scope': 'actual file bytes; no original pixels/pose/mesh agreement'}
 
 
 def validate_external_exit(path, native_exit, capture_bindings):
@@ -685,6 +724,7 @@ def audit_artifacts(directory, outer_outcome=None):
     chunks = [json.loads(line) for line in (directory / 'application-log-chunks.jsonl').read_text().splitlines() if line]
     finalization = validate_finalization(report, raw, chunks, records)
     pointer_route = validate_pointer_route(records, report)
+    frames = validate_frames(directory, report)
     bindings = {'raw_sha256': hashlib.sha256(raw).hexdigest(), 'report_sha256': hashlib.sha256(report_bytes).hexdigest(),
                 'preflight_sha256': hashlib.sha256(preflight_bytes).hexdigest(), 'host_head': report['host_head']}
     external = validate_external_exit(Path(outer_outcome) if outer_outcome else directory / 'raw-outcome.json', report['native_exit'], bindings)
@@ -692,7 +732,8 @@ def audit_artifacts(directory, outer_outcome=None):
     result['browser_cases_audited'] = 1
     result.update(raw_sha256=hashlib.sha256(raw).hexdigest(), raw_bytes=len(raw), report_sha256=hashlib.sha256(report_bytes).hexdigest(),
                   preflight_sha256=hashlib.sha256(preflight_bytes).hexdigest(), source_audit_script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                  preflight_schema=schema, finalization=finalization, pointer_route=pointer_route, external_node_exit=external)
+                  preflight_schema=schema, finalization=finalization, pointer_route=pointer_route, frames=frames, external_node_exit=external,
+                  historical_cleanliness_scope='legacy tracked_diff/source bindings only; no retrospective untracked-source cleanliness receipt')
     return result
 
 

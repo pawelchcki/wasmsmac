@@ -9,6 +9,18 @@ import {fileURLToPath} from 'node:url';
 import {declaredTerrain,fixtureSources,rateOneSource} from './terraform-browser-inputs.mjs';
 const sha=value=>createHash('sha256').update(value).digest('hex');
 
+export function assertHeightSourcesClean(scriptsRoot){
+  const consumed=['src','GLSMAC_data/default','GLSMAC_data/tests/_state_trace_observer.gls.js',
+    'GLSMAC_data/tests/_terrain_trace_observer.gls.js','GLSMAC_data/tests/_terraform_cooperation_observer.gls.js',
+    'tools/wasm-tests/terraform-height-browser.test.mjs','tools/wasm-tests/terraform-height-observation.mjs',
+    'tools/wasm-tests/terraform-browser-inputs.mjs','tools/wasm-tests/fixtures/terraform-height-main.gls.js',
+    'tools/wasm-tests/fixtures/terraform-controls-main.gls.js','tools/wasm-tests/fixtures/terraform-controls-world.gls.js',
+    'tools/wasm-tests/browser-log-cursor.mjs','tools/wasm-tests/browser-native-log-hook.mjs',
+    'tools/wasm-tests/runtime-fetch-barrier.mjs','tools/wasm-tests/terraform-browser-geometry.mjs','tools/wasm-tests/terraform-browser-pointer.mjs'];
+  const changes=execFileSync('git',['status','--porcelain=v1','-z','--untracked-files=all','--ignored=matching','--',...consumed],{cwd:scriptsRoot,encoding:'utf8'});
+  assert.equal(changes,'','Relevant tracked, untracked or ignored source differs from declared clean HEAD');
+}
+
 export function terrainOverrideTable(original,executed){
   const rows=bytes=>{let active=false;const out=[];
     for(const[line,text]of bytes.toString('latin1').split('\n').entries()){
@@ -41,6 +53,9 @@ export function buildHeightPreflight({source,runtimeJS,runtimeWasm,originalRules
 }
 
 export function loadHeightPreflight({scriptsRoot,build,assets,seed,driverPath=resolve(scriptsRoot,'tools/wasm-tests/terraform-height-browser.test.mjs')}){
+  // A future producer must reject ambiguity before it reads/emits a clean
+  // HEAD-labelled snapshot. Historical captures gain no retrospective receipt.
+  assertHeightSourcesClean(scriptsRoot);
   const read=name=>readFileSync(resolve(scriptsRoot,name));
   const main=read('tools/wasm-tests/fixtures/terraform-height-main.gls.js'),world=fixtureSources(scriptsRoot,{water:false}).world;
   const names=['_state_trace_observer','_terrain_trace_observer','_terraform_cooperation_observer'];

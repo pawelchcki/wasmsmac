@@ -1,13 +1,15 @@
 // Metadata-only tests: buffers below are synthetic protocol inputs, not a
 // browser, native engine, installed-data result or substitute preflight record.
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync,writeFileSync,mkdirSync,copyFileSync,existsSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {createHash} from 'node:crypto';
 import {declaredTerrain,rateOneSource} from './terraform-browser-inputs.mjs';
-import {buildHeightPreflight,writeHeightPreflight,terrainOverrideTable} from './terraform-height-preflight.mjs';
+import {buildHeightPreflight,writeHeightPreflight,terrainOverrideTable,loadHeightPreflight} from './terraform-height-preflight.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const data=()=>{
  const originalRules=Buffer.from('#TERRAIN\n'+Array.from({length:20},(_,i)=>`Land ${i},None,Sea ${i},Disable,12,Build,Help,R`).join('\n')+'\n#NEXT\n');
@@ -61,4 +63,49 @@ test('preflight refuses non-duration rule changes instead of fabricating provena
  assert.throws(()=>terrainOverrideTable(input.originalRules,changed));
  const malformed=data();malformed.map=Buffer.from(malformed.map);malformed.map[0]=0;
  assert.throws(()=>buildHeightPreflight(malformed));
+});
+
+function cleanGitInputs(){
+ const folder=mkdtempSync(join(tmpdir(),'height-clean-source-')),scriptsRoot=join(folder,'source'),build=join(folder,'runtime'),assets=join(folder,'assets');
+ const input=data(),repository=fileURLToPath(new URL('../../',import.meta.url));
+ mkdirSync(scriptsRoot,{recursive:true});mkdirSync(build);mkdirSync(assets);
+ const sourceFiles=['tools/wasm-tests/terraform-height-browser.test.mjs','tools/wasm-tests/terraform-height-observation.mjs','tools/wasm-tests/terraform-browser-inputs.mjs',
+  'tools/wasm-tests/fixtures/terraform-height-main.gls.js','tools/wasm-tests/fixtures/terraform-controls-main.gls.js','tools/wasm-tests/fixtures/terraform-controls-world.gls.js',
+  'tools/wasm-tests/browser-log-cursor.mjs','tools/wasm-tests/browser-native-log-hook.mjs','tools/wasm-tests/runtime-fetch-barrier.mjs',
+  'tools/wasm-tests/terraform-browser-geometry.mjs','tools/wasm-tests/terraform-browser-pointer.mjs',
+  'GLSMAC_data/tests/_state_trace_observer.gls.js','GLSMAC_data/tests/_terrain_trace_observer.gls.js','GLSMAC_data/tests/_terraform_cooperation_observer.gls.js'];
+ for(const name of sourceFiles){const target=join(scriptsRoot,name);mkdirSync(dirname(target),{recursive:true});copyFileSync(join(repository,name),target);}
+ for(const[name,bytes]of [['src/model.cpp','// metadata-only source'],['GLSMAC_data/default/main.gls.js','// not evaluated'],['README.md','unrelated source note']]){
+  const target=join(scriptsRoot,name);mkdirSync(dirname(target),{recursive:true});writeFileSync(target,bytes);
+ }
+ writeFileSync(join(build,'GLSMAC.js'),input.runtimeJS);writeFileSync(join(build,'GLSMAC.wasm'),input.runtimeWasm);writeFileSync(join(assets,'alphax.txt'),input.originalRules);
+ const git=(...args)=>execFileSync('git',args,{cwd:scriptsRoot,encoding:'utf8',stdio:['ignore','pipe','pipe']});
+ git('init','-q');git('add','.');git('-c','user.name=Protocol test','-c','user.email=protocol@example.invalid','-c','commit.gpgsign=false','commit','-qm','metadata fixture');
+ return{folder,scriptsRoot,build,assets,git,artifacts:join(folder,'output'),seed:'declared seed'};
+}
+
+test('future full producer rejects tracked staged and untracked consumed source before artifacts exist',()=>{
+ for(const variant of ['tracked-native','staged-default','untracked-native','untracked-default','untracked-observer','ignored-default']){
+  const f=cleanGitInputs();
+  try{
+   if(variant==='tracked-native')writeFileSync(join(f.scriptsRoot,'src/model.cpp'),'// changed native');
+   if(variant==='staged-default'){writeFileSync(join(f.scriptsRoot,'GLSMAC_data/default/main.gls.js'),'// changed default');f.git('add','GLSMAC_data/default/main.gls.js');}
+   if(variant==='untracked-native')writeFileSync(join(f.scriptsRoot,'src/untracked.cpp'),'// undeclared native');
+   if(variant==='untracked-default')writeFileSync(join(f.scriptsRoot,'GLSMAC_data/default/untracked.gls.js'),'// undeclared default');
+   if(variant==='untracked-observer'){f.git('rm','-q','GLSMAC_data/tests/_terrain_trace_observer.gls.js');f.git('-c','user.name=Protocol test','-c','user.email=protocol@example.invalid','-c','commit.gpgsign=false','commit','-qm','remove source');writeFileSync(join(f.scriptsRoot,'GLSMAC_data/tests/_terrain_trace_observer.gls.js'),'// untracked consumed observer');}
+   if(variant==='ignored-default'){writeFileSync(join(f.scriptsRoot,'.gitignore'),'*.local.gls.js\n');writeFileSync(join(f.scriptsRoot,'GLSMAC_data/default/hidden.local.gls.js'),'// ignored but loader-visible');}
+   assert.throws(()=>{const prepared=loadHeightPreflight(f);writeHeightPreflight({...f,...prepared});},/Relevant .*source differs/);
+   assert.equal(existsSync(f.artifacts),false,'Rejected source may not emit a preflight or misleading clean receipt');
+  }finally{rmSync(f.folder,{recursive:true,force:true});}
+ }
+});
+
+test('clean full producer allows unrelated notes and retains the actual Git source identity',()=>{
+ const f=cleanGitInputs();
+ try{
+  writeFileSync(join(f.scriptsRoot,'README.md'),'unrelated author note');
+  const prepared=loadHeightPreflight(f);assert.equal(prepared.record.head,f.git('rev-parse','HEAD').trim());
+  assert.equal(prepared.record.native_tree,f.git('rev-parse','HEAD:src').trim());
+  writeHeightPreflight({...f,...prepared});assert.equal(existsSync(join(f.artifacts,'preflight.json')),true);
+ }finally{rmSync(f.folder,{recursive:true,force:true});}
 });

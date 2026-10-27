@@ -22,7 +22,7 @@ spec.loader.exec_module(audit)
 def protocol_fixture():
     """Synthetic schema inputs only, never an original/candidate observation."""
     players = [{'id': f'p{i}', 'raw_id': i, 'faction': 'GAIANS' if i == 0 else f'other{i}'} for i in range(7)]
-    units = [{'id': f'u{i}', 'raw_id': i, 'owner': f'p{(i - 1) % 7}', 'movement': 1.0, 'health': 1.0, 'order': 'NO_ORDERS'} for i in range(1, 9)]
+    units = [{'id': f'u{i}', 'raw_id': i, 'owner': f'p{(i - 1) % 7}', 'x': 8, 'y': 8, 'movement': 1.0, 'health': 1.0, 'order': 'NO_ORDERS'} for i in range(1, 9)]
     units[-1]['owner'] = 'p0'
     bases = [{'id': f'b{i}', 'raw_id': i, 'owner': f'p{i - 1}'} for i in range(1, 8)]
     tiles = {}
@@ -35,7 +35,7 @@ def protocol_fixture():
                 'native_height_band': {name: False for name in audit.BANDS}, 'unknown_native': {'value': -0.0}}
     tiles['8,8']['neighbors']['E'] = {'x': 10, 'y': 8}
     trace = {'policy': {'version': 1, 'ignore_technologies': True}, 'ui': {}, 'tiles': tiles, 'unit_details': {u['id']: {'moved_this_turn': False, 'quotes': {'E': {'allowed_now': True, 'reason': None}}} for u in units},
-             'player_details': {p['id']: {'energy': {'credits': 10}, 'energy_revision': 1} for p in players},
+             'player_details': {p['id']: {'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}, 'energy_revision': 1} for p in players},
              'base_details': {b['id']: {'unknown': 'unchanged'} for b in bases}}
     world = {'width': 16, 'height': 16, 'turn': 1, 'players': players, 'units': units, 'bases': bases, 'terrain_trace': trace}
     quote = {'version': 1, 'supported': True, 'action': 'raise', 'resuming': False, 'paid_fee': 0, 'base_fee': 4, 'fee': 4, 'credits': 10,
@@ -69,15 +69,18 @@ def protocol_fixture():
     target['imported'].update(active=False, source_corners=None, source_elevation=None, source_water=None)
     after['terrain_trace']['tiles']['10,8']['elevation']['left'] = 241
     receipt = {'name': 'unit_terraform', 'event_id': '0_68', 'caller': 0, 'success': True, 'data': {'unit_id': 8, 'action': 'raise', 'confirmed_height': True}}
-    inputs = {'policy': {'version': 1, 'ignore_technologies': True}, 'actor': 8, 'can_terraform': True, 'raise_rule': {'turns': 1}}
+    inputs = {'policy': {'version': 1, 'ignore_technologies': True}, 'actor': 8, 'can_terraform': True, 'raise_rule': {'turns': 1},
+              'starting_credits': 10, 'faction_bonus': 0, 'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}}
     events = []
     for i in range(6):
         fence = (i + 1) * 3
         events.extend([{'seq': fence - 2, 'kind': 'input.ingress', 'data': {'ingress': i, 'type': 'keydown'}},
                        {'seq': fence - 1, 'kind': 'input.dispatch', 'data': {'ingress': i, 'phase': 'begin', 'type': 'keydown', 'code': 'P', 'modifiers': 6}},
                        {'seq': fence, 'kind': 'input.dispatch', 'data': {'ingress': i, 'phase': 'end', 'handled': True}}])
-    records = [('TH_INPUTS', inputs, 0), ('TH_TRACE', {'enabled': True, 'dropped': 0, 'events': events}, 1)]
-    records.extend(('TH_NATIVE', row, (i + 1) * 10) for i, row in enumerate(packets))
+    records = [('TH_INPUTS', inputs, 0)]
+    for i, row in enumerate(packets):
+        records.append(('TH_NATIVE', row, (i + 1) * 10))
+        records.append(('TH_TRACE', {'enabled': True, 'dropped': 0, 'events': events[i * 3:(i + 1) * 3]}, (i + 1) * 10 + 1))
     records.append(('TH_RECEIPT', receipt, 55))
     report = {'native_input': copy.deepcopy(inputs), 'height_receipt': copy.deepcopy(receipt),
               'native_snapshots': [{'checkpoint': name, 'query_after_native_key': (i + 1) * 3,
@@ -133,6 +136,35 @@ class AuditMutations:
 
     def test_reject_stale_owner(self):
         self.packets()[3]['query_owner']['owner'] = 1
+        self.reject()
+
+    def test_reject_foreign_actor_even_with_all_seven_owner_coverage(self):
+        for packet in self.packets():
+            next(row for row in packet['world']['units'] if row['raw_id'] == 8)['owner'] = next(row['id'] for row in packet['world']['players'] if row['raw_id'] == 1)
+        self.reject()
+
+    def test_reject_remote_actor_and_funding_contradictions(self):
+        for packet in self.packets():
+            actor = next(row for row in packet['world']['units'] if row['raw_id'] == 8); actor.update(x=0, y=0)
+        self.reject()
+        self.setUp()
+        source = next(value for kind, value, _ in self.records if kind == 'TH_INPUTS')
+        source.update(starting_credits=999, faction_bonus=3, energy={'credits': 123, 'initialized': True, 'last_income_turn': 0})
+        self.report['native_input'] = copy.deepcopy(source); self.reject()
+
+    def test_reject_relocated_p_carrier_without_changing_its_events(self):
+        fence = self.report['native_snapshots'][0]['query_after_native_key']
+        index = next(i for i, (kind, packet, _) in enumerate(self.records) if kind == 'TH_TRACE' and any(event['seq'] == fence for event in packet['events']))
+        kind, packet, _ = self.records[index]
+        first_native = next(line for name, _, line in self.records if name == 'TH_NATIVE')
+        self.records[index] = kind, packet, first_native - 1
+        self.reject()
+        self.setUp()
+        fence = self.report['native_snapshots'][0]['query_after_native_key']
+        index = next(i for i, (kind, packet, _) in enumerate(self.records) if kind == 'TH_TRACE' and any(event['seq'] == fence for event in packet['events']))
+        kind, packet, _ = self.records[index]
+        next_native = [line for name, _, line in self.records if name == 'TH_NATIVE'][1]
+        self.records[index] = kind, packet, next_native + 1
         self.reject()
 
     def test_reject_missing_or_wrong_native_key(self):
@@ -304,7 +336,6 @@ class ActualCaptureAuditTests(AuditMutations, unittest.TestCase):
 def finalization_fixture():
     """Synthetic metadata envelope; never claimed to be a real engine run."""
     records, report = protocol_fixture()
-    events = next(value['events'] for kind, value, _ in records if kind == 'TH_TRACE')
     exit_events = [{'seq': 19, 'kind': 'input.ingress', 'data': {'ingress': 7, 'type': 'keydown'}},
                    {'seq': 20, 'kind': 'input.dispatch', 'data': {'ingress': 7, 'phase': 'begin', 'type': 'keydown', 'code': 'Q', 'modifiers': 6}},
                    {'seq': 21, 'kind': 'input.dispatch', 'data': {'ingress': 7, 'phase': 'end', 'handled': True}}]
@@ -613,6 +644,13 @@ class PointerRouteMutations:
                     if row['id'] == 'raise': row['enabled'] = False
         self.reject()
 
+    def test_reject_extra_unreported_raw_button_action(self):
+        packets = [value for kind, value, _ in self.records if kind == 'TH_TRACE']
+        last = packets[-1]['events'][-1]['seq']
+        packets[-1]['events'].append({'seq': last + 1, 'kind': 'input.ingress', 'target': 'input',
+                                    'data': {'type': 'mousedown', 'button': 1, 'x': 1, 'y': 1, 'ingress': 9000}})
+        self.reject()
+
     def test_reject_native_disabled_widget_despite_enabled_source_packet(self):
         target = self.report['processed_pointers'][2]['target']['id']
         for kind, packet, _ in self.records:
@@ -677,7 +715,8 @@ class PreflightSchemaTests(unittest.TestCase):
                      'override_table': [{'row': i, 'field': 'shared_turns', 'field_index': 4, 'old': 12, 'new': 1, 'applies_to': ['land', 'sea'], 'land_name': f'Land {i}', 'sea_name': f'Sea {i}', 'land_prerequisite': 'None', 'sea_prerequisite': 'None'} for i in range(20)]}
         self.report = {'host_head': self.pref['head'], 'native_source_tree': self.pref['native_tree'], 'default_tree': self.pref['default_tree'],
                        'runtime_js_sha256': self.pref['runtime']['js'], 'runtime_wasm_sha256': self.pref['runtime']['wasm'],
-                       'source_override': {'original_sha256': self.pref['original_rules_sha256'], 'rate_one_sha256': self.pref['executed_rules_sha256']},
+                       'source_override': {'original_sha256': self.pref['original_rules_sha256'], 'rate_one_sha256': self.pref['executed_rules_sha256'],
+                                           'reads': 1, 'original_manifest_id': audit.CAPTURE_MANIFESTS[0], 'manifest_id': audit.CAPTURE_MANIFESTS[1]},
                        'seed_requested': self.pref['seed_requested'], 'production_default_sha256': self.pref['production_default_sha256'],
                        'observer_sha256': sha(main), 'world_input_sha256': sha(world), 'observer_helpers_sha256': '2' * 64,
                        'driver_sha256': files['executed_node_driver'], 'height_observation_sha256': files['tools/wasm-tests/terraform-height-observation.mjs'],
@@ -708,6 +747,28 @@ class PreflightSchemaTests(unittest.TestCase):
                 with self.assertRaises((AssertionError, KeyError)): self.validate()
         self.setUp(); encoded = json.dumps(self.pref).encode(); self.report['preflight_sha256'] = '0' * 64
         with self.assertRaises(AssertionError): audit.validate_preflight(self.directory, self.pref, encoded, self.report, self.native)
+
+    def test_actual_override_load_and_manifest_identity_are_required(self):
+        for key, value in [('reads', 0), ('reads', True), ('original_manifest_id', 'f' * 64), ('manifest_id', '0' * 64)]:
+            self.setUp(); self.report['source_override'][key] = value
+            with self.assertRaises(AssertionError): self.validate()
+
+
+class FrameFileTests(unittest.TestCase):
+    def test_all_five_actual_digests_required_without_pixel_agreement_claim(self):
+        names = ['before-height', 'raise-quote', 'raise-cancel', 'raise-payment-draft', 'raise-paid-completion']
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder); captures = []
+            for name in names:
+                data = b'\x89PNG\r\n\x1a\n' + name.encode()  # Digest protocol only; not a rendered image.
+                (root / (name + '.png')).write_bytes(data)
+                captures.append({'name': name, 'sha256': hashlib.sha256(data).hexdigest()})
+            report = {'captures': captures}
+            self.assertEqual(audit.validate_frames(root, report)['retained_frame_digests_verified'], 5)
+            target = root / (names[2] + '.png'); original = target.read_bytes(); target.unlink()
+            with self.assertRaises(FileNotFoundError): audit.validate_frames(root, report)
+            target.write_bytes(original + b'changed')
+            with self.assertRaises(AssertionError): audit.validate_frames(root, report)
 
 
 if __name__ == '__main__':
