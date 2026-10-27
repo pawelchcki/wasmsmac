@@ -17,7 +17,8 @@ behavior.scenario('short aquifer planning preserves exact native features Float 
  const expected = [{x:2,y:2,features:#clone(original.features)}];
  const plan = effects.plan(proxy.game,f.former,'aquifer');
  test.assert(plan == expected && #json_text_exact(plan) == #json_text_exact(expected),'The ordered complete native feature plan is unchanged');
- test.assert(proxy.reads['2:2'] == 3 && proxy.reads['0:2'] == 2 && #sizeof(proxy.reads) == 2,
+ let read_count = 0; for (key in proxy.reads) { read_count++; }
+ test.assert(proxy.reads['2:2'] == 3 && proxy.reads['0:2'] == 2 && read_count == 2,
   'Each of the two pure route calls reads each native coordinate once; eligibility also reads its origin');
  test.assert(f.snapshot() == before && f.terrain_snapshot() == terrain && #float_bits(f.former.movement) == bits);
  f.with_write(() => { f.former.movement = 1.0; });
