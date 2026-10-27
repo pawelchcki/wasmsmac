@@ -10,10 +10,19 @@
  const terrain_observer = #include('../tests/_terrain_trace_observer');
  glsmac.on('configure_game',(configured) => {
   const game = configured.game;
+  let production_acks = 0; let resumption_ack = false;
   game.on('event_result',(e) => {
    if (#typeof(e.event_id) != 'String' || #typeof(e.caller) != 'Int' || #typeof(e.success) != 'Bool') { throw Error('Unexpected native receipt types'); }
    #print('TH_RECEIPT|' + #json_text_exact({name:e.name,event_id:e.event_id,caller:e.caller,success:e.success,data:e.data}));
    if (!e.success) { #print('TH_ERROR|event-rejected'); }
+   if (e.name == 'process_base_production' && e.success && e.caller == 0 && e.data.turn_id == 1) { production_acks = production_acks + 1; }
+   if (e.name == 'set_base_production' && e.success && e.caller == 0) {
+    const setup = game.get('sea_browser_setup');
+    if (e.data.choice_id == setup.resumed_choice) {
+     if (production_acks != 7 || resumption_ack) { throw Error('Project resumption did not follow seven real production ACKs'); }
+     resumption_ack = true;
+    }
+   }
   });
   game.on('error',() => { #print('TH_ERROR|native-game'); });
   game.on('start_ui',() => {
@@ -153,7 +162,7 @@
    glsmac.ui.root.timer(100,() => {
     const setup = game.get('sea_browser_setup');
     const home = game.get_tm().get_tile(10,8).get_base();
-    if (game.get_turn() != 1 || home == null || home.get_production().choice_id != setup.resumed_choice) { return true; }
+    if (!resumption_ack || production_acks != 7 || game.get_turn() != 1 || home == null || home.get_production().choice_id != setup.resumed_choice) { return true; }
     let ready = false;
     for (unit of game.get_tm().get_tile(8,8).get_units()) { if (unit.owner == game.get_player().id && unit.get_def().id == setup.recipe.id && unit.get_terraform_home() == home.id) { ready = true; } }
     if (!ready) { return true; }

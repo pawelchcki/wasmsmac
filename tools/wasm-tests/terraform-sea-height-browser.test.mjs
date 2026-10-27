@@ -15,7 +15,7 @@ import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs'
 import {rateOneSource} from './terraform-browser-inputs.mjs';
 import {HeightPresentation,completedHeightKey,nativeHeightWorld,verifyHeightCapture,heightFatal,verifyHeightFinalization} from './terraform-height-observation.mjs';
 import {seaHeightTerrain,seaHeightInput,seaHeightOverrideManifest} from './terraform-sea-height-inputs.mjs';
-import {auditPaidSeaHeight} from './terraform-sea-height-observation.mjs';
+import {auditPaidSeaHeight,verifySeaBootstrap} from './terraform-sea-height-observation.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const scriptsRoot=process.env.WASM_SCRIPTS_ROOT||root;
 const build=process.env.WASM_APP_DIR||`${root}build/wasm-release/bin`;
@@ -188,10 +188,7 @@ test('real produced SeaFormer Raise quote Cancel draft and paid completion prese
   assert.equal(report.sea_setup.definition,report.sea_setup.declared.recipe.id);
   assert.equal(report.sea_setup.home,report.sea_setup.home_id);assert.equal(report.sea_setup.home_owner,0);
   assert.equal(report.sea_setup.declared.recipe.weapon_mode,9);assert.equal(report.sea_setup.declared.recipe.application_recipe,'foil-terraform-module-v1');
-  const produced=records.filter(row=>row.kind==='TH_RECEIPT'&&row.value.name==='process_base_production'&&row.value.success);
-  assert.ok(produced.length>0,'A real queued production event must complete before the sea UI baseline');
-  report.production_receipts=produced.map(row=>row.value);
-  assert.ok(records.some(row=>row.kind==='TH_RECEIPT'&&row.value.name==='set_base_production'&&row.value.success&&row.value.data.choice_id===report.sea_setup.declared.resumed_choice),'Normal source project selection must ACK after production');
+  report.production_bootstrap=verifySeaBootstrap(records,report.sea_setup);
   assert.equal(report.native_input.can_terraform,true);assert.equal(report.native_input.raise_rule.turns,1);assert.equal(report.native_input.raise_rule.sea.turns,1);
   assert.equal(report.sea_setup.declared.recipe.rows,8,'Fixed installed recipe must retain its native eight-row composition');
   assert.equal(report.sea_setup.declared.restored.cost,80);
@@ -211,6 +208,7 @@ test('real produced SeaFormer Raise quote Cancel draft and paid completion prese
   assert.ok(rendered,'The actual game HUD must render before pointer input');
   const before=await observe('before-height');await capture('before-height');
   const nativeActor=before.world.units.find(row=>row.raw_id===before.ui.actor);assert.ok(nativeActor);
+  assert.equal(report.sea_setup.home_id,Math.min(...before.world.bases.map(row=>row.raw_id)),'Source native base ordering must bind the first production receipt to the local producer');
   const nativeDetails=before.world.terrain_trace.unit_details[nativeActor.id];assert.equal(nativeDetails.movement_kind,'sea');
   assert.equal(nativeDetails.home_base_id,report.sea_setup.home_id);assert.equal(nativeDetails.can_terraform,true);
   assert.ok(before.ui.movement>0);

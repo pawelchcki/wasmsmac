@@ -46,14 +46,29 @@ return (game) => {
   game.event('spawn_unit',{type:'ScoutPatrol',owner:player,tile:tile,morale:2,health:1.0}); index++;
  }
  if (index != 7) { throw Error('Seven native participants are required'); }
- // bases.gls registered its ordinary turn listener first: it queues real
- // process_base_production, then growth. Queue the normal project selection
- // afterward so the complete trace's existing verified project vocabulary is
- // retained; no empty/native project is projected to a fabricated source ID.
- game.on('turn',() => {
-  if (game.get_turn() == 1) {
-   if (home == null || declared.restored == null) { throw Error('Authored Sea producer did not initialize'); }
-   game.event('set_base_production',{base:home,choice_id:project.choice});
+ // create_world precedes Trigger(start): registering turn directly here
+ // would run BEFORE the shipped bases start callback installs production.
+ // Register this later start callback now; bases.gls already owns the earlier
+ // start callback, so its ordinary turn production listener is installed first.
+ game.on('start',() => {
+  game.on('turn',() => {
+   if (game.get_turn() == 1) {
+    if (home == null || declared.restored == null) { throw Error('Authored Sea producer did not initialize'); }
+    game.event('set_base_production',{base:home,choice_id:project.choice});
+   }
+  });
+ });
+ // Read-only birth witness inside the actual native production publication.
+ // No native field/custom setter/event is called under its mutation guard.
+ game.get_um().on('unit_spawn',(e) => {
+  const unit = e.unit;
+  if (unit.get_def().id == sea.id) {
+   if (home == null || unit.owner != game.get_player().id || unit.get_terraform_home() != home.id) { throw Error('Unexpected Sea production origin'); }
+   const movement = unit.movement; const health = unit.health;
+   #print('TH_SEA_BIRTH|' + #json_text_exact({unit_id:unit.id + 0,owner:unit.owner + 0,definition:unit.get_def().id,
+    is_water:unit.is_water,can_terraform:unit.get_def().can_terraform,x:unit.get_tile().x + 0,y:unit.get_tile().y + 0,
+    movement:movement,health:health,home_id:unit.get_terraform_home(),home_population:#sizeof(home.get_pops()),
+    production:home.get_production(),turn:game.get_turn() + 0}));
   }
  });
 };
