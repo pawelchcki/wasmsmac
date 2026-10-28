@@ -80,7 +80,7 @@ relabeled current. No producer/hook/fixture/map/rule/runtime or game changes
 were made for this auditor branch. Publication/CI and merges remain Delivery-owned;
 this necessary closure is the final wrap-up, not another feature batch.
 
-Current source/result manifest (all SHA256):
+Historical ABI-guard source/result manifest (all SHA256; superseded by the separately versioned schema/ownership proof):
 
 | Item | Digest |
 | --- | --- |
@@ -117,7 +117,7 @@ reaped. Delivery owns mandatory CI selection and publication.
 
 The actual capture source is preserved at [`evidence/terraform-sea-height-v3-source`](https://github.com/pawelchcki/wasmsmac/tree/7d26149abbaa028b3d685f3503df7c8e195fbdec), exact commit `7d26149abbaa028b3d685f3503df7c8e195fbdec`, Native `115032ffc7f53ff7f0c3a9f997da12674e25e643`, Default `25ef18d3222f553507291d412330262169b2e418`. The publication branch contains the same nine Sea fixture/driver/contract files on its newer Land delivery base. That integrated head was not the historical game execution. The archive contains candidate source only, with no original-game binaries or assets.
 
-The mandatory PR Hot unit step runs all 32 `PublicSea` checks, all 26 portable runner checks (the earlier 13- and 17-check runs remain historical), and the Sea observation Node test without assets. Retained private capture classes are excluded from public CI rather than counted as skipped success. Portable envelope composition uses real cheap Node process completion with synthetic Native/UI report fields; it supplies no new game observation. The latest historical capture scope remains partial, complete-browser case count zero, and bounded state/receipt case count one.
+The mandatory PR Hot unit step runs all 33 `PublicSea` checks, all 26 portable runner checks (the earlier 13- and 17-check runs remain historical), and the Sea observation Node test without assets. Retained private capture classes are excluded from public CI rather than counted as skipped success. Portable envelope composition uses real cheap Node process completion with synthetic Native/UI report fields; it supplies no new game observation. The latest historical capture scope remains partial, complete-browser case count zero, and bounded state/receipt case count one.
 
 ## Portable runner follow-up (not game-executed)
 
@@ -130,3 +130,7 @@ Cleanup follows the fresh owned session across process-group changes, revalidate
 A single further read-only audit uses shared Land auditor `d0ee126802b8ff1428b61e292769d806602962ad785e44fa1cf22ae1582d38a3` and the unchanged historical Sea source and raw journal. The [new versioned result](terraform-sea-height-v3-typed-audit-six-contracts.json), SHA256 `59747426fa481093e60a6f23ad893c98bff9aed43187335dda26869231db674c`, retains partial scope: complete-browser cases zero, bounded state/receipt case one. It verifies research projection, terrain units/schema, raw player identity, input ordering and all pointer dispatch completions under the current helper. Prior results remain byte-unchanged. The portable runner/resource/environment corrections are future unexecuted code and do not change the historical producer or supply new game evidence.
 
 Current portable cleanup additionally retains proven process identities across session changes. Unknown, unreadable or reused identities cannot certify cleanup; the portable auditor requires ownership_supported and known_owned_identities_absent to be true with empty unresolved/adoption-reason arrays. The historical capture retains its original cleanup receipt and does not claim execution of this successor.
+
+The current schema/ownership supplement is `terraform-sea-height-schema-ownership-proof.json`. Its separate result checks all six original native packets with the unchanged shared v4 terrain schema, available unit/base mirrors, and equality of duplicate UI state. It reports observed worlds6, complete worlds0, recognized historical execution1, bounded state/receipt1 and complete-browser0. Missing native raw identity echoes and exact callback content remain unsupported. Modern portable process metadata has execution0 without a recognized independent tool witness. Semantic records, including bootstrap records from the separate mounted world filename, require complete source-framed lines. No retained source/runtime or older result is relabeled.
+
+Final local public checks:33 Sea,26 preparation/owned-process and12 named Node observation checks pass with zero skips. The first schema integration run exposed a synthetic report Float projection mismatch; only that model was corrected. The first framed read-only replay identified the separate world-script prefix and produced no result; the corrected explicit prefix passes the unchanged historical audit. Both integration failures were harness/source-contract findings, not game failures.

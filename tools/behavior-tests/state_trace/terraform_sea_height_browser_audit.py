@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import re
 import struct
 import subprocess
 from pathlib import Path
@@ -36,16 +37,22 @@ def digest(path):
 def parse_records(raw):
     kinds = ('TH_NATIVE', 'TH_RECEIPT', 'TH_INPUTS', 'TH_TRACE', 'TH_HEADERS', 'TH_ROWS',
              'TH_SEA_DECLARED', 'TH_SEA_ACCOUNTING', 'TH_SEA_PRETURN', 'TH_SEA_BIRTH', 'TH_SEA_SETUP')
+    world_kinds = ('TH_SEA_DECLARED', 'TH_SEA_ACCOUNTING', 'TH_SEA_PRETURN', 'TH_SEA_BIRTH')
+    semantic = re.compile(height.GSE_RECORD_PREFIX + '(' + '|'.join(k for k in kinds if k not in world_kinds) + r')\|(.+)')
+    world_prefix = r'(?: {4}\[/height-snapshot/GLSMAC_data/default/game/world/browser_height\.gls\.js:[1-9][0-9]*:[1-9][0-9]*\] )?'
+    bootstrap = re.compile(world_prefix + '(' + '|'.join(world_kinds) + r')\|(.+)')
     records = []
     for line_number, line in enumerate(raw.decode('utf8').splitlines()):
-        if 'TH_EXIT_REQUEST' in line:
+        if height.EXIT_RECORD.fullmatch(line):
             records.append(('TH_EXIT_REQUEST', None, line_number))
-        for kind in kinds:
-            if kind + '|' in line:
-                value = json.loads(line.split(kind + '|', 1)[1])
-                if kind == 'TH_TRACE': value = json.loads(value)
-                records.append((kind, value, line_number))
-                break
+        match = semantic.fullmatch(line) or bootstrap.fullmatch(line)
+        if match:
+            kind, encoded = match.groups()
+            value = height.terrain_schema.decode_json(encoded)
+            if kind == 'TH_TRACE':
+                assert type(value) is str
+                value = height.terrain_schema.decode_json(value)
+            records.append((kind, value, line_number))
     return records
 
 
@@ -224,7 +231,9 @@ def audit_records(records, report):
         assert height.equal(movement, next(unit['movement'] for unit in row['world']['units'] if unit['raw_id'] == 8))
     assert [row['ui']['movement_bits'] for row in packets] == [1082130432] * 5 + [0]
     return {'status': 'passed-readonly-native-audit', 'native_cases_added': 0, 'browser_cases_audited': 0,
-            'worlds': len(packets), 'per_world': height.validate_coverage(before), 'pure_worlds': 5,
+            'worlds': len(packets), 'observed_worlds': len(packets), 'complete_worlds': 0,
+            'entity_detail_identity': height.validate_detail_mirrors(before),
+            'per_world': height.validate_coverage(packets[0]['world']), 'pure_worlds': 5,
             'changed_fields': len(height.diffs(before, after)), 'canonical_patches': patches, 'affected_tiles': affected,
             'source_vertex_means': [{'vertex': list(key), 'native_Int_height': value} for key, value in vertices.items()],
             'fee': fee, 'energy_before': quote['credits'], 'energy_after': quote['credits'] - fee,
@@ -426,10 +435,13 @@ def validate_portable_outer(directory, report, raw, preflight):
     assert height.equal(claim, {'preflight_sha256': digest(directory / 'preflight.json'), 'argv': preflight['argv'], 'candidate_execution_requested': True})
     for field in ('actual_os_process_exit_code', 'actual_os_node_exit_code', 'native_app_exit', 'complete_browser_cases'):
         assert type(completion[field]) is int and completion[field] == 0
-    for field in ('actual_wait_returned', 'owned_group_absent', 'subreaper_restored', 'postpins_match'): assert completion[field] is True
+    for field in ('actual_wait_returned', 'owned_group_absent', 'subreaper_restored', 'postpins_match',
+                  'ownership_supported', 'known_owned_identities_absent'): assert completion[field] is True
     for field in ('forced_cleanup', 'outer_timed_out'): assert completion[field] is False
     for field in ('spawn_error', 'postpins_error', 'lifecycle_error', 'report_read_error'): assert completion.get(field) is None
     assert completion['remaining_owned_identities'] == []
+    assert completion['unresolved_adopted_children'] == []
+    assert completion['ownership_unsupported_reasons'] == []
     assert completion['reported_status'] == report['status'] == 'passed'
     assert height.equal(completion['reported_native_exit'], report['native_exit'])
     assert height.equal(report['native_exit'], {'body_state': 'exited', 'status_text': 'GLSMAC exited (0).', 'raw_code': 0})
@@ -491,16 +503,11 @@ def validate_outer(directory, report, raw):
             'raw_outcome_sha256': digest(directory / 'raw-outcome.json'), 'owned_reaped_without_forced_cleanup': True}
 
 
-def classify_evidence(finalization, external_exit):
-    if external_exit['supported']:
-        return height.classify_browser_credit(finalization, external_exit)
-    assert external_exit['bounded_process_witness_supported'] is True
-    unsupported = [external_exit['reason']]
-    if not finalization['exact_callback_message_identity']['supported']:
-        unsupported.append(finalization['exact_callback_message_identity']['scope'])
-    return {'status': 'partial-readonly-bounded-state-receipt-audit', 'browser_cases_audited': 0,
-            'complete_browser_cases_audited': 0, 'bounded_state_receipt_cases_audited': 1,
-            'unsupported_capabilities': unsupported}
+def classify_evidence(finalization, external_exit, entity_identity=None):
+    if not external_exit['supported']:
+        assert external_exit['bounded_process_witness_supported'] is True
+    result = height.classify_browser_credit(finalization, external_exit, entity_identity)
+    return result
 
 
 def audit_artifacts(directory, source_root, portable_node=None):
@@ -518,7 +525,7 @@ def audit_artifacts(directory, source_root, portable_node=None):
     result['external_exit'] = validate_outer(directory, report, raw)
     result['frames_decoded'] = height.validate_frames(directory, report)
     clip = [result['frames_decoded']['decoded_frames'][0][key] for key in ('width', 'height')]
-    result.update(classify_evidence(result['finalization'], result['external_exit']))
+    result.update(classify_evidence(result['finalization'], result['external_exit'], result['entity_detail_identity']))
     result.update(raw_bytes=len(raw), raw_sha256=hashlib.sha256(raw).hexdigest(),
                   report_sha256=digest(directory / 'report.json'), preflight_sha256=digest(directory / 'preflight.json'),
                   provenance_schema=provenance['kind'],

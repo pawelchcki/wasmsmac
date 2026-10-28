@@ -45,14 +45,18 @@ def model():
     actor = before['units'][-1]; actor.update(x=8, y=8, movement=4.0)
     detail = before['terrain_trace']['unit_details']['u8']
     detail.update(definition_id='SeaFormers', movement_kind='sea', can_terraform=True, home_base_id=1,
-                  work={'action': '', 'work_units': 0}, terraforming_recovery={'active': False, 'x': 0, 'y': 0}, automation={'version': 2, 'epoch': 0})
+                  terraforming_recovery={'active': False, 'x': 0, 'y': 0}, nominal_mp_per_turn=4.0)
+    for q in detail['quotes'].values():
+        if q is not None: q.update(movement_kind='sea', nominal_mp_per_turn=4.0)
     detail['quotes']['E']['destination'] = {'x': 10, 'y': 8}
     for i in range(7):
         before['terrain_trace']['base_details'][f'b{i + 1}']['production'] = {'choice_id': 'FORMERS', 'minerals': 4 if i == 0 else 0, 'last_processed_turn': 1}
+        before['bases'][i]['resources']['minerals'] = 4 if i == 0 else 0
     after = copy.deepcopy(before)
     after['units'][-1]['movement'] = 0.0
     after['terrain_trace']['unit_details']['u8']['moved_this_turn'] = True
-    after['terrain_trace']['unit_details']['u8']['quotes']['E'].update(allowed_now=False, reason='Unit is out of moves')
+    for q in after['terrain_trace']['unit_details']['u8']['quotes'].values():
+        if q is not None: q.update(allowed_now=False, reason='Unit is out of moves')
     after['terrain_trace']['player_details']['p0']['energy']['credits'] = 9
     after['terrain_trace']['player_details']['p0']['energy_revision'] = 2
     for name, tile in after['terrain_trace']['tiles'].items():
@@ -102,11 +106,12 @@ def model():
                     'source_lines': ['It will cost $NUM0 credits to {raise} this area;', 'our current reserves are $NUM1 credits.'],
                     'lines': ['It will cost 1 credits to raise this area;', 'our current reserves are 10 credits.'],
                     'source_choices': ['Cancel action.', 'Expend $NUM0 credits.'], 'choices': ['Cancel action.', 'Expend 1 credits.']}
+        if kind == 'TH_NATIVE': value['world']['terrain_trace']['ui'] = copy.deepcopy(value['ui'])
         if kind == 'TH_RECEIPT': value['event_id'] = 'model-height-accepted'
         changed.append((kind, value, line + 100 if kind in ('TH_NATIVE', 'TH_TRACE', 'TH_RECEIPT') else line))
     changed.append(('TH_EXIT_REQUEST', None, max(line for _, _, line in changed) + 1))
     report.update(native_input=copy.deepcopy(inputs), actual_sea_row={'id': 'raise', 'label': 'Terraform UP', 'enabled': True},
-                  expected_effect_from_live_quote=copy.deepcopy(quote), traversal={'home_port_before': copy.deepcopy(detail['quotes']['E'])})
+                  expected_effect_from_live_quote=copy.deepcopy(quote), traversal={'home_port_before': sea.height.node_projection(detail['quotes']['E'])})
     for item, packet in zip(report['native_snapshots'], [v for k, v, _ in changed if k == 'TH_NATIVE']): item['observation'] = sea.height.node_projection(packet)
     report['height_receipt'] = copy.deepcopy(next(v for k, v, _ in changed if k == 'TH_RECEIPT'))
     recipe = {'id': 'SeaFormers', 'choice': 'SEA_FORMERS', 'movement_type': 'water', 'chassis_cost': 2, 'weapon_cost': 6, 'armor_cost': 1, 'rows': 5, 'weapon_mode': 9}
@@ -144,6 +149,8 @@ class DomainMutations:
         before = copy.deepcopy((self.records, self.report)); result = sea.audit_records(self.records, self.report)
         self.assertEqual(result['native_float_fields'], 96); self.assertEqual(result['fee'], 1)
         self.assertEqual(result['per_world'], {'players': 7, 'units': 8, 'bases': 7, 'tiles': 128})
+        self.assertEqual(result['observed_worlds'], 6); self.assertEqual(result['complete_worlds'], 0)
+        self.assertFalse(result['entity_detail_identity']['supported'])
         self.assertEqual(result['browser_cases_audited'], 0); self.assertTrue(sea.height.equal(before, (self.records, self.report)))
     def test_coherent_foreign_actor_and_remote_position_are_rejected(self):
         # All six native worlds and their reported copies agree. A matching
@@ -251,6 +258,13 @@ class PublicSeaDomainTests(DomainMutations, unittest.TestCase):
     def setUpClass(cls): cls.original = model()
 
 class PublicSeaParserTests(unittest.TestCase):
+    def test_semantic_markers_and_exit_require_a_complete_gse_record(self):
+        for name in ('TH_NATIVE', 'TH_SEA_SETUP', 'TH_INPUTS', 'TH_RECEIPT'):
+            self.assertEqual(sea.parse_records(('noise' + name + '|{}\n').encode()), [])
+            self.assertEqual(sea.parse_records(('    [/height-snapshot/GLSMAC_data/default/browser_height_main.gls.js:144:1] ' + name + '|{}\n').encode()), [(name, {}, 0)])
+        self.assertEqual(sea.parse_records(b'noiseTH_EXIT_REQUEST\n'), [])
+        self.assertEqual(sea.parse_records(b'    [/height-snapshot/GLSMAC_data/default/game/world/browser_height.gls.js:35:4] TH_SEA_ACCOUNTING|{}\n'), [('TH_SEA_ACCOUNTING', {}, 0)])
+
     def test_exit_marker_is_retained_for_the_last_query_interval(self):
         self.assertEqual(sea.parse_records(b'prefix\nTH_EXIT_REQUEST\n'), [('TH_EXIT_REQUEST', None, 1)])
 
@@ -424,6 +438,7 @@ writeFileSync(out+'/application-log-chunks.jsonl',data.chunks.map(x=>JSON.string
             sea.parse_records(self.original['application.log']))
         credit = sea.classify_evidence(finalization, result)
         self.assertEqual(credit['complete_browser_cases_audited'], 0)
+        self.assertEqual(credit['execution_cases_audited'], 0)
         self.assertEqual(credit['bounded_state_receipt_cases_audited'], 1)
         self.assertTrue(credit['status'].startswith('partial-'))
 
@@ -434,9 +449,12 @@ writeFileSync(out+'/application-log-chunks.jsonl',data.chunks.map(x=>JSON.string
     def test_app_zero_does_not_hide_os_failure_missing_wait_or_cleanup(self):
         for field, value in [('actual_os_node_exit_code', 1), ('actual_os_process_exit_code', 1),
                              ('actual_wait_returned', False), ('owned_group_absent', False),
-                             ('forced_cleanup', True), ('subreaper_restored', False), ('postpins_match', False)]:
+                             ('forced_cleanup', True), ('subreaper_restored', False), ('postpins_match', False),
+                             ('ownership_supported', False), ('known_owned_identities_absent', False),
+                             ('unresolved_adopted_children', [{'pid': 1}]), ('ownership_unsupported_reasons', ['unknown'])]:
             self.setUp(); self.completion[field] = value; self.reject()
-        for field in ('actual_wait_returned', 'owned_group_absent'):
+        for field in ('actual_wait_returned', 'owned_group_absent', 'ownership_supported', 'known_owned_identities_absent',
+                      'unresolved_adopted_children', 'ownership_unsupported_reasons'):
             self.setUp(); self.completion.pop(field); self.reject()
 
     def test_malformed_kinds_and_fictional_tool_receipt_reject(self):
