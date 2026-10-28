@@ -476,3 +476,10 @@ previous audit accepted. The new additive result is
 `terraform-height-browser-v6-reaudit-footprint.json`; prior results remain
 historical. Missing per-callback message identity remains unsupported: complete
 browser count0, bounded state/receipt count1, no new Native or browser execution.
+
+The assertion-based auditor explicitly rejects optimized Python at module entry.
+Real file CLI, `-m`, import, `-O`/`-OO` and `PYTHONOPTIMIZE` negatives confirm the
+guard, while normal commands remain unchanged. A final actual read-only replay
+passed with the guarded source; the compact `reaudit-guard.json` receipt binds
+and exactly reconstructs its result from the preceding result plus its sole
+source-hash change. No Native or browser run was added.

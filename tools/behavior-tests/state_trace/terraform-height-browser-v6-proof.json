@@ -3506,8 +3506,8 @@
   },
   "current_acceptance": {
     "status": "partial-readonly-bounded-state-receipt-audit",
-    "source_commit": "3e0148fde82785eb4e728f5113f0b821efc12de0",
-    "auditor_sha256": "baa7912eb4cd7287c05a3a8583db1567f71f2335a2c70529693de8f0307a50f3",
+    "source_commit": "6b27d931fa55b95645cd7f450c21e1768166327a",
+    "auditor_sha256": "f6cca166ba823d7ede2e98469fe79292e3747ca75487604874091555e9103479",
     "result": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-footprint.json",
     "result_sha256": "086238325076882c755548a5ebd354d2ed9ba4668cf670f1779ab4c6ff4f0087",
     "browser_cases_audited": 0,
@@ -3534,7 +3534,10 @@
       "exact callback message identity; complete-browser credit remains0",
       "Original-game height/fee parity",
       "numeric rendered mesh/facing/animation/fixedcamera"
-    ]
+    ],
+    "guarded_reaudit_receipt": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-guard.json",
+    "guarded_reaudit_receipt_sha256": "07d1b17a6cc25c192405a73cc6e62508dc31e343391677745a3d2041b569f267",
+    "optimized_python_supported": false
   },
   "source_plan_reaudit_v8": {
     "status": "partial-readonly-bounded-state-receipt-audit",
@@ -3578,5 +3581,72 @@
     "latest_result_sha256": "eb9e79ba85302387794739c830c1b3ac7fe6acbdd57d6508fb3678d7efe2b7f0",
     "historical_proof_before_append_sha256": "a6deef11f8774f93e5115bf2ad7fc974d421eb009f654365895ba156c7822175",
     "historical_claims": "Earlier fields/results remain historical, not current full-browser passing credit; see latest typed_raw_reaudits entry and wrapup scope document."
+  },
+  "previous_current_acceptance_v8": {
+    "status": "partial-readonly-bounded-state-receipt-audit",
+    "source_commit": "3e0148fde82785eb4e728f5113f0b821efc12de0",
+    "auditor_sha256": "baa7912eb4cd7287c05a3a8583db1567f71f2335a2c70529693de8f0307a50f3",
+    "result": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-footprint.json",
+    "result_sha256": "086238325076882c755548a5ebd354d2ed9ba4668cf670f1779ab4c6ff4f0087",
+    "browser_cases_audited": 0,
+    "bounded_state_receipt_cases_audited": 1,
+    "native_cases_added": 0,
+    "source_derived_canonical_patches": 9,
+    "source_derived_affected_tiles": 25,
+    "source_derived_native_corner_fields_changed": 64,
+    "parsed_world_field_changes": 229,
+    "native_float_checks": 96,
+    "candidate_execution_required": "report.candidate_executed must be Boolean true before any field/case credit",
+    "plan_oracle": "BEFORE native centers/topology +pinned GSE band/slope policy; quote must equalderived plan",
+    "corner_oracle": "BEFORE native centers +derived patches; C++ four-incident-center mean with signed truncation; no AFTER oracle or render-mesh claim",
+    "tests": {
+      "public": 75,
+      "retained": 65,
+      "total_passed": 140,
+      "skipped": 0,
+      "elapsed_seconds": 126.009
+    },
+    "counterexamples": "one-patch/remote/missing/wrong-slope/coherently altered effects, wrong shared corner, false/Int execution flags oldaccepted/newrejected",
+    "historical_raw_report_preflight_external_unchanged": true,
+    "unsupported": [
+      "exact callback message identity; complete-browser credit remains0",
+      "Original-game height/fee parity",
+      "numeric rendered mesh/facing/animation/fixedcamera"
+    ]
+  },
+  "guarded_reaudit_v9": {
+    "version": 1,
+    "kind": "actual-readonly-guarded-height-reaudit.v1",
+    "status": "partial-readonly-bounded-state-receipt-audit",
+    "source_commit": "6b27d931fa55b95645cd7f450c21e1768166327a",
+    "auditor_sha256": "f6cca166ba823d7ede2e98469fe79292e3747ca75487604874091555e9103479",
+    "actual_process_exit": 0,
+    "actual_tool_session": 59412,
+    "python": "3.14.3 (main, Mar 26 2026, 00:00:00) [GCC 15.2.1 20260123 (Red Hat 15.2.1-7)]",
+    "reconstruction": {
+      "base_result": "tools/behavior-tests/state_trace/terraform-height-browser-v6-reaudit-footprint.json",
+      "base_result_sha256": "086238325076882c755548a5ebd354d2ed9ba4668cf670f1779ab4c6ff4f0087",
+      "replace_top_level_fields": {
+        "source_audit_script_sha256": "f6cca166ba823d7ede2e98469fe79292e3747ca75487604874091555e9103479"
+      },
+      "serialization": "json.dumps(value, indent=2) + newline; retain original object key order",
+      "actual_result_sha256": "b2fc4ddcc9eb7341f7d8a4bd62c0551b8d7d60deae2267ce5798f2ba7dea37e7",
+      "exact_actual_bytes_reconstructed": true
+    },
+    "complete_browser_cases_audited": 0,
+    "bounded_state_receipt_cases_audited": 1,
+    "new_native_or_browser_runs": 0,
+    "new_guard_tests": {
+      "passed": 3,
+      "skipped": 0,
+      "scope": "real -O/-OO/PYTHONOPTIMIZE/file CLI/-m/import fail closed; normal --help preserved"
+    },
+    "prior_algorithm_tests": {
+      "public": 75,
+      "retained": 65,
+      "total": 140,
+      "skipped": 0,
+      "source": "3e0148fd; no algorithm changes in guarded successor"
+    }
   }
 }
