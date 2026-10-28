@@ -1,14 +1,34 @@
-"""Portable successor boundary checks. Zero spawned children or engines.
+"""Portable successor boundary checks. Cheap Python children only; zero engines.
 
 The historical c2a13e capture and raw evidence are immutable; this runner has
 NEVER executed a game. Existing six no-child boundaries are ported unchanged."""
 import json
+import os
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 from pathlib import Path
 from state_trace import unit_body_census_runner as executor
 
 class ExecutorBoundaryTests(unittest.TestCase):
+
+    def test_optimized_import_and_file_or_module_cli_reject_before_credit(self):
+        root=Path(__file__).resolve().parents[2];script=root/'tools/behavior-tests/state_trace/unit_body_census_runner.py'
+        base=dict(os.environ);base.pop('PYTHONOPTIMIZE',None);base['PYTHONPATH']=str(root/'tools/behavior-tests')
+        variants=[(['-O'],None),(['-OO'],None),([], '1'),([], '0')]
+        entries=[['-c',"import state_trace.unit_body_census_runner;print('UNSAFE_CASE_CREDIT')"],['-m','state_trace.unit_body_census_runner','--help'],[str(script),'--help']]
+        for flags,optimize in variants:
+            for entry in entries:
+                env=dict(base)
+                if optimize is not None:env['PYTHONOPTIMIZE']=optimize
+                with self.subTest(flags=flags,env=optimize,entry=entry):
+                    child=subprocess.run([sys.executable,*flags,*entry],cwd=root,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=5)
+                    self.assertNotEqual(child.returncode,0);self.assertIn('requires unoptimized Python',child.stderr);self.assertNotIn('UNSAFE_CASE_CREDIT',child.stdout)
+        for entry in entries:
+            child=subprocess.run([sys.executable,*entry],cwd=root,env=base,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=5)
+            self.assertEqual(child.returncode,0,child.stderr)
+
     def test_split_utf16_emoji_transport_and_corrupt_chunks(self):
         rows=[dict(start_utf16=0,end_utf16=2,text='a\ud83d'),
               dict(start_utf16=2,end_utf16=4,text='\ude00b')]
