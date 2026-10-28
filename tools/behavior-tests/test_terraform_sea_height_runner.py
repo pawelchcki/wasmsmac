@@ -63,6 +63,42 @@ export function seaHeightOverrideManifest(original,executed){
 
 
 class SeaPreparationTests(unittest.TestCase):
+    def test_nested_package_scan_errors_reject_prepare_and_execution_pins(self):
+        with tempfile.TemporaryDirectory() as folder:
+            config, expected = public_source(folder)
+            modules = Path(config['node_modules'])
+            for name in ('playwright', 'playwright-core', 'pngjs'):
+                lib = modules / name / 'lib'; lib.mkdir()
+                (lib / 'driver.js').write_bytes(b'known-path executable stays readable')
+            prep.prepare(config, expected)
+            preflight = Path(config['output']) / 'preflight.json'
+            original = preflight.read_bytes()
+            actual_scandir = os.scandir
+            for name in ('playwright', 'playwright-core', 'pngjs'):
+                blocked = modules / name / 'lib'
+                self.assertEqual((blocked / 'driver.js').read_bytes(), b'known-path executable stays readable')
+                for error in (PermissionError('nested listing denied'), OSError('nested scan failed')):
+                    def fail_nested_scan(path):
+                        if Path(path) == blocked: raise error
+                        return actual_scandir(path)
+                    fresh = dict(config, output=str(Path(folder) / 'not-prepared'))
+                    checks = {'directory': lambda: prep.directory_hashes(blocked.parent),
+                              'prepare': lambda: prep.prepare(fresh, expected),
+                              'execution': lambda: runner.load_preflight(preflight, prep.sha(preflight))}
+                    for phase, check in checks.items():
+                        with self.subTest(package=name, error=type(error).__name__, phase=phase), \
+                                patch.object(os, 'scandir', fail_nested_scan):
+                            with self.assertRaises(type(error)) as caught: check()
+                            self.assertIs(caught.exception, error)
+                    self.assertFalse(Path(fresh['output']).exists())
+                    self.assertFalse((preflight.parent / 'execution-claim.json').exists())
+                    self.assertEqual(preflight.read_bytes(), original)
+            runner.load_preflight(preflight, prep.sha(preflight))
+            for name in ('playwright', 'playwright-core', 'pngjs'):
+                hashes = prep.directory_hashes(modules / name)
+                self.assertEqual(list(hashes), sorted(hashes))
+                self.assertEqual(hashes['lib/driver.js'], prep.sha(modules / name / 'lib/driver.js'))
+
     def test_imported_asset_helper_is_pinned_and_rejects_dirty_or_prepared_changes(self):
         helper = 'tools/wasm_assets.py'
         self.assertIn(helper, prep.FILES)

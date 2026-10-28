@@ -40,11 +40,16 @@ def git(root, *args): return subprocess.check_output(['git', *args], cwd=root, t
 def directory_hashes(root):
     root = Path(root)
     result = {}
-    for path in sorted(root.rglob('*')):
-        assert not path.is_symlink(), 'Symlink input is unsupported: ' + str(path)
-        if path.is_file(): result[str(path.relative_to(root))] = sha(path)
+    directories = [root]
+    while directories:
+        # rglob suppresses nested scan errors, allowing a partial input map.
+        # Explicit traversal must propagate these errors at every depth.
+        for path in sorted(directories.pop().iterdir()):
+            assert not path.is_symlink(), 'Symlink input is unsupported: ' + str(path)
+            if path.is_file(): result[str(path.relative_to(root))] = sha(path)
+            elif path.is_dir(): directories.append(path)
     assert result, 'Empty input directory: ' + str(root)
-    return result
+    return {name: result[name] for name in sorted(result)}
 
 
 def source_pins(root):
