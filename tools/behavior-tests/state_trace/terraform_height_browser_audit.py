@@ -538,7 +538,7 @@ def validate_preflight(directory, preflight, preflight_bytes, report, native_inp
     shared = {'browser-log-cursor.mjs', 'browser-native-log-hook.mjs', 'runtime-fetch-barrier.mjs', 'terraform-browser-geometry.mjs', 'terraform-browser-pointer.mjs'}
     assert set(report['shared_helpers_sha256']) == shared
     common_sources = {'tools/wasm-tests/' + name for name in shared} | {'tools/wasm-tests/terraform-height-observation.mjs', 'tools/wasm-tests/fixtures/terraform-height-main.gls.js', 'tools/wasm-tests/terraform-browser-inputs.mjs'}
-    expected_sources = common_sources | ({'tools/wasm-tests/terraform-height-browser.test.mjs'} if 'kind' not in preflight else {'executed_node_driver', 'preflight_producer', 'tools/serve-wasm.py', 'tools/wasm-tests/terraform-height-preflight.mjs', 'tools/wasm-tests/fixtures/terraform-controls-world.gls.js', 'GLSMAC_data/tests/_state_trace_observer.gls.js', 'GLSMAC_data/tests/_terrain_trace_observer.gls.js', 'GLSMAC_data/tests/_terraform_cooperation_observer.gls.js'})
+    expected_sources = common_sources | ({'tools/wasm-tests/terraform-height-browser.test.mjs'} if 'kind' not in preflight else {'executed_node_driver', 'preflight_producer', 'tools/serve-wasm.py', 'tools/wasm_assets.py', 'tools/wasm-tests/terraform-height-preflight.mjs', 'tools/wasm-tests/fixtures/terraform-controls-world.gls.js', 'GLSMAC_data/tests/_state_trace_observer.gls.js', 'GLSMAC_data/tests/_terrain_trace_observer.gls.js', 'GLSMAC_data/tests/_terraform_cooperation_observer.gls.js'})
     assert set(files) == expected_sources
     assert all(type(value) is str and re.fullmatch(r'[0-9a-f]{64}', value) for value in files.values())
     if 'kind' in preflight:
@@ -1077,8 +1077,14 @@ def main():
     parser.add_argument('--output', type=Path, help='Optional separate derived audit output; never rewrites raw capture/report')
     args = parser.parse_args()
     directory = args.artifacts
+    output = args.output or directory / 'raw-typed-audit.json'
+    if output.exists():
+        raise FileExistsError('Keep previous derived results immutable; choose a NEW --output path')
     result = audit_artifacts(directory, args.outer_outcome)
-    (args.output or directory / 'raw-typed-audit.json').write_text(json.dumps(result, indent=2) + '\n')
+    # A competing writer may finish during the audit. Exclusive creation keeps
+    # its exact bytes instead of truncating an accepted result.
+    with output.open('x', encoding='utf8') as stream:
+        stream.write(json.dumps(result, indent=2) + '\n')
     print(json.dumps({key: value for key, value in result.items() if key != 'unit_float_bits'}, indent=2))
 
 

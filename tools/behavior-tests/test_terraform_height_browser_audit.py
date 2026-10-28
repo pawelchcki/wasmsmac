@@ -885,6 +885,45 @@ class ExternalOutcomeTests(unittest.TestCase):
                 mutated = copy.deepcopy(data); change(mutated); path.write_text(json.dumps(mutated))
                 with self.assertRaises((AssertionError, KeyError, TypeError)): audit.validate_external_exit(path, native, bindings)
 
+class DerivedOutputTests(unittest.TestCase):
+    """Deterministic writer interleaving only; no game or retained capture."""
+    def invoke(self, directory, output, perform):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        argv = ['height-audit', '--artifacts', str(directory)]
+        if output is not None: argv += ['--output', str(output)]
+        with patch.object(sys, 'argv', argv), patch.object(audit, 'audit_artifacts', side_effect=perform), contextlib.redirect_stdout(io.StringIO()):
+            audit.main()
+
+    def test_existing_explicit_or_default_result_rejects_before_audit(self):
+        for explicit in (False, True):
+            with self.subTest(explicit=explicit), tempfile.TemporaryDirectory() as folder:
+                directory = Path(folder); path = directory / ('new.json' if explicit else 'raw-typed-audit.json')
+                path.write_bytes(b'original retained result\n'); calls = []
+                with self.assertRaises(FileExistsError):
+                    self.invoke(directory, path if explicit else None, lambda *a: calls.append(a) or {'status': 'synthetic'})
+                self.assertEqual(calls, [])
+                self.assertEqual(path.read_bytes(), b'original retained result\n')
+
+    def test_other_writer_during_audit_keeps_its_exact_result(self):
+        for explicit in (False, True):
+            with self.subTest(explicit=explicit), tempfile.TemporaryDirectory() as folder:
+                directory = Path(folder); path = directory / ('new.json' if explicit else 'raw-typed-audit.json')
+                def intervening_writer(*args):
+                    path.write_bytes(b'first writer immutable result\n')
+                    return {'status': 'synthetic later writer'}
+                with self.assertRaises(FileExistsError):
+                    self.invoke(directory, path if explicit else None, intervening_writer)
+                self.assertEqual(path.read_bytes(), b'first writer immutable result\n')
+
+    def test_fresh_result_is_written_once(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder); output = directory / 'fresh.json'
+            self.invoke(directory, output, lambda *a: {'status': 'synthetic writer model', 'native_cases_added': 0})
+            self.assertEqual(json.loads(output.read_text()), {'status': 'synthetic writer model', 'native_cases_added': 0})
+
+
 def pointer_route_fixture():
     """Asset-free model of the same eight native widget/input protocol steps."""
     records, report = protocol_fixture()
@@ -1112,7 +1151,7 @@ class PreflightSchemaTests(unittest.TestCase):
         shared = {name: sha(name.encode()) for name in ('browser-log-cursor.mjs', 'browser-native-log-hook.mjs', 'runtime-fetch-barrier.mjs', 'terraform-browser-geometry.mjs', 'terraform-browser-pointer.mjs')}
         files = {'tools/wasm-tests/' + name: value for name, value in shared.items()}
         files.update({'tools/wasm-tests/terraform-height-observation.mjs': 'a' * 64, 'tools/wasm-tests/fixtures/terraform-height-main.gls.js': sha(main),
-                      'tools/wasm-tests/terraform-browser-inputs.mjs': 'b' * 64, 'executed_node_driver': 'c' * 64, 'preflight_producer': 'd' * 64, 'tools/wasm-tests/terraform-height-preflight.mjs': 'd' * 64, 'tools/serve-wasm.py': '4' * 64,
+                      'tools/wasm-tests/terraform-browser-inputs.mjs': 'b' * 64, 'executed_node_driver': 'c' * 64, 'preflight_producer': 'd' * 64, 'tools/wasm-tests/terraform-height-preflight.mjs': 'd' * 64, 'tools/serve-wasm.py': '4' * 64, 'tools/wasm_assets.py': '5' * 64,
                       'tools/wasm-tests/fixtures/terraform-controls-world.gls.js': 'e' * 64,
                       'GLSMAC_data/tests/_state_trace_observer.gls.js': 'f' * 64, 'GLSMAC_data/tests/_terrain_trace_observer.gls.js': '1' * 64,
                       'GLSMAC_data/tests/_terraform_cooperation_observer.gls.js': '2' * 64})
@@ -1152,7 +1191,7 @@ class PreflightSchemaTests(unittest.TestCase):
                 with self.assertRaises((AssertionError, KeyError)): self.validate()
 
     def test_v1_binds_digest_seed_files_and_mandatory_sources(self):
-        for mutate in (lambda x: x.report.update(seed_requested='wrong'), lambda x: x.pref['source_sha256'].pop('preflight_producer'),
+        for mutate in (lambda x: x.report.update(seed_requested='wrong'), lambda x: x.pref['source_sha256'].pop('preflight_producer'), lambda x: x.pref['source_sha256'].pop('tools/wasm_assets.py'),
                        lambda x: x.report.update(shared_helpers_sha256={}), lambda x: (x.directory / 'fixture-world.gls.js').write_bytes(b'wrong input')):
             with self.subTest(mutate=mutate):
                 self.setUp(); mutate(self)
