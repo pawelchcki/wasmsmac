@@ -10,7 +10,12 @@ import struct
 import re
 import math
 import zlib
+import sys
 from pathlib import Path
+
+# Reuse the reviewed v4 native schema unchanged, including all 128 tiles.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from state_trace import terrain_observation as terrain_schema
 
 CHECKPOINTS = ('before-height', 'raise-quote', 'raise-cancel', 'raise-reopened',
                'raise-payment-draft', 'raise-paid-completion')
@@ -21,7 +26,9 @@ CORNERS = ('left', 'top', 'right', 'bottom')
 # GSE Console::print emits four spaces + source location + one space.
 # This pinned fixture is mounted under the same virtual filename for land/sea;
 # a bare line is also admitted by the asset-free protocol model.
-EXIT_RECORD = re.compile(r'(?: {4}\[/height-snapshot/GLSMAC_data/default/browser_height_main\.gls\.js:[1-9][0-9]*:[1-9][0-9]*\] )?TH_EXIT_REQUEST')
+GSE_RECORD_PREFIX = r'(?: {4}\[/height-snapshot/GLSMAC_data/default/browser_height_main\.gls\.js:[1-9][0-9]*:[1-9][0-9]*\] )?'
+EXIT_RECORD = re.compile(GSE_RECORD_PREFIX + r'TH_EXIT_REQUEST')
+SEMANTIC_RECORD = re.compile(GSE_RECORD_PREFIX + r'(TH_NATIVE|TH_RECEIPT|TH_INPUTS|TH_TRACE|TH_HEADERS|TH_ROWS)\|(.+)')
 
 
 def equal(a, b):
@@ -53,18 +60,19 @@ def parse_records(raw):
     for line_number, line in enumerate(raw.decode('utf8').splitlines()):
         if EXIT_RECORD.fullmatch(line):
             records.append(('TH_EXIT_REQUEST', None, line_number))
-        for kind in ('TH_NATIVE', 'TH_RECEIPT', 'TH_INPUTS', 'TH_TRACE', 'TH_HEADERS', 'TH_ROWS'):
-            marker = kind + '|'
-            if marker in line:
-                value = json.loads(line.split(marker, 1)[1])  # malformed packets fail closed
-                if kind == 'TH_TRACE':
-                    value = json.loads(value)
-                records.append((kind, value, line_number))
-                break
+        match = SEMANTIC_RECORD.fullmatch(line)
+        if match:
+            kind, encoded = match.groups()
+            value = terrain_schema.decode_json(encoded)
+            if kind == 'TH_TRACE':
+                assert type(value) is str
+                value = terrain_schema.decode_json(value)
+            records.append((kind, value, line_number))
     return records
 
 
 def world(row):
+    assert equal(row['world']['terrain_trace']['ui'], row['ui']), 'Contradictory duplicated native UI projection'
     result = copy.deepcopy(row['world'])
     del result['terrain_trace']['ui']
     return result
@@ -83,6 +91,12 @@ def diffs(a, b, path=()):
 
 
 def validate_coverage(state):
+    # The reusable schema raises ProtocolError; keep the auditor acceptance
+    # surface fail-closed without discarding or normalizing any raw field.
+    try:
+        terrain_schema.validate_snapshot(state)
+    except terrain_schema.ProtocolError as error:
+        raise AssertionError(str(error)) from error
     assert type(state['width']) is int and state['width'] == 16
     assert type(state['height']) is int and state['height'] == 16
     counts = {name: len(state[name]) for name in ('players', 'units', 'bases')}
@@ -133,7 +147,34 @@ def validate_coverage(state):
         assert type(tile['x']) is int and type(tile['y']) is int
         assert key == f"{tile['x']},{tile['y']}"
     counts['tiles'] = len(tiles)
+    validate_detail_mirrors(state)
     return counts
+
+
+def validate_detail_mirrors(state):
+    """Check actual available echoes, without inventing absent native handles."""
+    trace = state['terrain_trace']
+    prototypes = {'ColonyPod': 'colony-pod', 'Formers': 'formers', 'ScoutPatrol': 'scout-patrol', 'Scout': 'scout-patrol'}
+    for unit in state['units']:
+        detail = trace['unit_details'][unit['id']]
+        if detail['definition_id'] in prototypes:
+            assert unit['prototype'] == prototypes[detail['definition_id']], 'Native unit definition/prototype mirror differs'
+        # validate_snapshot also binds all eight quote source/destination,
+        # movement-kind and nominal-MP echoes to this row's actual position.
+    projects = {'COLONY_POD': 'colony-pod', 'FORMERS': 'formers', 'SCOUT_PATROL': 'scout-patrol'}
+    for base in state['bases']:
+        detail = trace['base_details'][base['id']]
+        assert equal(base['resources']['minerals'], detail['production']['minerals']), 'Native base mineral mirror differs'
+        assert base['project'] == projects[detail['production']['choice_id']], 'Native base production mirror differs'
+        assert equal(base['nutrients_native'], detail['nutrients'] if detail['nutrients_present'] else 'uninitialized'), 'Native base nutrient mirror differs'
+        jobs = {'workers': sum(c['type'] == 'WORKER' for c in detail['citizens']),
+                'doctors': sum(c['type'] == 'DOCTOR' for c in detail['citizens'])}
+        assert equal(base['jobs'], jobs), 'Native base citizen/job mirror differs'
+    # v4 detail objects do not contain raw_id. Matching available echoes is
+    # necessary but cannot prove individual identity for otherwise equal rows.
+    return {'supported': False, 'schema': 'game.terrain_observation.v4',
+            'unit_mirrors_verified': len(state['units']), 'base_mirrors_verified': len(state['bases']),
+            'reason': 'UNSUPPORTED: native unit/base raw identity echoes absent from v4 details; no complete entity/world credit'}
 
 
 def validate_trace(records):
@@ -178,6 +219,7 @@ def validate_sequence(records, report):
     prior_fence = -1
     for i, ((row, native_line), item) in enumerate(zip(native, reported)):
         ui, request = row['ui'], row['query_owner']
+        assert equal(row['world']['terrain_trace']['ui'], ui), 'Contradictory duplicated native UI projection'
         assert type(row['query']) is int and row['query'] == i + 1
         assert item['checkpoint'] == CHECKPOINTS[i]
         assert equal(item['observation'], node_projection(row)), 'Report observation is not the retained raw packet'
@@ -417,8 +459,9 @@ def audit_records(records, report):
         assert int.from_bytes(struct.pack('>f', ui['movement']), 'big') == ui['movement_bits']
         assert equal(ui['movement'], next(unit['movement'] for unit in row['world']['units'] if unit['raw_id'] == ui['actor']))
     assert packets[0]['ui']['movement_bits'] == 1065353216 and packets[-1]['ui']['movement_bits'] == 0
-    return {'status': 'passed-readonly-audit', 'native_cases_added': 0, 'browser_cases_audited': 0, 'native_capture_field_cases_audited': 1,
-            'typed_pure_checkpoints': 5, 'complete_worlds': len(packets), 'per_world': validate_coverage(base),
+    return {'status': 'partial-readonly-native-fields-audit', 'native_cases_added': 0, 'browser_cases_audited': 0, 'native_capture_field_cases_audited': 1,
+            'typed_pure_checkpoints': 5, 'complete_worlds': 0, 'observed_worlds': len(packets),
+            'entity_detail_identity': validate_detail_mirrors(base), 'per_world': validate_coverage(packets[0]['world']),
             'parsed_native_world_changed_fields': len(changes), 'allowed_diff_categories': categories,
             'native_float_unit_fields_checked': len(f32), 'unit_float_bits': f32,
             'actor_movement_bits': [row['ui']['movement_bits'] for row in packets],
@@ -436,7 +479,7 @@ LEGACY_KEYS = {'candidate_executed', 'phase', 'prior_attempt', 'head', 'native_t
 V1_KEYS = {'version', 'kind', 'candidate_executed', 'phase', 'head', 'native_tree', 'default_tree',
            'runtime', 'original_rules_sha256', 'executed_rules_sha256', 'override_table', 'source_sha256',
            'input_sha256', 'production_default_sha256', 'declared_map', 'seed_requested',
-           'browser_budget_ms', 'native_policy_observation'}
+           'browser_budget_ms', 'native_policy_observation', 'runtime_build_binding'}
 FATAL = re.compile(r'TH_ERROR|Unhandled exception|Uncaught|Unsupported image format|Assertion failed|Aborted\(|RuntimeError:|(?:worker|Pthread[^\n]*) sent an error!|\[Error\]', re.I)
 CAPTURE_MANIFESTS = ('12743b42e275842a7ae3862572ec769c6d86f647394f0edb1ff9db6d104888e3',
                      '740c1c9f418ec24f7f6343087645cdef44fd7b85127cb297f0a453f28ea3ae10')
@@ -458,6 +501,14 @@ def validate_preflight(directory, preflight, preflight_bytes, report, native_inp
         assert type(preflight['version']) is int and preflight['version'] == 1
         assert preflight['phase'] == 'before-native-launch'
         assert report['preflight_sha256'] == digest
+        binding = preflight['runtime_build_binding']
+        assert set(binding) == {'schema', 'provenance_sha256', 'source_head', 'native_tree', 'runtime', 'scope'}
+        assert binding['schema'] == 'native-source-runtime.v1'
+        assert type(binding['provenance_sha256']) is str and re.fullmatch(r'[0-9a-f]{64}', binding['provenance_sha256'])
+        assert type(binding['source_head']) is str and re.fullmatch(r'[0-9a-f]{40}', binding['source_head'])
+        assert binding['native_tree'] == preflight['native_tree'] == report['native_source_tree']
+        assert binding['runtime'] == {'GLSMAC.js': report['runtime_js_sha256'], 'GLSMAC.wasm': report['runtime_wasm_sha256']}
+        assert binding['scope'] == 'Native C++ tree/runtime pair; Default scripts separately captured'
         assert preflight['production_default_sha256'] == report['production_default_sha256']
         assert preflight['native_policy_observation'] == 'not available before launch; require actual TH_INPUTS and every retained native world in the auditor'
         source = preflight['input_sha256']
@@ -964,18 +1015,28 @@ def validate_external_exit(path, native_exit, capture_bindings):
     assert type(completion['exit_code']) is int and completion['exit_code'] == 0
     assert completion['chunk_id'] == data['tool_completion_chunk_id']
     assert data['browser_server_driver_reaped'] is True and equal(data['native_exit'], native_exit)
-    return {'supported': True, 'external_raw_exit_code': 0, 'tool_session_id': data['tool_session_id'],
+    if 'kind' in data:
+        return {'supported': False, 'reason': 'UNSUPPORTED: self-declared v1 completion metadata has no recognized independently retained tool receipt',
+                'self_reported_process_fields_valid': True, 'artifact_sha256': digest}
+    return {'supported': True, 'receipt_verification': 'recognized-immutable-tool-receipt', 'external_raw_exit_code': 0, 'tool_session_id': data['tool_session_id'],
             'completion_chunk_id': data['tool_completion_chunk_id'], 'artifact_sha256': digest}
 
 
-def classify_browser_credit(finalization, external):
-    assert external['supported'] is True, 'External Node completion remains required'
-    complete = finalization['exact_callback_message_identity']['supported'] is True
+def classify_browser_credit(finalization, external, entity_identity=None):
+    execution = external.get('supported') is True
+    callbacks = finalization['exact_callback_message_identity']['supported'] is True
+    entities = entity_identity is not None and entity_identity.get('supported') is True
+    complete = execution and callbacks and entities
+    unsupported = []
+    if not execution: unsupported.append('Independent OS execution witness unsupported; self-declared outcome metadata is not tool evidence')
+    if not callbacks: unsupported.append('exact per-callback message identity; legacy offset-only metadata cannot earn complete-browser case credit')
+    if not entities: unsupported.append('native entity detail raw identity echoes absent; complete entity/world observation unsupported')
     return {'browser_cases_audited': 1 if complete else 0,
             'complete_browser_cases_audited': 1 if complete else 0,
+            'execution_cases_audited': 1 if execution else 0,
             'bounded_state_receipt_cases_audited': 1,
             'status': 'passed-readonly-complete-browser-audit' if complete else 'partial-readonly-bounded-state-receipt-audit',
-            'unsupported_capabilities': [] if complete else ['exact per-callback message identity; legacy offset-only metadata cannot earn complete-browser case credit']}
+            'unsupported_capabilities': unsupported}
 
 
 def audit_artifacts(directory, outer_outcome=None):
@@ -995,10 +1056,15 @@ def audit_artifacts(directory, outer_outcome=None):
     bindings = {'raw_sha256': hashlib.sha256(raw).hexdigest(), 'report_sha256': hashlib.sha256(report_bytes).hexdigest(),
                 'preflight_sha256': hashlib.sha256(preflight_bytes).hexdigest(), 'host_head': report['host_head']}
     external = validate_external_exit(Path(outer_outcome) if outer_outcome else directory / 'raw-outcome.json', report['native_exit'], bindings)
-    assert external['supported'], 'Full browser audit requires genuine external Node completion; native-field-only audit adds no browser case credit'
-    result.update(classify_browser_credit(finalization, external))
+    result.update(classify_browser_credit(finalization, external, result['entity_detail_identity']))
+    if not external['supported']:
+        result['native_capture_field_cases_audited'] = 0
+        result['bounded_journal_field_cases_audited'] = 1
     result.update(raw_sha256=hashlib.sha256(raw).hexdigest(), raw_bytes=len(raw), report_sha256=hashlib.sha256(report_bytes).hexdigest(),
                   preflight_sha256=hashlib.sha256(preflight_bytes).hexdigest(), source_audit_script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                  source_validation_dependencies_sha256={str(path.relative_to(Path(__file__).resolve().parent.parent)): hashlib.sha256(path.read_bytes()).hexdigest()
+                      for path in (Path(terrain_schema.__file__).resolve(), Path(__file__).resolve().parent / 'schema.py',
+                                   Path(__file__).resolve().parent.parent / 'protocol.py', Path(__file__).resolve().parent.parent / 'fast.py')},
                   preflight_schema=schema, finalization=finalization, pointer_route=pointer_route, keyboard_route=keyboard_route, frames=frames, external_node_exit=external,
                   historical_cleanliness_scope='legacy tracked_diff/source bindings only; no retrospective untracked-source cleanliness receipt')
     return result
