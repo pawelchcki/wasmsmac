@@ -63,6 +63,44 @@ export function seaHeightOverrideManifest(original,executed){
 
 
 class SeaPreparationTests(unittest.TestCase):
+    def test_prelaunch_ownership_errors_consume_claim_and_record_no_execution(self):
+        from unittest.mock import Mock
+        for phase in ('missing-children', 'concurrent-tasks', 'get-subreaper-denied', 'set-subreaper-denied'):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as folder:
+                config, expected = public_source(folder)
+                record = prep.prepare(config, expected)
+                path = Path(config['output']) / 'preflight.json'
+                if phase == 'missing-children':
+                    boundary = patch.object(runner, 'direct_children', return_value=None)
+                elif phase == 'concurrent-tasks':
+                    boundary = patch.object(runner, 'task_count', return_value=2)
+                else:
+                    libc = Mock()
+                    libc.prctl.side_effect = [-1] if phase == 'get-subreaper-denied' else [0, -1]
+                    boundary = patch.object(runner.ctypes, 'CDLL', return_value=libc)
+                actual_popen = subprocess.Popen
+                with boundary, patch.object(runner.subprocess, 'Popen', wraps=actual_popen) as observed:
+                    result, code = runner.execute(path, prep.sha(path))
+                self.assertEqual(code, 1)
+                self.assertEqual(result['status'], 'failed-or-unsupported')
+                self.assertTrue(result['prelaunch_ownership_error'])
+                self.assertIs(result['child_launch_attempted'], False)
+                self.assertIs(result['actual_wait_returned'], False)
+                self.assertIsNone(result['actual_os_node_exit_code'])
+                self.assertIsNone(result['owned_group_absent'])
+                self.assertIs(result['ownership_supported'], False)
+                self.assertIs(result['known_owned_identities_absent'], False)
+                self.assertIs(result['subreaper_restored'], False)
+                self.assertIs(result['subreaper_state_unmodified'], True)
+                self.assertFalse(result['external_tool_receipt']['supported'])
+                self.assertEqual(result['complete_browser_cases'], 0)
+                self.assertFalse(any(call.args[0] == record['argv'] for call in observed.call_args_list))
+                self.assertTrue((path.parent / 'execution-claim.json').is_file())
+                self.assertFalse((path.parent / 'external-start.json').exists())
+                self.assertFalse((path.parent / 'driver.log').exists())
+                self.assertEqual(json.loads((path.parent / 'portable-external-completion.json').read_bytes()), result)
+                with self.assertRaises(FileExistsError): runner.execute(path, prep.sha(path))
+
     def test_nested_package_scan_errors_reject_prepare_and_execution_pins(self):
         with tempfile.TemporaryDirectory() as folder:
             config, expected = public_source(folder)

@@ -19,6 +19,10 @@ import time
 import terraform_sea_height_prepare as preparation
 
 
+class OwnershipPrelaunchUnavailable(RuntimeError):
+    """Ownership setup failed before Popen or a successful subreaper change."""
+
+
 def probe_identity(pid):
     """Definite ENOENT is distinct from unreadable/invalid proc identity."""
     if type(pid) is not int or pid <= 0: return 'unknown', None
@@ -179,12 +183,17 @@ def run_owned(argv, cwd, env, output, timeout, cleanup_seconds=5):
     assert type(argv) is list and argv and all(type(value) is str for value in argv)
     assert timeout > 0 and cleanup_seconds > 0
     output = Path(output)
-    ownership = new_ownership()
     # The standalone outer process adopts orphaned descendants so a killed
     # Node/browser tree can be reaped. Restore the caller's previous flag.
-    libc = ctypes.CDLL(None, use_errno=True); previous = ctypes.c_int()
-    assert libc.prctl(37, ctypes.byref(previous), 0, 0, 0) == 0
-    assert libc.prctl(36, 1, 0, 0, 0) == 0
+    try:
+        ownership = new_ownership()
+        libc = ctypes.CDLL(None, use_errno=True); previous = ctypes.c_int()
+        if libc.prctl(37, ctypes.byref(previous), 0, 0, 0) != 0:
+            raise RuntimeError('Subreaper state cannot be read before launch')
+        if libc.prctl(36, 1, 0, 0, 0) != 0:
+            raise RuntimeError('Subreaper state cannot be enabled before launch')
+    except (OSError, RuntimeError) as error:
+        raise OwnershipPrelaunchUnavailable(str(error)) from error
     start, wall = time.monotonic(), time.time()
     record = {'kind': 'terraform-sea-owned-process-completion.v1', 'command_argv': argv,
               'cwd': str(cwd), 'started_wall_time': wall, 'timeout_seconds': timeout,
@@ -318,7 +327,24 @@ def execute(path, expected_digest):
     env = preparation.clean_environment()
     env['PATH'] = str(Path(config['server_python']).parent) + os.pathsep + env.get('PATH', '')
     env.update(record['environment'])
-    completion = run_owned(record['argv'], config['source_root'], env, out, record['outer_timeout_seconds'])
+    try:
+        completion = run_owned(record['argv'], config['source_root'], env, out, record['outer_timeout_seconds'])
+    except OwnershipPrelaunchUnavailable as error:
+        # This typed boundary is reached only before Popen and before any
+        # successful subreaper mutation. Never turn a post-launch error into a
+        # fabricated no-child, wait or cleanup observation.
+        completion = {'kind': 'terraform-sea-owned-process-completion.v1',
+                      'command_argv': record['argv'], 'cwd': config['source_root'],
+                      'actual_os_process_exit_code': None, 'actual_wait_returned': False,
+                      'spawn_error': None, 'prelaunch_ownership_error': str(error),
+                      'child_launch_attempted': False, 'outer_timed_out': False,
+                      'forced_cleanup': False, 'owned_group_absent': None,
+                      'known_owned_identities_absent': False, 'ownership_supported': False,
+                      'ownership_unsupported_reasons': ['prelaunch-ownership-unavailable'],
+                      'remaining_owned_identities': [], 'unresolved_adopted_children': [],
+                      'subreaper_restored': False, 'subreaper_state_unmodified': True,
+                      'complete_browser_cases': 0,
+                      'external_tool_receipt': {'supported': False, 'reason': 'No child was launched; no tool receipt is supplied'}}
     completion.update(kind='terraform-sea-portable-external-completion.v1',
                       actual_os_node_exit_code=completion['actual_os_process_exit_code'],
                       preflight_sha256=expected_digest, runner_sha256=preparation.sha(__file__),
