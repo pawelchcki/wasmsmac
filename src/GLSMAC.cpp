@@ -13,6 +13,7 @@
 
 #include "util/FS.h"
 #include "engine/Engine.h"
+#include "graphics/Graphics.h"
 #include "config/Config.h"
 #include "resource/ResourceManager.h"
 #include "scheduler/Scheduler.h"
