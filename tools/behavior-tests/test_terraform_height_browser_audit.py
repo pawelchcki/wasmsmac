@@ -81,10 +81,13 @@ def protocol_fixture():
         'traverse_quotes', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase',
         'home_identity', 'improvement_owners', 'terrain_epoch', 'paid_height_work', 'naval_recovery',
         'energy_revision', 'cooperative_work', 'ui')}
-    trace = {'coverage': capabilities, 'policy': {'version': 1, 'ignore_technologies': True}, 'ui': {}, 'tiles': tiles, 'unit_details': {u['id']: {'moved_this_turn': False, 'quotes': {'E': {'allowed_now': True, 'reason': None}}} for u in units},
-             'player_details': {p['id']: {'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}, 'energy_revision': 1} for p in players},
+    trace = {'schema': 'game.terrain_observation.v4', 'elevation_units': 'native-engine-elevation',
+             'terrain_units': {'rockiness': 'native-enum-0-none-1-flat-2-rolling-3-rocky', 'moisture': 'native-enum-0-none-1-arid-2-moist-3-rainy',
+                               'original_raw_height_class': 'unsupported', 'original_raw_rockiness': 'unsupported'}, 'coverage': capabilities, 'policy': {'version': 1, 'ignore_technologies': True}, 'ui': {}, 'tiles': tiles, 'unit_details': {u['id']: {'moved_this_turn': False, 'quotes': {'E': {'allowed_now': True, 'reason': None}}} for u in units},
+             'player_details': {p['id']: {'raw_id': p['raw_id'], 'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}, 'energy_revision': 1} for p in players},
              'base_details': {b['id']: {'unknown': 'unchanged'} for b in bases}}
-    world = {'width': 16, 'height': 16, 'turn': 1, 'players': players, 'units': units, 'bases': bases, 'terrain_trace': trace}
+    research = [{'player': p['id'], 'owned_tech_ids': [p['raw_id']], 'target_id': -1, 'accumulated': 0} for p in players]
+    world = {'research': research, 'width': 16, 'height': 16, 'turn': 1, 'players': players, 'units': units, 'bases': bases, 'terrain_trace': trace}
     quote = {'version': 1, 'supported': True, 'action': 'raise', 'resuming': False, 'paid_fee': 0, 'base_fee': 4, 'fee': 4, 'credits': 10,
              'mode': 'functional_approximation', 'policy': 'application.band-slope-height.v1', 'fee_policy': 'application.band-fee.v1',
              'unit_id': 8, 'owner': 0, 'turn': 1, 'x': 8, 'y': 8, 'source_elevation': 240, 'source_water': False,
@@ -264,6 +267,47 @@ class AuditMutations:
             foreign = next(p['id'] for p in row['world']['players'] if p['raw_id'] == 1)
             row['world']['terrain_trace']['player_details'][foreign]['energy_revision'] = 1.0
         self.reject()
+
+    def test_reject_reduced_or_misbound_research_projection(self):
+        for mutation in ('missing', 'short', 'duplicate-player', 'foreign-player', 'bool-target', 'float-science'):
+            self.setUp()
+            for packet in self.packets():
+                state = packet['world']
+                if mutation == 'missing': state.pop('research')
+                elif mutation == 'short': state['research'].pop()
+                elif mutation == 'duplicate-player': state['research'][1]['player'] = state['research'][0]['player']
+                elif mutation == 'foreign-player': state['research'][1]['player'] = 'unknown-player'
+                elif mutation == 'bool-target': state['research'][1]['target_id'] = False
+                else: state['research'][1]['accumulated'] = 0.0
+            self.reject()
+
+    def test_reject_missing_or_changed_schema_and_units_in_every_world(self):
+        for field in ('schema', 'elevation_units', 'terrain_units'):
+            for missing in (True, False):
+                self.setUp()
+                for packet in self.packets():
+                    trace = packet['world']['terrain_trace']
+                    if missing: trace.pop(field)
+                    elif field == 'terrain_units': trace[field]['rockiness'] = 'different-enum'
+                    else: trace[field] = 'unknown-schema-or-units'
+                self.reject()
+
+    def test_reject_swapped_or_wrong_type_native_player_detail_identity(self):
+        for mutation in ('swap', 'bool', 'float'):
+            self.setUp()
+            for packet in self.packets():
+                state = packet['world']; details = state['terrain_trace']['player_details']
+                players = {p['raw_id']: p['id'] for p in state['players']}
+                if mutation == 'swap': details[players[1]], details[players[2]] = details[players[2]], details[players[1]]
+                else: details[players[1]]['raw_id'] = True if mutation == 'bool' else 1.0
+            self.reject()
+
+    def test_reject_inputs_relocated_after_checkpoint_or_actions(self):
+        native_lines = [line for kind, _, line in self.records if kind == 'TH_NATIVE']
+        for line in (native_lines[0], native_lines[0] + 1, native_lines[-1] + 100):
+            self.setUp()
+            self.records = [(kind, value, line if kind == 'TH_INPUTS' else old_line) for kind, value, old_line in self.records]
+            self.reject()
 
     def test_reject_missing_world_policy(self):
         self.packets()[1]['world']['terrain_trace'].pop('policy')
@@ -831,6 +875,14 @@ class PointerRouteMutations:
                                     'data': {'type': 'mousedown', 'button': 1, 'x': 1, 'y': 1, 'ingress': 9000}})
         self.reject()
 
+    def test_reject_duplicate_untyped_pointer_dispatch_completion(self):
+        packets = [value for kind, value, _ in self.records if kind == 'TH_TRACE']
+        duplicate = copy.deepcopy(self.report['processed_pointers'][2]['end'])
+        duplicate['seq'] = packets[-1]['events'][-1]['seq'] + 1
+        self.assertNotIn('type', duplicate['data'], 'Real dispatch END has no mouse type')
+        packets[-1]['events'].append(duplicate)
+        self.reject()
+
     def test_reject_native_disabled_widget_despite_enabled_source_packet(self):
         target = self.report['processed_pointers'][2]['target']['id']
         for kind, packet, _ in self.records:
@@ -881,7 +933,7 @@ class PreflightSchemaTests(unittest.TestCase):
         shared = {name: sha(name.encode()) for name in ('browser-log-cursor.mjs', 'browser-native-log-hook.mjs', 'runtime-fetch-barrier.mjs', 'terraform-browser-geometry.mjs', 'terraform-browser-pointer.mjs')}
         files = {'tools/wasm-tests/' + name: value for name, value in shared.items()}
         files.update({'tools/wasm-tests/terraform-height-observation.mjs': 'a' * 64, 'tools/wasm-tests/fixtures/terraform-height-main.gls.js': sha(main),
-                      'tools/wasm-tests/terraform-browser-inputs.mjs': 'b' * 64, 'executed_node_driver': 'c' * 64, 'preflight_producer': 'd' * 64,
+                      'tools/wasm-tests/terraform-browser-inputs.mjs': 'b' * 64, 'executed_node_driver': 'c' * 64, 'preflight_producer': 'd' * 64, 'tools/wasm-tests/terraform-height-preflight.mjs': 'd' * 64, 'tools/serve-wasm.py': '4' * 64,
                       'tools/wasm-tests/fixtures/terraform-controls-world.gls.js': 'e' * 64,
                       'GLSMAC_data/tests/_state_trace_observer.gls.js': 'f' * 64, 'GLSMAC_data/tests/_terrain_trace_observer.gls.js': '1' * 64,
                       'GLSMAC_data/tests/_terraform_cooperation_observer.gls.js': '2' * 64})
@@ -927,6 +979,15 @@ class PreflightSchemaTests(unittest.TestCase):
                 with self.assertRaises((AssertionError, KeyError)): self.validate()
         self.setUp(); encoded = json.dumps(self.pref).encode(); self.report['preflight_sha256'] = '0' * 64
         with self.assertRaises(AssertionError): audit.validate_preflight(self.directory, self.pref, encoded, self.report, self.native)
+
+    def test_future_preflight_binds_its_executed_module_and_server_source(self):
+        for mutation in ('missing-server', 'missing-preflight', 'different-preflight'):
+            self.setUp()
+            files = self.pref['source_sha256']
+            if mutation == 'missing-server': files.pop('tools/serve-wasm.py')
+            elif mutation == 'missing-preflight': files.pop('tools/wasm-tests/terraform-height-preflight.mjs')
+            else: files['tools/wasm-tests/terraform-height-preflight.mjs'] = '9' * 64
+            with self.assertRaises((AssertionError, KeyError)): self.validate()
 
     def test_actual_override_load_and_manifest_identity_are_required(self):
         for key, value in [('reads', 0), ('reads', True), ('original_manifest_id', 'f' * 64), ('manifest_id', '0' * 64)]:

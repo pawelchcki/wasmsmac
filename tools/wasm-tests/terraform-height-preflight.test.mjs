@@ -69,7 +69,7 @@ function cleanGitInputs(){
  const folder=mkdtempSync(join(tmpdir(),'height-clean-source-')),scriptsRoot=join(folder,'source'),build=join(folder,'runtime'),assets=join(folder,'assets');
  const input=data(),repository=fileURLToPath(new URL('../../',import.meta.url));
  mkdirSync(scriptsRoot,{recursive:true});mkdirSync(build);mkdirSync(assets);
- const sourceFiles=['tools/wasm-tests/terraform-height-browser.test.mjs','tools/wasm-tests/terraform-height-observation.mjs','tools/wasm-tests/terraform-browser-inputs.mjs',
+ const sourceFiles=['tools/serve-wasm.py','tools/wasm-tests/terraform-height-preflight.mjs','tools/wasm-tests/terraform-height-browser.test.mjs','tools/wasm-tests/terraform-height-observation.mjs','tools/wasm-tests/terraform-browser-inputs.mjs',
   'tools/wasm-tests/fixtures/terraform-height-main.gls.js','tools/wasm-tests/fixtures/terraform-controls-main.gls.js','tools/wasm-tests/fixtures/terraform-controls-world.gls.js',
   'tools/wasm-tests/browser-log-cursor.mjs','tools/wasm-tests/browser-native-log-hook.mjs','tools/wasm-tests/runtime-fetch-barrier.mjs',
   'tools/wasm-tests/terraform-browser-geometry.mjs','tools/wasm-tests/terraform-browser-pointer.mjs',
@@ -85,9 +85,12 @@ function cleanGitInputs(){
 }
 
 test('future full producer rejects tracked staged and untracked consumed source before artifacts exist',()=>{
- for(const variant of ['tracked-native','staged-default','untracked-native','untracked-default','untracked-observer','ignored-default']){
+ for(const variant of ['tracked-native','staged-default','untracked-native','untracked-default','untracked-observer','ignored-default','tracked-server','staged-preflight','untracked-server','untracked-preflight']){
   const f=cleanGitInputs();
   try{
+   if(variant==='tracked-server')writeFileSync(join(f.scriptsRoot,'tools/serve-wasm.py'),'# changed executed server');
+   if(variant==='staged-preflight'){writeFileSync(join(f.scriptsRoot,'tools/wasm-tests/terraform-height-preflight.mjs'),'// changed executed preflight');f.git('add','tools/wasm-tests/terraform-height-preflight.mjs');}
+   if(variant==='untracked-server'||variant==='untracked-preflight'){const name=variant==='untracked-server'?'tools/serve-wasm.py':'tools/wasm-tests/terraform-height-preflight.mjs';f.git('rm','-q',name);f.git('-c','user.name=Protocol test','-c','user.email=protocol@example.invalid','-c','commit.gpgsign=false','commit','-qm','remove harness');writeFileSync(join(f.scriptsRoot,name),'// untracked executed harness');}
    if(variant==='tracked-native')writeFileSync(join(f.scriptsRoot,'src/model.cpp'),'// changed native');
    if(variant==='staged-default'){writeFileSync(join(f.scriptsRoot,'GLSMAC_data/default/main.gls.js'),'// changed default');f.git('add','GLSMAC_data/default/main.gls.js');}
    if(variant==='untracked-native')writeFileSync(join(f.scriptsRoot,'src/untracked.cpp'),'// undeclared native');
@@ -104,8 +107,24 @@ test('clean full producer allows unrelated notes and retains the actual Git sour
  const f=cleanGitInputs();
  try{
   writeFileSync(join(f.scriptsRoot,'README.md'),'unrelated author note');
-  const prepared=loadHeightPreflight(f);assert.equal(prepared.record.head,f.git('rev-parse','HEAD').trim());
+  const prepared=loadHeightPreflight(f);
+  for(const name of ['tools/serve-wasm.py','tools/wasm-tests/terraform-height-preflight.mjs'])assert.equal(prepared.record.source_sha256[name],hash(readFileSync(join(f.scriptsRoot,name))));
+  assert.equal(prepared.record.source_sha256.preflight_producer,prepared.record.source_sha256['tools/wasm-tests/terraform-height-preflight.mjs']);
+  assert.equal(prepared.record.head,f.git('rev-parse','HEAD').trim());
   assert.equal(prepared.record.native_tree,f.git('rev-parse','HEAD:src').trim());
   writeHeightPreflight({...f,...prepared});assert.equal(existsSync(join(f.artifacts,'preflight.json')),true);
+ }finally{rmSync(f.folder,{recursive:true,force:true});}
+});
+
+
+test('producer binds the server next to the actual driver, not a different source copy',()=>{
+ const f=cleanGitInputs();
+ try{
+  const actualRoot=join(f.folder,'executed');mkdirSync(join(actualRoot,'tools/wasm-tests'),{recursive:true});
+  const driverPath=join(actualRoot,'tools/wasm-tests/terraform-height-browser.test.mjs');
+  copyFileSync(join(f.scriptsRoot,'tools/wasm-tests/terraform-height-browser.test.mjs'),driverPath);
+  writeFileSync(join(actualRoot,'tools/serve-wasm.py'),'# different executed serving behavior');
+  assert.throws(()=>loadHeightPreflight({...f,driverPath}),/Executed asset server differs/);
+  assert.equal(existsSync(f.artifacts),false);
  }finally{rmSync(f.folder,{recursive:true,force:true});}
 });
