@@ -171,6 +171,10 @@ GLSMAC::GLSMAC()
 
 	// there can only be one GLSMAC
 	ASSERT( !s_glsmac, "GLSMAC already defined" );
+	// UI construction requires nonempty layout bounds. Reject this invalid
+	// environment before publishing the singleton or registering a GC root.
+	ASSERT( g_engine->GetGraphics()->GetViewportWidth() > 0 && g_engine->GetGraphics()->GetViewportHeight() > 0,
+		"GLSMAC UI requires a nonzero viewport" );
 	s_glsmac = this;
 
 	Log( "Creating global state" );
