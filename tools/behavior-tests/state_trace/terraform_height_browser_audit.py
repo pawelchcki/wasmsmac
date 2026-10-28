@@ -383,7 +383,7 @@ def audit_records(records, report):
     assert native[4][1] < receipt_line < native[5][1], 'Payment ACK is outside draft/complete sequence'
     assert type(receipt['event_id']) is str and receipt['event_id']
     assert receipt['success'] is True and type(receipt['caller']) is int and receipt['caller'] == quote['owner']
-    assert receipt['data'] == {'unit_id': quote['unit_id'], 'action': 'raise', 'confirmed_height': True}
+    assert equal(receipt['data'], {'unit_id': quote['unit_id'], 'action': 'raise', 'confirmed_height': True}), 'Native scalar receipt types differ'
     assert type(receipt['data']['unit_id']) is int
     changes, categories = diffs(base, after), {}
     for path, _, _ in changes:

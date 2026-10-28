@@ -148,6 +148,11 @@ class AuditMutations:
         with self.assertRaises((AssertionError, KeyError, TypeError)):
             audit.audit_records(self.records, self.report)
 
+    def test_native_confirmation_receipt_is_bool_not_integer_one(self):
+        receipt = next(value for kind, value, _ in self.records if kind == 'TH_RECEIPT')
+        receipt['data']['confirmed_height'] = 1
+        self.reject()
+
     def test_valid_capture_and_readonly_inputs(self):
         before = copy.deepcopy((self.records, self.report))
         result = audit.audit_records(self.records, self.report)
