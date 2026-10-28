@@ -239,7 +239,7 @@ def audit_records(records, report):
         assert int.from_bytes(struct.pack('>f', movement), 'big') == row['ui']['movement_bits']
         assert height.equal(movement, next(unit['movement'] for unit in row['world']['units'] if unit['raw_id'] == 8))
     assert [row['ui']['movement_bits'] for row in packets] == [1082130432] * 5 + [0]
-    return {'status': 'passed-readonly-native-audit', 'native_cases_added': 0, 'browser_cases_audited': 0,
+    return {'status': 'observations-only-readonly-native-fields-audit', 'native_cases_added': 0, 'browser_cases_audited': 0,
             'worlds': len(packets), 'observed_worlds': len(packets), 'complete_worlds': 0,
             'entity_detail_identity': height.validate_detail_mirrors(before),
             'per_world': height.validate_coverage(packets[0]['world']), 'pure_worlds': 5,

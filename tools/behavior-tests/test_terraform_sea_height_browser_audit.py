@@ -335,8 +335,8 @@ class RetainedSeaDomainTests(DomainMutations, unittest.TestCase):
         self.assertEqual(result['changed_fields'], 71)
         self.assertEqual(result['browser_cases_audited'], 0)
         self.assertEqual(result['complete_browser_cases_audited'], 0)
-        self.assertEqual(result['bounded_state_receipt_cases_audited'], 1)
-        self.assertEqual(result['status'], 'partial-readonly-bounded-state-receipt-audit')
+        self.assertEqual(result['bounded_state_receipt_cases_audited'], 0)
+        self.assertEqual(result['status'], 'observations-only-readonly-audit')
         self.assertFalse(result['finalization']['exact_callback_message_identity']['supported'])
         self.assertEqual(result['raw_sha256'], '191a6ffcf96f896ad8b7a0e009446bb406092133229461497492d6e6ccd7bb98')
         self.assertEqual({item['native_Int_height'] for item in result['source_vertex_means']}, {38, 42, 43, 47})
@@ -491,8 +491,8 @@ writeFileSync(out+'/application-log-chunks.jsonl',data.chunks.map(x=>JSON.string
         credit = sea.classify_evidence(finalization, result)
         self.assertEqual(credit['complete_browser_cases_audited'], 0)
         self.assertEqual(credit['execution_cases_audited'], 0)
-        self.assertEqual(credit['bounded_state_receipt_cases_audited'], 1)
-        self.assertTrue(credit['status'].startswith('partial-'))
+        self.assertEqual(credit['bounded_state_receipt_cases_audited'], 0)
+        self.assertEqual(credit['status'], 'observations-only-readonly-audit')
 
     def test_candidate_flag_false_or_integer_never_means_true(self):
         for value in (False, 1):
