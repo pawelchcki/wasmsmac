@@ -4,7 +4,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import {hash, nativeCensusEvidence, plan, snapshotAt} from './gse-shards.mjs';
+import {hash, nativeCensusEvidence, nativeResources, plan, snapshotAt} from './gse-shards.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const directory = process.env.WASM_APP_DIR || `${root}build/wasm/bin`;
@@ -35,7 +35,7 @@ assert.equal(result.status, 0, 'WASM game exits successfully');
 // fact is recorded after awaiting it, never inferred from APP/TAP/native text.
 const nativeResult={close_observed:true,status:result.status,signal:result.signal,
   error:result.error,stdout:result.stdout,stderr:result.stderr};
-const nativeCensus=nativeCensusEvidence(nativeResult);
+const nativeCensus=nativeCensusEvidence(nativeResult,nativeResources(snapshot));
 assert.doesNotMatch(result.stdout, /TEST FAILED|Testing complete, passed:/);
 assert.match(result.stdout, /All tests passed\./, 'Full GSE suite completed');
 assert.match(result.stdout, /^\s*test if tests work\.\.\.$/m, 'Native engine tests were included');
