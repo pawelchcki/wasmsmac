@@ -262,6 +262,15 @@ class AuditMutations:
             row['world']['terrain_trace']['player_details'][payer]['energy_revision'] = True
         self.reject()
 
+    def test_reject_untyped_energy_fields_for_every_nonpayer(self):
+        for raw_id in range(1, 7):
+            for key, value in (('credits', True), ('credits', 10.0), ('initialized', 1), ('last_income_turn', False), ('last_income_turn', 0.0)):
+                self.setUp()
+                for packet in self.packets():
+                    state = packet['world']; player = next(p for p in state['players'] if p['raw_id'] == raw_id)
+                    state['terrain_trace']['player_details'][player['id']]['energy'][key] = value
+                self.reject()
+
     def test_reject_nonint_foreign_revision_even_when_unchanged(self):
         for row in self.packets():
             foreign = next(p['id'] for p in row['world']['players'] if p['raw_id'] == 1)
@@ -587,6 +596,34 @@ class FinalizationMutations:
 
 class ProtocolFinalizationTests(FinalizationMutations, unittest.TestCase):
 
+    def test_exit_request_must_be_a_complete_permitted_record(self):
+        for marker in ('noise:TH_EXIT_REQUEST', 'TH_EXIT_REQUEST suffix', 'TH_EXIT_REQUEST|{}',
+                       '    [other-source.gls.js:132:27] TH_EXIT_REQUEST'):
+            self.setUp()
+            text = self.raw.decode().replace('\nTH_EXIT_REQUEST\n', '\n' + marker + '\n')
+            self.raw = text.encode()
+            self.records = audit.parse_records(self.raw)
+            length = audit.utf16_length(text)
+            self.chunks = [{'start_utf16': 0, 'end_utf16': length, 'text': text}]
+            digest = hashlib.sha256(self.raw).hexdigest()
+            self.report['log_transport'].update(raw_sha256=digest, joined_chunk_sha256=digest,
+                retained_utf8=len(self.raw), retained_utf16=length,
+                reads=[{'start_utf16': 0, 'end_utf16': length, 'transferred_utf16': length, 'transferred_utf8': len(self.raw)}])
+            offset = 0
+            calls = self.report['native_log_configuration']['callbacks']['calls']
+            for call, line in zip(calls, text.splitlines(keepends=True)):
+                size = audit.utf16_length(line)
+                call.update(before_utf16=offset, after_utf16=offset + size, message_utf16=size - 1, message=line[:-1])
+                offset += size
+            self.assertEqual(offset, length)
+            self.reject()
+
+    def test_exact_gse_exit_record_and_synthetic_standalone_record(self):
+        for line in ('TH_EXIT_REQUEST',
+                     '    [/height-snapshot/GLSMAC_data/default/browser_height_main.gls.js:132:27] TH_EXIT_REQUEST',
+                     '    [/height-snapshot/GLSMAC_data/default/browser_height_main.gls.js:144:27] TH_EXIT_REQUEST'):
+            self.assertEqual(audit.parse_records((line + '\n').encode()), [('TH_EXIT_REQUEST', None, 0)])
+
     def test_modern_callback_messages_bind_each_interval(self):
         result = audit.validate_finalization(self.report, self.raw, self.chunks, self.records)
         self.assertTrue(result['exact_callback_message_identity']['supported'])
@@ -832,6 +869,47 @@ class PointerRouteMutations:
         before = copy.deepcopy((self.records, self.report))
         self.assertEqual(audit.validate_pointer_route(self.records, self.report)['physical_clicks_verified'], 8)
         self.assertTrue(audit.equal(before, (self.records, self.report)))
+
+    def insert_target_event(self, pointer, edge, kind, data):
+        receipt = self.report['processed_pointers'][pointer]
+        cut, target = receipt[edge]['seq'], receipt['target']['id']
+        selected = next(packet for name, packet, _ in self.records if name == 'TH_TRACE' and any(e['seq'] == cut for e in packet['events']))
+        for name, packet, _ in self.records:
+            if name == 'TH_TRACE':
+                for event in packet['events']:
+                    if event['seq'] >= cut: event['seq'] += 1
+        selected['events'].append({'seq': cut, 'target': target, 'kind': kind, 'data': data})
+        selected['events'].sort(key=lambda event: event['seq'])
+        for item in self.report['processed_pointers']:
+            if item['fence'] >= cut: item['fence'] += 1
+            for key in ('hover', 'down_ingress', 'down', 'down_end', 'up_ingress', 'up', 'end'):
+                if item[key]['seq'] >= cut: item[key]['seq'] += 1
+        for item in self.report['native_snapshots']:
+            if item['query_after_native_key'] >= cut: item['query_after_native_key'] += 1
+        for item in self.report.get('processed_keys', []):
+            for key in ('ingress', 'begin', 'end'):
+                if item[key]['seq'] >= cut: item[key]['seq'] += 1
+
+    def test_reject_widget_hidden_destroyed_or_disabled_before_actual_click_edges(self):
+        for edge in ('hover', 'down', 'up'):
+            for kind, data in (('node.hide', {}), ('node.destroy', {}), ('node.property', {'key': 'color', 'value': 'black'})):
+                self.setUp()
+                pointer = 7 if kind == 'node.destroy' else 2
+                receipt = self.report['processed_pointers'][pointer]
+                target = receipt['target']['id']
+                colors = [event['data']['value'] for name, packet, _ in self.records if name == 'TH_TRACE'
+                          for event in packet['events'] if event['seq'] <= receipt['fence'] and event.get('target') == target
+                          and event['kind'] == 'node.property' and event['data']['key'] == 'color']
+                self.insert_target_event(pointer, edge, kind, data)
+                # Restore the first row only after its mouseup begins. This
+                # isolates the in-click anomaly from any later reopen check.
+                if kind == 'node.hide': self.insert_target_event(pointer, 'end', 'node.show', {})
+                if kind == 'node.property': self.insert_target_event(pointer, 'end', 'node.property', {'key': 'color', 'value': colors[-1]})
+                self.reject()
+
+    def test_mouseup_handler_may_hide_its_widget_before_dispatch_end(self):
+        self.insert_target_event(7, 'end', 'node.hide', {})
+        self.assertEqual(audit.validate_pointer_route(self.records, self.report)['physical_clicks_verified'], 8)
 
     def test_reject_missing_empty_or_reordered_physical_route(self):
         self.report['processed_pointers'] = []; self.reject()

@@ -18,6 +18,10 @@ SCOPES = ('root', 'height', 'root', 'height', 'height', 'root')
 STAGES = (None, 'pending-consent', 'cancelled', 'pending-consent', 'pending-consent', 'submitted')
 BANDS = ('below_coast', 'below_ocean', 'below_trench')
 CORNERS = ('left', 'top', 'right', 'bottom')
+# GSE Console::print emits four spaces + source location + one space.
+# This pinned fixture is mounted under the same virtual filename for land/sea;
+# a bare line is also admitted by the asset-free protocol model.
+EXIT_RECORD = re.compile(r'(?: {4}\[/height-snapshot/GLSMAC_data/default/browser_height_main\.gls\.js:[1-9][0-9]*:[1-9][0-9]*\] )?TH_EXIT_REQUEST')
 
 
 def equal(a, b):
@@ -47,7 +51,7 @@ def node_projection(value):
 def parse_records(raw):
     records = []
     for line_number, line in enumerate(raw.decode('utf8').splitlines()):
-        if 'TH_EXIT_REQUEST' in line:
+        if EXIT_RECORD.fullmatch(line):
             records.append(('TH_EXIT_REQUEST', None, line_number))
         for kind in ('TH_NATIVE', 'TH_RECEIPT', 'TH_INPUTS', 'TH_TRACE', 'TH_HEADERS', 'TH_ROWS'):
             marker = kind + '|'
@@ -119,6 +123,8 @@ def validate_coverage(state):
     for player in state['players']:
         detail = trace['player_details'][player['id']]
         assert type(detail['raw_id']) is int and detail['raw_id'] == player['raw_id'], 'Misbound native player details'
+        energy = detail['energy']
+        assert type(energy['credits']) is int and type(energy['initialized']) is bool and type(energy['last_income_turn']) is int, 'Native player energy must retain Int/Bool/Int field types'
         assert type(detail['energy_revision']) is int and detail['energy_revision'] >= 0, 'Native energy revision must be an Int, never Bool'
     tiles = trace['tiles']
     expected = {f'{x},{y}' for y in range(16) for x in range(y % 2, 16, 2)}
@@ -627,7 +633,7 @@ def validate_finalization(report, raw, chunks, records):
     ends = [event for event in events if event['seq'] > begin['seq'] and event['kind'] == 'input.dispatch' and event['data'].get('phase') == 'end'
             and event['data'].get('ingress') == begin['data']['ingress'] and event['data'].get('handled') is True]
     assert len(ingresses) == len(ends) == 1
-    exit_lines = [i for i, line in enumerate(text.splitlines()) if 'TH_EXIT_REQUEST' in line]
+    exit_lines = [i for i, line in enumerate(text.splitlines()) if EXIT_RECORD.fullmatch(line)]
     last_native_line = max(line for kind, _, line in records if kind == 'TH_NATIVE')
     assert len(exit_lines) == 1 and exit_lines[0] > last_native_line
     # Fixture-specific: its owned timer drains on line131, then prints the
@@ -740,9 +746,24 @@ def validate_pointer_route(records, report):
             actual = event_map[recorded['seq']]
             assert equal(recorded, node_projection(actual)), 'Reported pointer receipt is not its actual native journal event'
             matched[name] = actual; prior = actual['seq']
-        hover = matched['hover']
-        assert hover['kind'] == 'input.ui-transition' and hover['data']['type'] == 'mouseover'
-        assert target['id'] in ancestors(hover['target']) and inside(hover['data'], bounds)
+        # Replay changes between the sampling fence and the actual input
+        # edges. Check BEFORE dispatch: mouseup may legitimately hide/destroy
+        # the widget from its click handler before the dispatch END record.
+        for edge in ('hover', 'down', 'up'):
+            actual = matched[edge]
+            while index < len(events) and events[index]['seq'] < actual['seq']:
+                ingest(events[index]); index += 1
+            assert target['id'] in nodes, 'Click target no longer exists'
+            live = nodes[target['id']]
+            assert live.get('tag') == '$button' and live['properties']['text'] == label and visible(target['id']), 'Click target became hidden or changed before input'
+            if role:
+                assert live.get('role') == role and live.get('source') == source
+            if role == 'terraform-row':
+                assert type(live['properties']['color']) is str and live['properties']['color'] != 'black', 'Terraform target became disabled before input'
+            assert equal(live['effective'], bounds), 'Click geometry changed after its sampling fence'
+            if edge == 'hover':
+                assert actual['kind'] == 'input.ui-transition' and actual['data']['type'] == 'mouseover'
+                assert target['id'] in ancestors(actual['target']) and inside(actual['data'], bounds)
         for stem, event_type in [('down', 'mousedown'), ('up', 'mouseup')]:
             ingress, begin, end = matched[stem + '_ingress'], matched[stem], matched['down_end' if stem == 'down' else 'end']
             assert ingress['kind'] == 'input.ingress' and ingress['data']['type'] == event_type
