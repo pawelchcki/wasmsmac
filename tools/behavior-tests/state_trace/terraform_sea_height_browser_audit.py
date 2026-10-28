@@ -71,6 +71,18 @@ def one(records, kind):
     return rows[0]
 
 
+def native_receipts(records):
+    receipts = [(value, line) for kind, value, line in records if kind == 'TH_RECEIPT']
+    seen = set()
+    for value, _ in receipts:
+        assert type(value) is dict and set(value) == {'name', 'event_id', 'caller', 'success', 'data'}, 'Different native receipt schema'
+        assert type(value['name']) is str and value['name']
+        assert type(value['event_id']) is str and value['event_id'] and value['event_id'] not in seen, 'Duplicate/invalid native receipt identity'
+        assert type(value['caller']) is int and value['success'] is True and type(value['data']) is dict, 'Invalid/rejected native completion'
+        seen.add(value['event_id'])
+    return receipts
+
+
 def source_plan(before, actor):
     """Existing GSE band/slope policy, computed from BEFORE centers/topology."""
     tiles = before['terrain_trace']['tiles']
@@ -220,10 +232,14 @@ def audit_records(records, report):
     port = [value for value in detail['quotes'].values() if value is not None and value['destination'] == {'x': 10, 'y': 8}]
     assert len(port) == 1 and port[0]['allowed_now'] is True
     assert height.equal(report['traversal']['home_port_before'], height.node_projection(port[0]))
-    receipts = [(v, line) for k, v, line in records if k == 'TH_RECEIPT' and v['name'] == 'unit_terraform']
+    all_receipts = native_receipts(records)
+    receipts = [(v, line) for v, line in all_receipts if v['name'] == 'unit_terraform']
     assert len(receipts) == 1
     receipt, receipt_line = receipts[0]
+    assert [(v, line) for v, line in all_receipts if line >= native[0][1]] == receipts, 'Unexpected native completion after the initial checkpoint'
     assert native[4][1] < receipt_line < native[5][1]
+    for kind, _, line in records:
+        if kind == 'TH_EXIT_REQUEST': assert native[5][1] < line, 'Final native completion checkpoint must precede exit'
     assert height.equal(receipt, report['height_receipt']) and type(receipt['event_id']) is str and receipt['event_id']
     assert receipt['name'] == 'unit_terraform' and receipt['success'] is True and type(receipt['caller']) is int and receipt['caller'] == 0
     assert height.equal(receipt['data'], {'unit_id': 8, 'action': 'raise', 'confirmed_height': True})
@@ -254,6 +270,7 @@ def audit_records(records, report):
 
 
 def validate_bootstrap(records, report):
+    declaration, declaration_line = one(records, 'TH_SEA_DECLARED')
     accounting, accounting_line = one(records, 'TH_SEA_ACCOUNTING')
     preturn, preturn_line = one(records, 'TH_SEA_PRETURN')
     birth, birth_line = one(records, 'TH_SEA_BIRTH')
@@ -267,13 +284,23 @@ def validate_bootstrap(records, report):
     rows = max(2, ((recipe['chassis_cost'] + 1) * recipe['weapon_cost'] + recipe['chassis_cost']) // 4)
     cost = rows * 8
     assert recipe['id'] == 'SeaFormers' and recipe['movement_type'] == 'water' and cost == 40
+    # The world fixture prints this native choice witness BEFORE restoring
+    # production, then reads/prints actual_prefill synchronously afterwards.
+    # Cost/stock are independently derived above, not taken from this witness.
+    assert height.equal(declaration, {'version': 2, 'base_id': 1, 'owner': 0, 'recipe': recipe,
+        'choice_id': recipe['choice'], 'population_cost': 0, 'cost': cost, 'stock': cost + 3,
+        'population': 1, 'turn': 1}), 'Different pre-restore native declaration'
+    for key in ('version', 'base_id', 'owner', 'choice_id', 'population_cost', 'population', 'turn'):
+        assert height.equal(accounting[key], declaration[key]), ('Declaration/accounting differs', key)
     assert height.equal(accounting['observed_choice_cost'], cost) and height.equal(accounting['requested_stock'], cost + 3)
     assert height.equal(accounting['actual_prefill'], {'choice_id': recipe['choice'], 'minerals': cost + 3, 'last_processed_turn': 0})
     assert height.equal(accounting['source_recipe'], recipe)
     assert height.equal(accounting['owner'], 0) and height.equal(accounting['turn'], 1)
     assert height.equal(accounting['base_id'], 1) and height.equal(setup['home_id'], 1)
-    assert accounting_line < preturn_line < birth_line < setup_line
-    assert setup_line < next(line for kind, _, line in records if kind == 'TH_NATIVE')
+    inputs, input_line = one(records, 'TH_INPUTS')
+    assert declaration_line < accounting_line < preturn_line < birth_line < setup_line < input_line
+    assert input_line < next(line for kind, _, line in records if kind == 'TH_NATIVE')
+    assert height.equal(inputs['actor'], birth['unit_id']) and inputs['definition'] == recipe['id']
     assert preturn['turn'] == 1 and preturn['home_id'] == 1
     assert len(preturn['bases']) == len(setup['base_states']) == 7
     mapping = lambda values: sorted((v['base_id'], v['owner']) for v in values)
@@ -300,12 +327,14 @@ def validate_bootstrap(records, report):
     results = production + growth + resumed
     assert all(v['success'] is True and type(v['caller']) is int and v['caller'] == 0 and type(v['event_id']) is str for v, _ in results)
     assert len({v['event_id'] for v, _ in results}) == 9
-    all_ids = [value['event_id'] for kind, value, _ in records if kind == 'TH_RECEIPT']
-    assert all(type(value) is str and value for value in all_ids) and len(set(all_ids)) == len(all_ids)
+    native_receipts(records)
     assert all(type(v['data']['turn_id']) is int and v['data']['turn_id'] == 1 for v, _ in production + growth)
     assert height.equal(production[0][0]['data']['minerals'], credits[0]) and resumed[0][0]['data']['choice_id'] == declared['resumed_choice']
     baseline = next(value for kind, value, _ in records if kind == 'TH_NATIVE')['world']
     native_owners = {player['id']: player['raw_id'] for player in baseline['players']}
+    home = next(base for base in baseline['bases'] if base['raw_id'] == declaration['base_id'])
+    assert height.equal(native_owners[home['owner']], declaration['owner']) and height.equal(home['population'], declaration['population'])
+    assert height.equal(baseline['turn'], declaration['turn'])
     assert sorted((base['raw_id'], native_owners[base['owner']]) for base in baseline['bases']) == mapping(setup['base_states'])
     for row in setup['base_states']:
         assert height.equal(row['population'], 1)

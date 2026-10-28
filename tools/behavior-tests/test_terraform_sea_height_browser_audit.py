@@ -108,7 +108,7 @@ def model():
                     'source_choices': ['Cancel action.', 'Expend $NUM0 credits.'], 'choices': ['Cancel action.', 'Expend 1 credits.']}
         if kind == 'TH_NATIVE': value['world']['terrain_trace']['ui'] = copy.deepcopy(value['ui'])
         if kind == 'TH_RECEIPT': value['event_id'] = 'model-height-accepted'
-        changed.append((kind, value, line + 100 if kind in ('TH_NATIVE', 'TH_TRACE', 'TH_RECEIPT') else line))
+        changed.append((kind, value, 100 if kind == 'TH_INPUTS' else line + 100 if kind in ('TH_NATIVE', 'TH_TRACE', 'TH_RECEIPT') else line))
     changed.append(('TH_EXIT_REQUEST', None, max(line for _, _, line in changed) + 1))
     report.update(native_input=copy.deepcopy(inputs), actual_sea_row={'id': 'raise', 'label': 'Terraform UP', 'enabled': True},
                   expected_effect_from_live_quote=copy.deepcopy(quote), traversal={'home_port_before': sea.height.node_projection(detail['quotes']['E'])})
@@ -117,12 +117,15 @@ def model():
     recipe = {'id': 'SeaFormers', 'choice': 'SEA_FORMERS', 'movement_type': 'water', 'chassis_cost': 2, 'weapon_cost': 6, 'armor_cost': 1, 'rows': 5, 'weapon_mode': 9}
     states = [{'base_id': i + 1, 'owner': i, 'population': 1, 'production': {'choice_id': 'FORMERS', 'minerals': 4 if i == 0 else 0, 'last_processed_turn': 1}} for i in range(7)]
     setup = {'actor': 8, 'home_id': 1, 'base_states': states, 'declared': {'recipe': recipe, 'resumed_choice': 'FORMERS'}}
-    account = {'observed_choice_cost': 40, 'requested_stock': 43, 'source_recipe': recipe, 'actual_prefill': {'choice_id': 'SEA_FORMERS', 'minerals': 43, 'last_processed_turn': 0}, 'owner': 0, 'turn': 1, 'base_id': 1}
+    declaration = {'version': 2, 'base_id': 1, 'owner': 0, 'recipe': copy.deepcopy(recipe), 'choice_id': 'SEA_FORMERS',
+                   'population_cost': 0, 'cost': 40, 'stock': 43, 'population': 1, 'turn': 1}
+    account = {'version': 2, 'choice_id': 'SEA_FORMERS', 'population_cost': 0, 'population': 1,
+               'observed_choice_cost': 40, 'requested_stock': 43, 'source_recipe': recipe, 'actual_prefill': {'choice_id': 'SEA_FORMERS', 'minerals': 43, 'last_processed_turn': 0}, 'owner': 0, 'turn': 1, 'base_id': 1}
     preturn = {'turn': 1, 'home_id': 1, 'bases': [dict(row, eligible=i == 0, intake={'MINERALS': 1, 'NUTRIENTS': 2}, consumption={'MINERALS': 0, 'NUTRIENTS': 2},
         production={'choice_id': 'SEA_FORMERS' if i == 0 else 'FORMERS', 'minerals': 43 if i == 0 else 0, 'last_processed_turn': 0 if i == 0 else 1}) for i, row in enumerate(states)]}
     birth = {'production': {'choice_id': '', 'minerals': 4, 'last_processed_turn': 1}, 'unit_id': 8, 'home_id': 1, 'home_population': 1,
              'definition': 'SeaFormers', 'is_water': True, 'can_terraform': True, 'x': 8, 'y': 8, 'health': 1.0, 'movement': 4.0}
-    prefix = [('TH_SEA_ACCOUNTING', account, 1), ('TH_SEA_PRETURN', preturn, 2), ('TH_SEA_BIRTH', birth, 3)]
+    prefix = [('TH_SEA_DECLARED', declaration, 0), ('TH_SEA_ACCOUNTING', account, 1), ('TH_SEA_PRETURN', preturn, 2), ('TH_SEA_BIRTH', birth, 3)]
     for i in range(9):
         name = 'process_base_production' if i == 0 else ('process_base_growth' if i < 8 else 'set_base_production')
         data = {'turn_id': 1, 'minerals': 1} if i == 0 else ({'turn_id': 1} if i < 8 else {'choice_id': 'FORMERS'})
@@ -257,6 +260,27 @@ class PublicSeaDomainTests(DomainMutations, unittest.TestCase):
     @classmethod
     def setUpClass(cls): cls.original = model()
 
+    def test_exhaust_native_receipts_across_the_entire_observed_flow(self):
+        for name in ('move_unit', 'advance_turn', 'unknown_action'):
+            for line in (115, 154, 156, 162, 170):
+                with self.subTest(name=name, line=line):
+                    records, report = model()
+                    records.append(('TH_RECEIPT', {'name': name, 'event_id': 'extra-opaque-token',
+                        'caller': 0, 'success': True, 'data': {'unit_id': 8}}, line))
+                    with self.assertRaisesRegex(AssertionError, 'Unexpected native completion'):
+                        sea.audit_records(records, report)
+
+    def test_startup_envelopes_and_final_completion_order_are_checked(self):
+        for key, value in (('caller', True), ('success', 1), ('success', False), ('data', []),
+                           ('event_id', 'model-height-accepted'), ('name', '')):
+            with self.subTest(key=key, value=value):
+                records, report = model()
+                next(v for k, v, _ in records if k == 'TH_RECEIPT')[key] = value
+                with self.assertRaises(AssertionError): sea.audit_records(records, report)
+        records, report = model()
+        records = [(k, v, 159 if k == 'TH_EXIT_REQUEST' else line) for k, v, line in records]
+        with self.assertRaises(AssertionError): sea.audit_records(records, report)
+
 class PublicSeaParserTests(unittest.TestCase):
     def test_semantic_markers_and_exit_require_a_complete_gse_record(self):
         for name in ('TH_NATIVE', 'TH_SEA_SETUP', 'TH_INPUTS', 'TH_RECEIPT'):
@@ -323,6 +347,37 @@ class PublicSeaParserTests(unittest.TestCase):
 class PublicSeaBootstrapTests(BootstrapMutations, unittest.TestCase):
     @classmethod
     def setUpClass(cls): cls.original = model()
+
+    def test_pre_restore_declaration_is_required_unique_exact_and_early(self):
+        for change in ('missing', 'duplicate', 'late', 'unknown_field', 'missing_field'):
+            with self.subTest(change=change):
+                self.setUp()
+                index = next(i for i, (kind, _, _) in enumerate(self.records) if kind == 'TH_SEA_DECLARED')
+                kind, value, line = self.records[index]
+                if change == 'missing': self.records.pop(index)
+                if change == 'duplicate': self.records.append((kind, copy.deepcopy(value), line))
+                if change == 'late': self.records[index] = kind, value, 2
+                if change == 'unknown_field': value['unobserved'] = True
+                if change == 'missing_field': value.pop('cost')
+                self.reject()
+
+    def test_declared_native_values_cannot_contradict_source_or_accounting(self):
+        for key, value in (('version', 1), ('base_id', True), ('owner', False), ('choice_id', 'FORMERS'),
+                           ('population_cost', False), ('cost', 40.0), ('stock', 83),
+                           ('population', True), ('turn', True), ('recipe', {'id': 'Formers'})):
+            with self.subTest(key=key, value=value):
+                self.setUp(); self.row('TH_SEA_DECLARED')[key] = value; self.reject()
+        for key, value in (('version', 1), ('choice_id', 'FORMERS'), ('population_cost', 1), ('population', 2)):
+            with self.subTest(accounting=key):
+                self.setUp(); self.row('TH_SEA_ACCOUNTING')[key] = value; self.reject()
+
+    def test_declaration_is_bound_to_the_before_input_and_native_home(self):
+        self.row('TH_INPUTS')['actor'] = 9; self.reject()
+        self.setUp()
+        self.row('TH_NATIVE')['world']['bases'][0]['population'] = 2; self.reject()
+        self.setUp()
+        self.records = [(k, v, 12 if k == 'TH_INPUTS' else line) for k, v, line in self.records]
+        self.reject()
 
 
 @unittest.skipUnless(os.environ.get('TERRAFORM_SEA_HEIGHT_CAPTURE'), 'Private retained capture is separate from public checks')
