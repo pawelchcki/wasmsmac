@@ -115,6 +115,29 @@ class MovementProofTests(unittest.TestCase):
         log=text(fixture())
         with self.assertRaises(ProtocolError):proof.evaluate(log,acceptance(log))
 
+    def test_an_early_off_route_or_reversing_point_cannot_hide_behind_a_later_intermediate(self):
+        for mode in ('behind-start','overshoot','regression','off-route-y','off-route-z'):
+            rows=fixture();index=3 if mode=='regression' else 2
+            def bad(p):
+                row=p['units'][7]
+                if mode in ('behind-start','overshoot','regression'):
+                    x={'behind-start':0.25,'overshoot':1.75,'regression':0.625}[mode]
+                    row['unit_render_coords']['x']=number(x);row['instance_position']['x']=number(x+0.125)
+                elif mode=='off-route-y':
+                    row['unit_render_coords']['y']=number(0.875);row['instance_position']['y']=number(0.625)
+                else:
+                    row['unit_render_coords']['z']=number(0.125);row['instance_position']['z']=number(0.125)
+            change_packet(kind(rows,'CENSUS')[index],bad)
+            # Other real synthetic intermediates and both final endpoints remain
+            # intact; only the anomalous point must prevent acceptance.
+            with self.subTest(mode=mode),self.assertRaisesRegex(ProtocolError,'outside the declared flat route|progress regressed'):
+                self.evaluate(rows)
+
+    def test_repeated_progress_is_allowed_without_inventing_cadence(self):
+        rows=fixture();samples=kind(rows,'CENSUS')
+        samples[2]['payload']=samples[1]['payload']
+        self.assertTrue(self.evaluate(rows)['match'])
+
     def test_missing_intermediate_is_incomplete_not_mismatch_or_pass(self):
         rows=fixture()
         for row in kind(rows,'CENSUS')[1:30]:

@@ -211,6 +211,15 @@ def validate_observation(rows):
     if points[28]!=end or points[29]!=end:
         raise SamplingIncomplete('last two independent in-flight samples did not establish actual destination')
     require(points[30]==end and points[31]==end, 'settled endpoint does not match independently defined destination')
+    # Every observation must belong to this one flat eastward route. One
+    # intermediate point cannot excuse an overshoot, off-route point or later
+    # regression. Repeated positions are allowed; acquisition is not all-ticks.
+    previous=start['x']
+    for point in points[1:]:
+        require(start['x']<=point['x']<=end['x'] and point['y']==end['y'] and point['z']==end['z'],
+                'sampled point is outside the declared flat route')
+        require(point['x']>=previous, 'sampled progress regressed')
+        previous=point['x']
     intermediate=[reads[i]['ordinal'] for i in range(1,30) if start['x']<points[i]['x']<end['x'] and points[i]['y']==end['y'] and points[i]['z']==end['z']]
     if not intermediate: raise SamplingIncomplete('no actual submitted intermediate point was sampled')
     expected=_expected_world(before,a)
