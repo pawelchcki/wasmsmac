@@ -218,18 +218,28 @@ def report_destination(args):
 
 
 def clear_report_after_parse_error(argv):
-    # This probe has no required arguments, so a missing --request or unknown
-    # option cannot preserve an earlier valid report. Unsafe destinations are
-    # never unlinked; malformed path arguments are not interpreted as outputs.
-    probe = argparse.ArgumentParser(add_help=False, allow_abbrev=False, exit_on_error=False)
-    probe.add_argument('--request', type=Path)
-    probe.add_argument('--profile', type=Path, default=PROFILE)
-    probe.add_argument('--report', type=Path)
+    # Recover each option independently: a malformed --profile must not prevent
+    # identifying a valid --report. Keep every earlier input path protected even
+    # when a duplicate later occurrence lacks its value. Ambiguous outputs are
+    # left untouched rather than guessing which file was intended.
+    values = {name: [] for name in ('--request', '--profile', '--report')}
+    for index, token in enumerate(argv):
+        if token == '--': break
+        name, separator, value = token.partition('=')
+        if name not in values: continue
+        if not separator:
+            if index + 1 >= len(argv) or argv[index + 1].startswith('-'): continue
+            value = argv[index + 1]
+        if value: values[name].append(Path(value))
     try:
-        known, _ = probe.parse_known_args(argv)
-        if known.report is not None:
-            report_destination(known).unlink(missing_ok=True)
-    except (OSError, ValueError, argparse.ArgumentError, SystemExit):
+        reports = set(values['--report'])
+        if len(reports) != 1: return
+        args = argparse.Namespace(report=reports.pop(), request=None, profile=PROFILE)
+        destination = report_destination(args)
+        protected = {PROFILE.resolve(), *(path.resolve() for name in ('--request', '--profile') for path in values[name])}
+        require(destination not in protected, 'Report cannot overwrite inputs')
+        destination.unlink(missing_ok=True)
+    except (OSError, ValueError):
         pass
 
 

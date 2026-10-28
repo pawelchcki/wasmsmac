@@ -216,12 +216,21 @@ class StableSelectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             report = Path(folder) / 'report.json'
             for argv in (['--report', str(report)],
-                         ['--request', str(Path(folder) / 'request.json'), '--report', str(report), '--unknown']):
+                         ['--request', str(Path(folder) / 'request.json'), '--report', str(report), '--unknown'],
+                         ['--request', str(Path(folder) / 'request.json'), '--report', str(report), '--profile']):
                 report.write_text('stale plan')
                 with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
                     selection.main(argv)
                 self.assertEqual(error.exception.code, 2)
                 self.assertFalse(report.exists())
+
+    def test_malformed_duplicate_input_does_not_delete_earlier_protected_input(self):
+        with tempfile.TemporaryDirectory() as folder:
+            profile = Path(folder) / 'profile.json'; profile.write_text('keep input')
+            argv = ['--request', str(Path(folder)/'request.json'), '--report', str(profile),
+                    '--profile', str(profile), '--profile']
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit): selection.main(argv)
+            self.assertEqual(profile.read_text(), 'keep input')
 
     def test_report_symlink_cannot_be_replaced_by_source_tree_output(self):
         with tempfile.TemporaryDirectory() as folder:
