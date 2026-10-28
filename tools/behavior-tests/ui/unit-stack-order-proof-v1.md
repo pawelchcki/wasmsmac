@@ -49,3 +49,14 @@ movement frames, tool/limb clip binding, cadence/audio and a direct frontend
 request-cause ID remain unsupported. Native callback provenance is source-backed;
 the actual callback, Widget payload and complete worlds are directly recorded.
 No original passing cases, map/body pixels or animation agreement are added.
+
+
+## Current acceptance scope
+
+Historical “complete native world”/“complete typed world” wording and `same_complete_native_world: true` mean equality of every retained field in the compared observer projections, after only the documented UI exclusion. They do not establish complete entity-detail identity. The old JSON keys and values remain immutable historical evidence.
+
+The retained legacy metadata does not prove independent raw identity for every unit/base detail object or exact message identity for every print callback. First-callback runtime output binding and the sealed raw byte/chunk relation remain supported within their recorded scopes.
+
+The old RED/new GREEN priority-cache witness, actual native order/health receipts, mounted HUD/Widget identity, all-seven-owner field comparisons and Float32 checks remain bounded evidence. Historical scoped strict-pass results and actual process/application exits are unchanged. An evaluator’s `complete: true` still means completion of its stated bounded protocol; it is not generic complete-browser credit.
+
+[unit-stack-current-acceptance-scope-v1.json](unit-stack-current-acceptance-scope-v1.json) records `candidate_executed: false`, no new observations, and current completeness credit of zero complete worlds and zero full-browser passing cases where those missing capabilities are mandatory. This is a source/documentation clarification, with no new game, test, capture or runtime execution and no retroactive change to old proof JSON or counters.
