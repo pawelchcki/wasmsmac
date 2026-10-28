@@ -192,6 +192,32 @@ class MovementRunnerTests(unittest.TestCase):
             extra.unlink();(root/'playwright/lib/driver.js').unlink()
             with self.assertRaises(AssertionError):runner.unchanged_dependencies(pre)
 
+    def test_unreadable_nested_package_directory_cannot_create_or_match_a_partial_pin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for name in ('playwright','playwright-core'):
+                (root/name/'lib').mkdir(parents=True)
+                (root/name/'package.json').write_text('{}')
+                (root/name/'lib/driver.js').write_text('readable by a known executable path')
+            baseline=runner.dependency_contents(root)
+            actual_scandir=os.scandir
+            for name in ('playwright','playwright-core'):
+                for error in (PermissionError,OSError):
+                    with self.subTest(package=name,error=error.__name__):
+                        denied=root/name/'lib'
+                        def denied_nested_listing(path):
+                            if Path(path)==denied:raise error('deterministic inaccessible package directory')
+                            return actual_scandir(path)
+                        self.assertTrue((denied/'driver.js').read_bytes())
+                        with patch.object(os,'scandir',side_effect=denied_nested_listing):
+                            with self.assertRaises(error):runner.dependency_contents(root)
+                            # Old rglob could prepare this partial map, then
+                            # accept matching omissions during every post-scan.
+                            partial=copy.deepcopy(baseline);partial[name].pop('lib/driver.js')
+                            pre=dict(dependency_symlink=str(root),dependency_contents_sha256=partial)
+                            with self.assertRaises(error):runner.unchanged_dependencies(pre)
+            self.assertEqual(runner.dependency_contents(root),baseline)
+
     def test_package_symlink_cannot_escape_content_pin(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)

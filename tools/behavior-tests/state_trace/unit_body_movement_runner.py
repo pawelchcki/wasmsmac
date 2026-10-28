@@ -81,12 +81,18 @@ def dependency_contents(root):
         package=Path(root)/name
         assert package.is_dir() and not package.is_symlink(), 'Actual package directory required'
         files={}
-        for path in sorted(package.rglob('*')):
-            assert not path.is_symlink(), 'Symlinked package content is unsupported'
-            if path.is_file():files[str(path.relative_to(package))]=sha(path)
-            else:assert path.is_dir(), 'Unsupported package content type'
+        pending=[package]
+        while pending:
+            # rglob can suppress nested scan OSError. An incomplete listing
+            # must never become an accepted dependency pin or postflight match.
+            for path in pending.pop().iterdir():
+                assert not path.is_symlink(), 'Symlinked package content is unsupported'
+                if path.is_file():files[str(path.relative_to(package))]=sha(path)
+                else:
+                    assert path.is_dir(), 'Unsupported package content type'
+                    pending.append(path)
         assert 'package.json' in files and files, 'Missing package content'
-        result[name]=files
+        result[name]=dict(sorted(files.items()))
     return result
 
 
