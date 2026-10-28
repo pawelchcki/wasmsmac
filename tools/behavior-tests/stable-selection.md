@@ -10,12 +10,13 @@ regression suites**, including 31 proposed moves from the current 79 Hot suites.
 in the proposed Hot set. The actual lane manifest remains 79 Hot / 104 Stable;
 this profile does not move a suite or execute coverage.
 
-This private preparation uses the inventory available after reconciling Main
-`d5572d973c17a5638e5a4e3ddbf9ffba89a2818f`. Its inventory fingerprint and Git
-baseline are **provisional**: PR43 must merge last, after PR40 and PR44. Refresh
-the actual Main/base/head, complete inventory fingerprint and exact changed-path
-request after those merges, then obtain fresh applicable checks and review.
-This preliminary profile is not final-base verification or a satisfied gate.
+The inventory was recomputed against Main
+`971c171d48b7680a30b8bf57588da1fe20766dc1`, after the Workshop, graphics,
+Census and movement changes merged. Its fingerprint is
+`0af7fd51108f32be37c89cf3d588a8f5e05caabf336b89067aef901e1bbd86b8`.
+Each invocation must still bind its actual base, final head and complete changed
+paths. This recorded inventory and a generated plan are not execution evidence
+or a satisfied CI gate; final-head checks, review and Main health remain required.
 
 All 11 current Hot UI references, eight recorded startup native projections,
 complete seven-player terrain/traversal and identity observations, cooperative
@@ -85,9 +86,9 @@ reject missing/skipped/stale/unsupported required results, and preserve the full
 Main/GSE/native/WASM/browser coverage union. Selection reports alone cannot do
 this aggregation. Pending UI, unsupported gaps, static archives, private
 reference captures and installed-asset checks stay outside public passing totals.
-Repair the observed startup single-case stall before migrating any failure
-checks. A separately reviewed CI change must integrate these prerequisites
-before any suite/capture moves out of Hot.
+The observed startup collector-progress repair is merged. Any newly failing
+check must be repaired before migration. A separately reviewed CI change must
+integrate these prerequisites before any suite/capture moves out of Hot.
 
 The inventory binding includes every regression GSE script and included test
 helper, not only catalog rows and JSON cases. Changing those inputs requires a
