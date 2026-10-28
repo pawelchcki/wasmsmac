@@ -19,17 +19,26 @@ import time
 import terraform_sea_height_prepare as preparation
 
 
+def probe_identity(pid):
+    """Definite ENOENT is distinct from unreadable/invalid proc identity."""
+    if type(pid) is not int or pid <= 0: return 'unknown', None
+    try:
+        text = (Path('/proc') / str(pid) / 'stat').read_text()
+        fields = text[text.rfind(')') + 2:].split()
+        return 'present', {'pid': pid, 'start_ticks': int(fields[19]),
+                           'parent': int(fields[1]), 'group': int(fields[2]), 'session': int(fields[3])}
+    except (FileNotFoundError, ProcessLookupError): return 'absent', None
+    except (OSError, ValueError, IndexError): return 'unknown', None
+
+
 def process_table():
     result = {}
     try: paths = list(Path('/proc').iterdir())
     except OSError: return result
     for path in paths:
         if not path.name.isdecimal(): continue
-        try:
-            text = (path / 'stat').read_text(); fields = text[text.rfind(')') + 2:].split()
-            result[int(path.name)] = {'pid': int(path.name), 'start_ticks': int(fields[19]),
-                                     'parent': int(fields[1]), 'group': int(fields[2]), 'session': int(fields[3])}
-        except (FileNotFoundError, ProcessLookupError, PermissionError): pass
+        state, row = probe_identity(int(path.name))
+        if state == 'present': result[row['pid']] = row
     return result
 
 
@@ -69,6 +78,18 @@ def new_ownership():
 def members(group, ownership):
     table = process_table()
     known, foreign = ownership['known'], ownership['foreign']
+    unresolved = []
+    for pid, start in known.items():
+        row = table.get(pid)
+        if row is None:
+            state, row = probe_identity(pid)
+            if state == 'present': table[pid] = row
+            elif state == 'unknown':
+                ownership['unsupported'].add('known-owned-identity-unreadable')
+                unresolved.append({'pid': pid, 'start_ticks': start})
+        if row and row['start_ticks'] != start:
+            ownership['unsupported'].add('owned-pid-start-reused')
+            unresolved.append({'pid': pid, 'start_ticks': start})
     owned = {pid for pid, start in known.items() if pid in table and table[pid]['start_ticks'] == start}
     # Track old unrelated branches too; never adopt/reap their known children.
     for mapping, selected, reason in ((foreign, set(foreign), 'foreign'), (known, owned, 'observed-descendant')):
@@ -85,7 +106,7 @@ def members(group, ownership):
     if task_count() != 1:
         ownership['adoption_allowed'] = False
         ownership['unsupported'].add('concurrent-caller-tasks')
-    children = direct_children(); unresolved = []
+    children = direct_children()
     if children is None:
         ownership['unsupported'].add('direct-child-observation-unavailable')
         unresolved.append({'pid': None, 'start_ticks': None})
@@ -93,10 +114,15 @@ def members(group, ownership):
     children |= {pid for pid, row in table.items() if row['parent'] == ownership['owner']}
     for pid in children:
         row = table.get(pid)
-        if (row and pid in foreign and row['start_ticks'] == foreign[pid]) or pid in known:
-            if row and pid in known and row['start_ticks'] != known[pid]:
-                ownership['unsupported'].add('owned-pid-start-reused')
+        if pid in known:
+            if row is None:
+                # A positive child-list entry contradicts absence, and an
+                # unreadable known child cannot silently disappear from scope.
+                ownership['unsupported'].add('listed-known-child-identity-unavailable')
+                entry = {'pid': pid, 'start_ticks': known[pid]}
+                if entry not in unresolved: unresolved.append(entry)
             continue
+        if row and pid in foreign and row['start_ticks'] == foreign[pid]: continue
         # New direct children are orphan adoptees only in the exclusive,
         # initially-childless standalone scope; concurrent callers are outside it.
         if row and ownership['adoption_allowed'] and row['start_ticks'] >= ownership['root_start']:

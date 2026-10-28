@@ -233,6 +233,42 @@ else:
                 if mode=='reused': self.assertEqual(scope['known'][300],4)
                 else: self.assertEqual(scope['unresolved'][0]['pid'],300)
 
+    def test_previously_known_adoptee_requires_present_absent_or_unknown_identity_proof(self):
+        root=dict(pid=100,start_ticks=1,parent=999,session=100,group=100)
+        changed=dict(pid=300,start_ticks=4,parent=888,session=300,group=300)
+        for state, listed, unknown in [('unknown',True,True),('unknown',False,True),('absent',False,False),('absent',True,True),('present',False,True)]:
+            scope=dict(owner=999,known={100:1,300:3},foreign={},provenance={100:'actual-Popen-leader',300:'new-subreaper-adoptee'},sessions={},adoption_allowed=True,unsupported=set(),unresolved=[],waited_adopted=[],root_start=1)
+            child_list={100,300} if listed else {100}
+            with self.subTest(state=state,listed=listed),patch.object(runner,'process_table',return_value={100:root}),patch.object(runner,'direct_children',return_value=child_list),patch.object(runner,'probe_identity',return_value=(state,changed if state=='present' else None)),patch.object(runner.os,'kill') as kill,patch.object(runner.os,'waitpid',return_value=(0,0)) as wait:
+                self.assertEqual(runner.members(100,scope),[{'pid':100,'start_ticks':1}])
+                self.assertEqual(bool(scope['unsupported']),unknown)
+                self.assertEqual(bool(scope['unresolved']),unknown)
+                self.assertEqual(scope['known'][300],3,'Do not overwrite original identity')
+                runner.signal_members(100,15,scope);runner.reap(100,scope)
+                self.assertTrue(all(call.args[0]==100 for call in kill.call_args_list))
+                self.assertTrue(all(call.args[0]==100 for call in wait.call_args_list))
+
+        # Exact peer case: leader is already gone, known escaped child is
+        # positively listed but unreadable. An empty member list is NOT clean.
+        scope=dict(owner=999,known={100:1,300:3},foreign={},provenance={100:'actual-Popen-leader',300:'new-subreaper-adoptee'},sessions={},adoption_allowed=True,unsupported=set(),unresolved=[],waited_adopted=[],root_start=1)
+        def probe(pid): return ('absent',None) if pid==100 else ('unknown',None)
+        with patch.object(runner,'process_table',return_value={}),patch.object(runner,'direct_children',return_value={300}),patch.object(runner,'probe_identity',side_effect=probe),patch.object(runner.os,'kill') as kill,patch.object(runner.os,'waitpid') as wait:
+            rows=runner.members(100,scope)
+            self.assertEqual(rows,[])
+            self.assertFalse(not rows and not scope['unresolved'] and not scope['unsupported'])
+            self.assertEqual(scope['unresolved'],[{'pid':300,'start_ticks':3}])
+            runner.signal_members(100,15,scope);runner.reap(100,scope)
+            kill.assert_not_called();wait.assert_not_called()
+
+    def test_identity_probe_distinguishes_definite_absence_from_unreadable(self):
+        state,row=runner.probe_identity(os.getpid())
+        self.assertEqual(state,'present');self.assertEqual(row['pid'],os.getpid());self.assertIsInstance(row['start_ticks'],int)
+        for error,expected in [(FileNotFoundError(),'absent'),(ProcessLookupError(),'absent'),(PermissionError(),'unknown'),(OSError('unreadable'),'unknown')]:
+            with self.subTest(error=type(error).__name__),patch.object(Path,'read_text',side_effect=error):
+                self.assertEqual(runner.probe_identity(300),(expected,None))
+        with patch.object(Path,'read_text',return_value='invalid proc stat'):
+            self.assertEqual(runner.probe_identity(300),('unknown',None))
+
     def test_missing_child_observation_is_unsupported_not_an_empty_owned_tree(self):
         scope=dict(owner=999,known={100:1},foreign={},provenance={100:'actual-Popen-leader'},sessions={},adoption_allowed=True,unsupported=set(),unresolved=[],waited_adopted=[],root_start=1)
         table={100:dict(pid=100,start_ticks=1,parent=999,session=100,group=100)}
