@@ -101,5 +101,11 @@
   },
   "disclosure": "Candidate synthetic-world logs/JSON include historical local usernames/paths, loopback URLs, PIDs and timestamps; approved for retention. No Original private files, assets/images/runtime payload included. Credential regex scan found no matches but is not a comprehensive privacy proof.",
   "proposal_sha256": "6800ca20ae004b472780f32b3e2ad9bba8afd9f89cf0e08a082e80e9d56442fd",
-  "bundle_new_game_execution": false
+  "bundle_new_game_execution": false,
+  "synthetic_auth_identity_disclosure": {
+    "scope": "Fresh synthetic candidate auth identity for the closed isolated run; not a live, personal or external credential; never reuse for future capture.",
+    "source_creation": "src/game/backend/Account.cpp:59; actual log says Creating local account, not Loaded account",
+    "ephemeral_browser": "historical66dc unit-body-movement-browser.test.mjs:99-101 chromium.launch then browser.newPage, no persistent context",
+    "closed_lifetime": "historical source113-115 awaits browser.close and server reap; retained APP0, Node1/OSwait and 13 owned identities gone"
+  }
 }

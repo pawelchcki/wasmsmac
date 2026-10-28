@@ -338,7 +338,7 @@
     "archive_repository_path": "tools/behavior-tests/ui/unit-body-movement-evidence-v2.tar.gz",
     "archive_sha256": "00c5ddbb0b4482f072e01538dadb3b32218879cefe4a734df82c9dffa4ac81cb",
     "manifest_repository_path": "tools/behavior-tests/ui/unit-body-movement-evidence-v2.manifest.json",
-    "manifest_sha256": "369ec9edf1eab6a475b6aef02a7b6ed0d8819e83f09f3357f2f3829d781bf428",
+    "manifest_sha256": "473b3a9205ec4a6dfab303c3bbbda097875a415e58d3e4a38d75a4cd91a487f8",
     "exact_utf8_members": 14,
     "member_total_bytes": 2463050,
     "compressed_bytes": 114130,
@@ -348,6 +348,12 @@
     "recorded_final_report_partial": true,
     "recorded_pre_evaluator_receipt_partial": false,
     "current_candidate_executed": false,
-    "public_evaluator_includes_later_stricter_route_guard": "source-only change; historical result remains incomplete; not a rerun or re-label of actual66dc"
+    "public_evaluator_includes_later_stricter_route_guard": "source-only change; historical result remains incomplete; not a rerun or re-label of actual66dc",
+    "synthetic_auth_identity_disclosure": {
+      "scope": "Fresh synthetic candidate auth identity for the closed isolated run; not a live, personal or external credential; never reuse for future capture.",
+      "source_creation": "src/game/backend/Account.cpp:59; actual log says Creating local account, not Loaded account",
+      "ephemeral_browser": "historical66dc unit-body-movement-browser.test.mjs:99-101 chromium.launch then browser.newPage, no persistent context",
+      "closed_lifetime": "historical source113-115 awaits browser.close and server reap; retained APP0, Node1/OSwait and 13 owned identities gone"
+    }
   }
 }
