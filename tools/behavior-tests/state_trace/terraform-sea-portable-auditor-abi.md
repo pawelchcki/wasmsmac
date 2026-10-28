@@ -112,3 +112,9 @@ verified three-line entry guard only. The exact guarded shared helper then
 passed the actual legacy CLI above. No duplicate full private mutation batch
 or game run was made. All owned public child processes and audit checks were
 reaped. Delivery owns mandatory CI selection and publication.
+
+## Public historical source and mandatory checks
+
+The actual capture source is preserved at [`evidence/terraform-sea-height-v3-source`](https://github.com/pawelchcki/wasmsmac/tree/7d26149abbaa028b3d685f3503df7c8e195fbdec), exact commit `7d26149abbaa028b3d685f3503df7c8e195fbdec`, Native `115032ffc7f53ff7f0c3a9f997da12674e25e643`, Default `25ef18d3222f553507291d412330262169b2e418`. The publication branch contains the same nine Sea fixture/driver/contract files on its newer Land delivery base. That integrated head was not the historical game execution. The archive contains candidate source only, with no original-game binaries or assets.
+
+The mandatory PR Hot unit step runs all 32 `PublicSea` checks, all 13 portable runner checks, and the Sea observation Node test without assets. Retained private capture classes are excluded from public CI rather than counted as skipped success. Portable envelope composition uses real cheap Node process completion with synthetic Native/UI report fields; it supplies no new game observation. The latest historical capture scope remains partial, complete-browser case count zero, and bounded state/receipt case count one.
