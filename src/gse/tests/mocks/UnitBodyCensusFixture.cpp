@@ -51,6 +51,17 @@ namespace gse::tests::mocks {
 namespace backend = game::backend;
 namespace frontend = game::frontend;
 
+namespace {
+// Test-local access to the real State's inherited retention operations. Keep
+// its constructor, collector registration, reachability and retirement intact.
+struct CensusFixtureState final : backend::State {
+    using backend::State::State;
+    using backend::State::Persist;
+    using backend::State::Unpersist;
+    using backend::State::IsPersisted;
+};
+}
+
 // This fixture supplies the application/frontend readiness and texture inputs,
 // not a normal startup, renderer or backend event loop. It calls the production
 // wrapped property and constructs real frontend objects: no census/copy/lookup
@@ -59,7 +70,7 @@ struct UnitBodyCensusFixture {
     // Both backend identities outlive the GLSMAC-owned State and its wrappers.
     backend::Game backend_game, different_game;
     std::unique_ptr< GLSMAC > application;
-    backend::State* state = nullptr; // GC-owned, rooted by application->m_state
+    CensusFixtureState* state = nullptr; // GC-owned, rooted by application->m_state
     value::Object* game_value = nullptr;
     value::Object* different_value = nullptr;
     value::Callable* binding = nullptr; // rooted via actual application wrap
@@ -308,7 +319,7 @@ struct UnitBodyCensusFixture {
             Require( gc_space->IsOwnerThread(), "binding setup is not on application GC owner" );
             Require( g_engine->GetGame() == nullptr, "fixture requires the existing asset-free GSE test engine" );
             Require( !application->m_state && !application->m_game, "unexpected live application context" );
-            state = new backend::State( gc_space, ctx, application.get() );
+            state = new CensusFixtureState( gc_space, ctx, application.get() );
             application->m_state = state;
             state->SetGame( &backend_game );
             application->m_wrapobj = application->Wrap( GSE_CALL );
