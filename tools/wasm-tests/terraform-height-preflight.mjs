@@ -39,7 +39,7 @@ export function claimHeightCapture({artifacts,prepared,report}){
 }
 
 export function assertHeightSourcesClean(scriptsRoot){
-  const consumed=['src','GLSMAC_data/default','tools/serve-wasm.py','tools/wasm-tests/terraform-height-preflight.mjs','GLSMAC_data/tests/_state_trace_observer.gls.js',
+  const consumed=['src','GLSMAC_data/default','tools/serve-wasm.py','tools/wasm_assets.py','tools/wasm-tests/terraform-height-preflight.mjs','GLSMAC_data/tests/_state_trace_observer.gls.js',
     'GLSMAC_data/tests/_terrain_trace_observer.gls.js','GLSMAC_data/tests/_terraform_cooperation_observer.gls.js',
     'tools/wasm-tests/terraform-height-browser.test.mjs','tools/wasm-tests/terraform-height-observation.mjs',
     'tools/wasm-tests/terraform-browser-inputs.mjs','tools/wasm-tests/fixtures/terraform-height-main.gls.js',
@@ -91,7 +91,7 @@ export function loadHeightPreflight({scriptsRoot,build,assets,seed,runtimeProven
   const main=read('tools/wasm-tests/fixtures/terraform-height-main.gls.js'),world=fixtureSources(scriptsRoot,{water:false}).world;
   const names=['_state_trace_observer','_terrain_trace_observer','_terraform_cooperation_observer'];
   const helpers=Object.fromEntries(names.map(name=>[name,read(`GLSMAC_data/tests/${name}.gls.js`).toString('utf8')]));
-  const files=Object.fromEntries(['tools/serve-wasm.py','tools/wasm-tests/terraform-height-preflight.mjs','tools/wasm-tests/terraform-height-observation.mjs','tools/wasm-tests/terraform-browser-inputs.mjs',
+  const files=Object.fromEntries(['tools/serve-wasm.py','tools/wasm_assets.py','tools/wasm-tests/terraform-height-preflight.mjs','tools/wasm-tests/terraform-height-observation.mjs','tools/wasm-tests/terraform-browser-inputs.mjs',
     'tools/wasm-tests/fixtures/terraform-height-main.gls.js','tools/wasm-tests/fixtures/terraform-controls-world.gls.js',
     'tools/wasm-tests/browser-log-cursor.mjs','tools/wasm-tests/browser-native-log-hook.mjs','tools/wasm-tests/runtime-fetch-barrier.mjs',
     'tools/wasm-tests/terraform-browser-geometry.mjs','tools/wasm-tests/terraform-browser-pointer.mjs',
@@ -100,6 +100,7 @@ export function loadHeightPreflight({scriptsRoot,build,assets,seed,runtimeProven
   files['executed_node_driver']=sha(readFileSync(driverPath));files['preflight_producer']=sha(readFileSync(fileURLToPath(import.meta.url)));
   assert.equal(files['preflight_producer'],files['tools/wasm-tests/terraform-height-preflight.mjs'],'Executed preflight differs from declared source root');
   assert.equal(files['tools/serve-wasm.py'],sha(readFileSync(resolve(dirname(driverPath),'../serve-wasm.py'))),'Executed asset server differs from declared source root');
+  assert.equal(files['tools/wasm_assets.py'],sha(readFileSync(resolve(dirname(driverPath),'../wasm_assets.py'))),'Executed asset helper differs from declared source root');
   const scripts=Object.fromEntries(readdirSync(resolve(scriptsRoot,'GLSMAC_data/default'),{recursive:true}).filter(name=>name.endsWith('.gls.js')).sort()
     .map(name=>[`GLSMAC_data/default/${name}`,read(`GLSMAC_data/default/${name}`).toString('utf8')]));
   const rev=ref=>execFileSync('git',['rev-parse',ref],{cwd:scriptsRoot,encoding:'utf8'}).trim();

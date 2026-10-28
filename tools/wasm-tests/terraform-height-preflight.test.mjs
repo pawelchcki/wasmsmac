@@ -69,7 +69,7 @@ function cleanGitInputs(){
  const folder=mkdtempSync(join(tmpdir(),'height-clean-source-')),scriptsRoot=join(folder,'source'),build=join(folder,'runtime'),assets=join(folder,'assets');
  const input=data(),repository=fileURLToPath(new URL('../../',import.meta.url));
  mkdirSync(scriptsRoot,{recursive:true});mkdirSync(build);mkdirSync(assets);
- const sourceFiles=['tools/serve-wasm.py','tools/wasm-tests/terraform-height-preflight.mjs','tools/wasm-tests/terraform-height-browser.test.mjs','tools/wasm-tests/terraform-height-observation.mjs','tools/wasm-tests/terraform-browser-inputs.mjs',
+ const sourceFiles=['tools/wasm_assets.py','tools/serve-wasm.py','tools/wasm-tests/terraform-height-preflight.mjs','tools/wasm-tests/terraform-height-browser.test.mjs','tools/wasm-tests/terraform-height-observation.mjs','tools/wasm-tests/terraform-browser-inputs.mjs',
   'tools/wasm-tests/fixtures/terraform-height-main.gls.js','tools/wasm-tests/fixtures/terraform-controls-main.gls.js','tools/wasm-tests/fixtures/terraform-controls-world.gls.js',
   'tools/wasm-tests/browser-log-cursor.mjs','tools/wasm-tests/browser-native-log-hook.mjs','tools/wasm-tests/runtime-fetch-barrier.mjs',
   'tools/wasm-tests/terraform-browser-geometry.mjs','tools/wasm-tests/terraform-browser-pointer.mjs',
@@ -109,7 +109,7 @@ test('clean full producer allows unrelated notes and retains the actual Git sour
  try{
   writeFileSync(join(f.scriptsRoot,'README.md'),'unrelated author note');
   const prepared=loadHeightPreflight(f);
-  for(const name of ['tools/serve-wasm.py','tools/wasm-tests/terraform-height-preflight.mjs'])assert.equal(prepared.record.source_sha256[name],hash(readFileSync(join(f.scriptsRoot,name))));
+  for(const name of ['tools/serve-wasm.py','tools/wasm_assets.py','tools/wasm-tests/terraform-height-preflight.mjs'])assert.equal(prepared.record.source_sha256[name],hash(readFileSync(join(f.scriptsRoot,name))));
   assert.equal(prepared.record.source_sha256.preflight_producer,prepared.record.source_sha256['tools/wasm-tests/terraform-height-preflight.mjs']);
   assert.equal(prepared.record.head,f.git('rev-parse','HEAD').trim());
   assert.equal(prepared.record.native_tree,f.git('rev-parse','HEAD:src').trim());
@@ -169,6 +169,32 @@ test('producer binds the server next to the actual driver, not a different sourc
   copyFileSync(join(f.scriptsRoot,'tools/wasm-tests/terraform-height-browser.test.mjs'),driverPath);
   writeFileSync(join(actualRoot,'tools/serve-wasm.py'),'# different executed serving behavior');
   assert.throws(()=>loadHeightPreflight({...f,driverPath}),/Executed asset server differs/);
+  assert.equal(existsSync(f.artifacts),false);
+ }finally{rmSync(f.folder,{recursive:true,force:true});}
+});
+
+
+test('producer rejects tracked and untracked imported asset helper changes',()=>{
+ for(const untracked of [false,true]){
+  const f=cleanGitInputs();
+  try{
+   if(untracked){f.git('rm','-q','tools/wasm_assets.py');f.git('-c','user.name=Protocol test','-c','user.email=protocol@example.invalid','-c','commit.gpgsign=false','commit','-qm','remove imported helper');}
+   writeFileSync(join(f.scriptsRoot,'tools/wasm_assets.py'),'# changed consumed manifest and asset routing');
+   assert.throws(()=>loadHeightPreflight(f),/Relevant tracked, untracked or ignored source differs/);
+   assert.equal(existsSync(f.artifacts),false);
+  }finally{rmSync(f.folder,{recursive:true,force:true});}
+ }
+});
+
+test('producer binds the imported asset helper next to the executed server',()=>{
+ const f=cleanGitInputs();
+ try{
+  const actualRoot=join(f.folder,'executed');mkdirSync(join(actualRoot,'tools/wasm-tests'),{recursive:true});
+  const driverPath=join(actualRoot,'tools/wasm-tests/terraform-height-browser.test.mjs');
+  copyFileSync(join(f.scriptsRoot,'tools/wasm-tests/terraform-height-browser.test.mjs'),driverPath);
+  copyFileSync(join(f.scriptsRoot,'tools/serve-wasm.py'),join(actualRoot,'tools/serve-wasm.py'));
+  writeFileSync(join(actualRoot,'tools/wasm_assets.py'),'# different imported serving behavior');
+  assert.throws(()=>loadHeightPreflight({...f,driverPath}),/Executed asset helper differs/);
   assert.equal(existsSync(f.artifacts),false);
  }finally{rmSync(f.folder,{recursive:true,force:true});}
 });
