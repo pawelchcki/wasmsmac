@@ -333,5 +333,21 @@
     "public_commit_was_game_executed": false,
     "original_source_freeze": "tools/behavior-tests/ui/unit-body-movement-source-freeze-v2.json",
     "original_source_freeze_sha256": "41fd6d3bbf06a19144efec9176c3559ba0d655894fea2cb34a7d7a8de2b807bf"
+  },
+  "durable_evidence": {
+    "archive_repository_path": "tools/behavior-tests/ui/unit-body-movement-evidence-v2.tar.gz",
+    "archive_sha256": "00c5ddbb0b4482f072e01538dadb3b32218879cefe4a734df82c9dffa4ac81cb",
+    "manifest_repository_path": "tools/behavior-tests/ui/unit-body-movement-evidence-v2.manifest.json",
+    "manifest_sha256": "369ec9edf1eab6a475b6aef02a7b6ed0d8819e83f09f3357f2f3829d781bf428",
+    "exact_utf8_members": 14,
+    "member_total_bytes": 2463050,
+    "compressed_bytes": 114130,
+    "portable_reproducer_repository_path": "tools/behavior-tests/state_trace/unit_body_movement_retained.py",
+    "reproducer_kind": "explicit bundle/manifest/source paths; no extraction, old path dereference, assets, runtime or current PID/process access",
+    "replay_exit_zero_means": "offline audit completed; recorded Node1/APP0/incomplete/0movementpasses remains unchanged",
+    "recorded_final_report_partial": true,
+    "recorded_pre_evaluator_receipt_partial": false,
+    "current_candidate_executed": false,
+    "public_evaluator_includes_later_stricter_route_guard": "source-only change; historical result remains incomplete; not a rerun or re-label of actual66dc"
   }
 }

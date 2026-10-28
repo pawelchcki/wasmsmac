@@ -33,3 +33,20 @@ The retained artifacts are under `/tmp/unit-body-movement-browser-v2`. The harne
 The historical execution identity remains `66dc0b997e2804a33012bebaea45bca0c221e22d`. Its original source-freeze manifest is retained byte-for-byte in [unit-body-movement-source-freeze-v2.json](unit-body-movement-source-freeze-v2.json), SHA256 `41fd6d3bbf06a19144efec9176c3559ba0d655894fea2cb34a7d7a8de2b807bf`; its historical pending flags are preserved rather than rewritten. [unit-body-movement-source-equivalence-v2.json](unit-body-movement-source-equivalence-v2.json) maps all 41 consumed source files to reachable ancestor `8f956da124794bb1166ccdb69ae0aaec0d7459e3` with identical per-file SHA256 values. That public commit was **not** the executed host identity; commit history and Git metadata are not claimed equal.
 
 The old capture pinned Playwright manifests and Chromium bytes, **not full executable Playwright package content**. That historical provenance gap remains unsupported. The review repair adds full content pins for the two relevant executable packages to future runner profiles, an explicit rejection of optimized Python before assert-based acceptance, and PID-reuse-safe lifecycle checks. These source/pure changes have never run this browser case and add no fidelity credit.
+
+## Durable candidate evidence and offline replay
+
+The exact 14 approved UTF8 capture files are retained in [unit-body-movement-evidence-v2.tar.gz](unit-body-movement-evidence-v2.tar.gz), with a complete [size/hash/member manifest](unit-body-movement-evidence-v2.manifest.json). The deterministic archive is 114,130 compressed bytes, SHA256 `00c5ddbb0b4482f072e01538dadb3b32218879cefe4a734df82c9dffa4ac81cb`; the payload totals 2,463,050 bytes. It contains candidate synthetic-world data and historical local paths, usernames, loopback URLs, PIDs and timestamps, whose disclosure is recorded. It contains no installed assets, images, runtime payload or Original private research.
+
+From the repository root, replay without assets or a game:
+
+```sh
+PYTHONPATH=tools/behavior-tests python3 -m state_trace.unit_body_movement_retained \
+  --bundle tools/behavior-tests/ui/unit-body-movement-evidence-v2.tar.gz \
+  --manifest tools/behavior-tests/ui/unit-body-movement-evidence-v2.manifest.json \
+  --source-root .
+```
+
+Exit zero means **offline audit completed**, with `candidate_executed: false`, recorded Node1/APP0, `incomplete-sampling`, zero movement/full-browser/Original passing cases, and the final all-owner effect comparator still unaccepted. The replay verifies 242 UTF16 chunks, 32 all-nine-unit census joins and 1,812 F32 descriptors. The final producer report's `partial: true` follows evaluator rejection; its earlier sealed pre-evaluator receipt's `partial: false` is preserved as a distinct fact. It verifies recorded process receipts without inspecting current PIDs or historical absolute paths.
+
+The reader uses fixed member names, compressed/decompressed/member bounds, exact payload hashes, canonical archive metadata and no path extraction. Malformed members, links, traversal, hidden trailing data and corruption reject. The current public evaluator includes subsequent source-only route guards; their use in offline replay does not change the original executed source identity or add a live capture. Credential-pattern checks found no matches; that screening alone is not a comprehensive privacy proof.
