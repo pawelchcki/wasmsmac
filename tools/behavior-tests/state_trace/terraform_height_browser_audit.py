@@ -93,7 +93,22 @@ def validate_coverage(state):
     assert {row['raw_id'] for row in state['players']} == set(range(7))
     assert {row['owner'] for row in state['units']} == ids['players']
     assert {row['owner'] for row in state['bases']} == ids['players']
+    research = state['research']
+    assert type(research) is list and len(research) == len(state['players'])
+    assert {row['player'] for row in research} == ids['players'], 'Incomplete/duplicate research player projection'
+    for row in research:
+        assert type(row['owned_tech_ids']) is list
+        assert all(type(value) is int and 0 <= value < 89 for value in row['owned_tech_ids'])
+        assert len(set(row['owned_tech_ids'])) == len(row['owned_tech_ids'])
+        assert type(row['target_id']) is int and -1 <= row['target_id'] < 89
+        assert type(row['accumulated']) is int and row['accumulated'] >= 0
     trace = state['terrain_trace']
+    assert trace['schema'] == 'game.terrain_observation.v4'
+    assert trace['elevation_units'] == 'native-engine-elevation'
+    assert equal(trace['terrain_units'], {
+        'rockiness': 'native-enum-0-none-1-flat-2-rolling-3-rocky',
+        'moisture': 'native-enum-0-none-1-arid-2-moist-3-rainy',
+        'original_raw_height_class': 'unsupported', 'original_raw_rockiness': 'unsupported'}), 'Unknown native terrain units'
     required = ('all_players', 'terrain_height', 'terrain_type', 'terrain_resources',
                 'traverse_quotes', 'canonical_height', 'energy_initialization', 'automation_context',
                 'automation_phase', 'home_identity', 'improvement_owners', 'terrain_epoch',
@@ -101,7 +116,9 @@ def validate_coverage(state):
     assert all(trace['coverage'][name] is True for name in required), 'Missing/unsupported native observation capability'
     for name, detail in [('players', 'player_details'), ('units', 'unit_details'), ('bases', 'base_details')]:
         assert set(trace[detail]) == ids[name], (name, 'incomplete native details')
-    for detail in trace['player_details'].values():
+    for player in state['players']:
+        detail = trace['player_details'][player['id']]
+        assert type(detail['raw_id']) is int and detail['raw_id'] == player['raw_id'], 'Misbound native player details'
         assert type(detail['energy_revision']) is int and detail['energy_revision'] >= 0, 'Native energy revision must be an Int, never Bool'
     tiles = trace['tiles']
     expected = {f'{x},{y}' for y in range(16) for x in range(y % 2, 16, 2)}
@@ -134,8 +151,10 @@ def validate_trace(records):
 
 def validate_sequence(records, report):
     assert report.get('candidate_executed') is True, 'Actual candidate execution must be Boolean true before case credit'
-    inputs = [value for kind, value, _ in records if kind == 'TH_INPUTS']
-    assert len(inputs) == 1
+    input_records = [(value, line) for kind, value, line in records if kind == 'TH_INPUTS']
+    assert len(input_records) == 1
+    inputs = [input_records[0][0]]
+    input_line = input_records[0][1]
     policy = inputs[0]['policy']
     assert equal(policy, {'version': 1, 'ignore_technologies': True}), 'Different actual native input policy'
     native = [(value, line) for kind, value, line in records if kind == 'TH_NATIVE']
@@ -143,6 +162,8 @@ def validate_sequence(records, report):
     reported = report['native_snapshots']
     assert len(reported) == len(CHECKPOINTS)
     trace, carriers = validate_trace(records)
+    assert input_line < native[0][1], 'Actual inputs must precede the first native checkpoint'
+    assert all(input_line < carriers[event['seq']] for event in trace if event['kind'] == 'input.ingress'), 'Actual inputs must precede native user input carriers'
     events = {event['seq']: event for event in trace}
     packets = []
     actor, owner, turn = native[0][0]['ui']['actor'], native[0][0]['ui']['owner'], native[0][0]['ui']['turn']
@@ -460,9 +481,11 @@ def validate_preflight(directory, preflight, preflight_bytes, report, native_inp
     shared = {'browser-log-cursor.mjs', 'browser-native-log-hook.mjs', 'runtime-fetch-barrier.mjs', 'terraform-browser-geometry.mjs', 'terraform-browser-pointer.mjs'}
     assert set(report['shared_helpers_sha256']) == shared
     common_sources = {'tools/wasm-tests/' + name for name in shared} | {'tools/wasm-tests/terraform-height-observation.mjs', 'tools/wasm-tests/fixtures/terraform-height-main.gls.js', 'tools/wasm-tests/terraform-browser-inputs.mjs'}
-    expected_sources = common_sources | ({'tools/wasm-tests/terraform-height-browser.test.mjs'} if 'kind' not in preflight else {'executed_node_driver', 'preflight_producer', 'tools/wasm-tests/fixtures/terraform-controls-world.gls.js', 'GLSMAC_data/tests/_state_trace_observer.gls.js', 'GLSMAC_data/tests/_terrain_trace_observer.gls.js', 'GLSMAC_data/tests/_terraform_cooperation_observer.gls.js'})
+    expected_sources = common_sources | ({'tools/wasm-tests/terraform-height-browser.test.mjs'} if 'kind' not in preflight else {'executed_node_driver', 'preflight_producer', 'tools/serve-wasm.py', 'tools/wasm-tests/terraform-height-preflight.mjs', 'tools/wasm-tests/fixtures/terraform-controls-world.gls.js', 'GLSMAC_data/tests/_state_trace_observer.gls.js', 'GLSMAC_data/tests/_terrain_trace_observer.gls.js', 'GLSMAC_data/tests/_terraform_cooperation_observer.gls.js'})
     assert set(files) == expected_sources
     assert all(type(value) is str and re.fullmatch(r'[0-9a-f]{64}', value) for value in files.values())
+    if 'kind' in preflight:
+        assert files['preflight_producer'] == files['tools/wasm-tests/terraform-height-preflight.mjs'], 'Executed preflight differs from declared source'
     assert files[driver_key] == report['driver_sha256']
     assert files['tools/wasm-tests/terraform-height-observation.mjs'] == report['height_observation_sha256']
     assert files['tools/wasm-tests/fixtures/terraform-height-main.gls.js'] == report['observer_sha256']
@@ -731,7 +754,12 @@ def validate_pointer_route(records, report):
             assert ingress['data']['button'] == begin['data']['button'] == 1
             assert inside(begin['data'], bounds)
             assert (ingress['data']['x'], ingress['data']['y']) == (begin['data']['x'], begin['data']['y'])
-            used_buttons.update((ingress['seq'], begin['seq']))
+            # End packets intentionally have no mouse type: join by the
+            # actual Int ingress, then exhaust every matching completion.
+            associated = [event for event in events if event['kind'] in ('input.ingress', 'input.dispatch')
+                          and type(event['data'].get('ingress')) is int and event['data']['ingress'] == ingress['data']['ingress']]
+            assert {event['seq'] for event in associated} == {ingress['seq'], begin['seq'], end['seq']}, 'Pointer ingress requires exactly one begin/end pair'
+            used_buttons.update((ingress['seq'], begin['seq'], end['seq']))
         assert (matched['down']['data']['x'], matched['down']['data']['y']) == (matched['up']['data']['x'], matched['up']['data']['y'])
         next_query = report['native_snapshots'][checkpoint + 1]['query_after_native_key']
         query_ingress = event_map[next_query]['data']['ingress']
@@ -743,8 +771,12 @@ def validate_pointer_route(records, report):
             assert rows
             row = [item for item in rows[-1] if item['id'] == 'raise']
             assert len(row) == 1 and row[0]['enabled'] is True and row[0]['label'] == label
+    pointer_ids = {event['data']['ingress'] for event in events if event['kind'] in ('input.ingress', 'input.dispatch')
+                   and event['data'].get('type') in ('mousedown', 'mouseup')
+                   and type(event['data'].get('ingress')) is int}
     actual_buttons = {event['seq'] for event in events if event['kind'] in ('input.ingress', 'input.dispatch')
-                      and event['data'].get('type') in ('mousedown', 'mouseup')}
+                      and (event['data'].get('type') in ('mousedown', 'mouseup') or
+                           (type(event['data'].get('ingress')) is int and event['data']['ingress'] in pointer_ids))}
     assert actual_buttons == used_buttons, 'Unreported or unused native pointer button action'
     return {'physical_clicks_verified': len(pointers), 'raw_button_actions_exhausted': True,
             'scope': 'MENU/terraform/raise/Cancel/reopen/Expend/confirm; actual native geometry and input receipts'}
