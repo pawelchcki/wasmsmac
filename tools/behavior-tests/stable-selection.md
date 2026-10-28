@@ -77,3 +77,12 @@ reference captures and installed-asset checks stay outside public passing totals
 Repair the observed startup single-case stall before migrating any failure
 checks. A separately reviewed CI change must integrate these prerequisites
 before any suite/capture moves out of Hot.
+
+The inventory binding includes every regression GSE script and included test
+helper, not only catalog rows and JSON cases. Changing those inputs requires a
+reviewed profile refresh even while v1 keeps its full Stable fallback. CLI copy
+detection includes unchanged sources; both paths remain visible in diagnostic
+area matching. Parse errors remove a prior report only when its destination can
+be safely identified and validated. Final-component report symlinks are rejected
+without unlinking them or their targets; all writes use the validated canonical
+outside-checkout destination. No execution gate or lane migration is added.

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepare a fail-closed Stable coverage plan; never execute or certify tests."""
 import argparse
+import hashlib
 import ast
 from fnmatch import fnmatchcase
 import re
@@ -110,7 +111,11 @@ def inventory(root=DIRECTORY):
         case = lanes.read(root / relative)
         cases[relative] = case
         startup += [row['id'] for row in case['cases']]
-    payload = dict(manifest=manifest, catalogs=known, case_inputs=cases, action_ids=sorted(action_ids),
+    script_root = root.parents[1] / 'GLSMAC_data/tests'
+    regression_sources = {str(name.relative_to(root.parents[1])): hashlib.sha256(name.read_bytes()).hexdigest()
+                          for name in sorted(script_root.rglob('*.gls.js'))}
+    require(bool(regression_sources), 'Missing regression script inputs')
+    payload = dict(manifest=manifest, catalogs=known, case_inputs=cases, regression_sources=regression_sources, action_ids=sorted(action_ids),
                    startup_projection_ids=sorted(startup))
     return dict(sha256=fingerprint(payload), manifest=manifest,
                 ids={kind: sorted(row['id'] for row in known[kind]) for kind in KINDS},
@@ -197,18 +202,52 @@ def git(root, *args):
     return subprocess.check_output(['git', *args], cwd=root)
 
 
+def actual_changes(root, base, head):
+    return diff_records(git(root, 'diff', '--name-status', '-z', '--find-renames',
+                            '--find-copies', '--find-copies-harder', base, head, '--'))
+
+
+def report_destination(args):
+    """Validate once and use the same canonical destination for unlink/write."""
+    require(not args.report.is_symlink(), 'Report final component cannot be a symlink')
+    destination = args.report.resolve()
+    protected = [name.resolve() for name in (args.request, args.profile) if name is not None]
+    require(destination not in protected, 'Report cannot overwrite inputs')
+    require(not destination.is_relative_to(DIRECTORY.parents[1].resolve()), 'Report must be outside the source checkout')
+    return destination
+
+
+def clear_report_after_parse_error(argv):
+    # This probe has no required arguments, so a missing --request or unknown
+    # option cannot preserve an earlier valid report. Unsafe destinations are
+    # never unlinked; malformed path arguments are not interpreted as outputs.
+    probe = argparse.ArgumentParser(add_help=False, allow_abbrev=False, exit_on_error=False)
+    probe.add_argument('--request', type=Path)
+    probe.add_argument('--profile', type=Path, default=PROFILE)
+    probe.add_argument('--report', type=Path)
+    try:
+        known, _ = probe.parse_known_args(argv)
+        if known.report is not None:
+            report_destination(known).unlink(missing_ok=True)
+    except (OSError, ValueError, argparse.ArgumentError, SystemExit):
+        pass
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument('--request', type=Path, required=True, help='Exact SHAs, inventory hash and expected changed paths')
     parser.add_argument('--profile', type=Path, default=PROFILE)
     parser.add_argument('--report', type=Path, required=True)
-    args = parser.parse_args(argv)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as error:
+        if error.code: clear_report_after_parse_error(argv)
+        raise
     # Do not leave an earlier successful planning artifact on any failure.
     try:
         root = DIRECTORY.parents[1]
-        require(args.report.resolve() != args.request.resolve() and args.report.resolve() != args.profile.resolve(),
-                'Report cannot overwrite inputs')
-        require(not args.report.resolve().is_relative_to(root.resolve()), 'Report must be outside the source checkout')
+        args.report = report_destination(args)
         args.report.unlink(missing_ok=True)
         request = decode_json(args.request.read_text())
         fields(request, ('version', 'base_sha', 'head_sha', 'inventory_sha256', 'changes'), 'request')
@@ -218,7 +257,7 @@ def main(argv=None):
         require(not git(root, 'status', '--porcelain', '--untracked-files=no'), 'Tracked source modifications require a committed head')
         require(git(root, 'merge-base', request['base_sha'], request['head_sha']).decode().strip() == request['base_sha'],
                 'Base must be the current chosen merge base')
-        actual = diff_records(git(root, 'diff', '--name-status', '-z', '--find-renames', request['base_sha'], request['head_sha'], '--'))
+        actual = actual_changes(root, request['base_sha'], request['head_sha'])
         result = select(decode_json(args.profile.read_text()), inventory(), request,
                         git(root, 'rev-parse', 'HEAD').decode().strip(), actual)
         args.report.parent.mkdir(parents=True, exist_ok=True)

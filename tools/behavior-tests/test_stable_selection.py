@@ -212,5 +212,65 @@ class StableSelectionTests(unittest.TestCase):
                 self.assertFalse(report.exists())
 
 
+    def test_cli_parse_errors_clear_only_valid_report_destination(self):
+        with tempfile.TemporaryDirectory() as folder:
+            report = Path(folder) / 'report.json'
+            for argv in (['--report', str(report)],
+                         ['--request', str(Path(folder) / 'request.json'), '--report', str(report), '--unknown']):
+                report.write_text('stale plan')
+                with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                    selection.main(argv)
+                self.assertEqual(error.exception.code, 2)
+                self.assertFalse(report.exists())
+
+    def test_report_symlink_cannot_be_replaced_by_source_tree_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            temp = Path(folder); root = temp / 'checkout'; directory = root / 'tools/behavior-tests'
+            directory.mkdir(parents=True)
+            target = temp / 'outside-report.json'; target.write_text('keep existing target')
+            link = root / 'report.json'; link.symlink_to(target)
+            argv = ['--request', str(temp/'request.json'), '--report', str(link)]
+            with patch.object(selection, 'DIRECTORY', directory), redirect_stderr(io.StringIO()):
+                self.assertEqual(selection.main(argv), 2)
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(target.read_text(), 'keep existing target')
+
+    def test_regression_case_and_helper_source_changes_invalidate_profile(self):
+        original = Path.read_bytes
+        for filename in ('unit_orders_controls.gls.js', '_colony_menu_controls_cases.gls.js'):
+            # Included case factories matter even when the catalog/canonical
+            # entrypoint itself did not change.
+            existing = list((selection.DIRECTORY.parents[1]/'GLSMAC_data/tests').rglob(filename))
+            if not existing and filename.startswith('_'):
+                existing = list((selection.DIRECTORY.parents[1]/'GLSMAC_data/tests').glob('_colony_menu_controls*.gls.js'))
+            self.assertTrue(existing)
+            selected = existing[0]
+            def altered(name):
+                value = original(name)
+                return value + b'\n// changed case input\n' if name == selected else value
+            with patch.object(Path, 'read_bytes', altered):
+                updated = selection.inventory()
+            self.assertNotEqual(updated['sha256'], self.current['sha256'])
+            with self.assertRaises(ProtocolError): self.plan([], current=updated)
+
+    def test_real_git_unchanged_copy_keeps_both_source_and_destination(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            def git(*args):
+                return subprocess.check_output(['git', *args], cwd=root, stderr=subprocess.DEVNULL).decode().strip()
+            git('init', '-q'); git('config', 'user.name', 'Selector Test'); git('config', 'user.email', 'selector@example.invalid')
+            (root/'src').mkdir(); (root/'misc').mkdir()
+            content = 'unique source content for copy classification\n' * 4
+            (root/'src/mapped.cpp').write_text(content)
+            git('add', '.'); git('commit', '-qm', 'base'); base = git('rev-parse', 'HEAD')
+            (root/'misc/copied.cpp').write_text(content)
+            git('add', '.'); git('commit', '-qm', 'copy'); head = git('rev-parse', 'HEAD')
+            changed = selection.actual_changes(root, base, head)
+            self.assertEqual(changed, [dict(status='C', old_path='src/mapped.cpp', path='misc/copied.cpp')])
+            plan = self.plan(changed)
+            self.assertEqual({row['path'] for row in plan['reasons']}, {'src/mapped.cpp', 'misc/copied.cpp'})
+            self.assert_complete(plan)
+
+
 if __name__ == '__main__':
     unittest.main()
