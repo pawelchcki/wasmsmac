@@ -1,0 +1,114 @@
+# Explicit portable Sea evidence ABI
+
+This is a necessary source/publication compatibility repair, not a new capture.
+The portable form remains **never game-executed**. Historical raw/report/worlds,
+legacy preflight/process witnesses and every older audit result remain immutable.
+The old candidate `/tmp` tools and unguarded portable348 source blobs keep their
+original hashes in their historical versions; current tool hashes are separate.
+
+The Sea CLI now explicitly supports two preflight contracts:
+
+- `terraform-sea-height-preflight.v3` follows the unchanged strict historical
+  source7d/Native115/Default25/runtimev6 path. It still requires the recognized
+  genuine raw-outcome hash/session52401/chunk60a1a5 and original run-once witness.
+- `terraform-sea-portable-preflight.v1` follows the pinned preparation/executor
+  contract. It requires `portable-external-completion.json` with kind
+  `terraform-sea-portable-external-completion.v1`, its actual owned-process start
+  record and the one-use execution claim. It never falls back to a fake legacy
+  `raw-outcome.json`. Unknown schemas and malformed required fields reject.
+
+The portable branch binds canonical source/output paths, clean source trees and
+file manifests, runtime provenance/binaries, static web/assets/dependencies,
+current preparation/runner tool bytes and the exact prepared fixture/map/rule
+files. Before using any prepared input summary it runs the reviewed pure source
+input helpers through an operator-trusted local Node. Map bytes, rule bytes and
+all20 shared land/sea duration rows must independently match those source-derived
+bytes. A self-consistent altered map hash/summary cannot substitute for the
+source. The report must bind those source/runtime/helper/default/web/input
+identities, declared profile, seed and actual override read count. The supported
+bounded profile remains16×16/all7, actor8 at8,8, port10,8 and Raise; this adds no
+other map, action or domain-transition coverage.
+
+The CLI accepts `--portable-node /trusted/node` for rederivation; without it,
+PATH Node is selected. Its binary hash/version must match preparation. It does
+not execute an arbitrary program selected solely by a JSON command field. The
+supplied source checkout remains an explicitly trusted candidate input, not a
+sandbox for arbitrary operator code. Prepared source paths/filenames cannot
+escape the caller's source/artifact binding.
+
+Portable process evidence must have exact Node OS/process exitInt0, actual wait,
+matching PID/session/start identities, exact argv/cwd, no spawn/lifecycle/timeout/
+forced-cleanup failure, group absence/reaping, restored subreaper and matching
+source postpins. APP0 is separately bound to the actual report. Report/raw/chunk/
+preflight digests and the existing full raw finalization checks remain required;
+summary `match` or `postpins_match` flags are not substitutes for rechecking the
+retained source, bytes and journal. All typed Sea worlds, bootstrap/accounting,
+quote/source-policy expected changes, physical pointer/keyboard route and decoded
+frames still pass through the common auditors.
+
+The portable executor cannot attest its own caller's tool session/chunk. Its
+process/byte witness is therefore **bounded**, with independent tool-level
+completion capability unsupported. Even public models with every callback
+message bound cannot earn complete-browser credit through this missing
+capability. The result remains partial/full-browser0/bounded-state-receipt1;
+current unchanged hooks also lack per-call identities. No message, receipt,
+session or historical kind is fabricated to manufacture a passing full case.
+
+All three Sea entry modules also reject optimized Python before imports/input
+parsing when `__debug__` is false. They use non-assert guards, so `-O`, `-OO` and
+`PYTHONOPTIMIZE` cannot remove the acceptance checks. Tests distinguish each
+module's own direct-file and import guard from a dependency guard. Normal CLI
+help/preparation/execution behavior remains covered. A changed tool version
+requires matching fingerprints; do not edit a historical preflight to relabel it.
+
+Public tests are selected explicitly with `-k PublicSea`. The portability
+composition uses real preparation and the real executor around a **cheap Node
+metadata writer carrying synthetic native/UI facts**, not the game/browser.
+It tests the new provenance/process/stream envelope APIs; existing public Sea
+state/geometry/bootstrap models cover the common typed-body checks. Public test
+counts are neither private capture checks nor additional native/browser cases.
+Negatives cover false/Int1 execution flags, OS1 despite modeled APP0, missing
+wait/cleanup, unsupported kinds, fictional legacy/tool receipts, coherent stale
+input summaries, source path/manifest escape and invalid override read flags.
+The optimization tests run real interpreter modes. Normal portable lifecycle
+checks separately cover actual cheap-child zero/nonzero/spawn/timeout/reaping.
+
+The immutable real Sea capture is re-audited separately with a NEW source/helper-
+bound result. Its six all-player worlds,71 source-derived changed fields and96
+Float checks remain bounded observations; the historical source/runtime is not
+relabeled current. No producer/hook/fixture/map/rule/runtime or game changes
+were made for this auditor branch. Publication/CI and merges remain Delivery-owned;
+this necessary closure is the final wrap-up, not another feature batch.
+
+Current source/result manifest (all SHA256):
+
+| Item | Digest |
+| --- | --- |
+| Sea auditor (ABI plus entry guard) | `77b7a2b9d56523f7cf5db8ef1a9b59977bde58740542d7ea41d70b93529c0d43` |
+| Exact Delivery guarded height helper | `f6cca166ba823d7ede2e98469fe79292e3747ca75487604874091555e9103479` |
+| Guarded preparation tool | `7578fdc101ec5018bd908456bc0c5dff4eca6c92cef13d75c7c95a08b473ba4f` |
+| Guarded outer runner | `e698ee824daa9473de384281749970b0b61bb9419901e2365e33fe5d2d2f618d` |
+| Sea public/retained test source | `b15f10931ef70b39ce862ee2b0cb9128bfffd7a5b8861a68a312938d40a0feb9` |
+| Prior unguarded ABI re-audit result | `9fca73392e1e319009ed384a5a03c7a4f718c131eb57c86ff2c77fadc7a81265` |
+| Guarded ABI re-audit result | `e7c1b4c7c00398f21f81119e35445d298072d50ab2446e61e7336a3b823a13d6` |
+
+The prior ABI result is `terraform-sea-height-v3-typed-audit-portable-abi.json`,
+source dde97409/helperbaa7912e, actual read-only CLI7.116s plus one affected
+retained artifact check8.419s. It remains separately source-bound. The guarded
+result is `terraform-sea-height-v3-typed-audit-portable-abi-guarded.json`, using
+Sea guard85703d1c and Delivery's exact guarded helper byte-port73d8a150. Its one
+actual read-only CLI completed6.135s/process0/tool9c4abb. It still reports the
+same13,374,094-byte raw191a6ffc…bb98 and report99082bb4…761a, six full worlds,
+71 exact changed fields/96 Float checks and partial/full0/bounded1. This is no
+capture rerun. Older c49/4756/0a931 results and all original raw/proof files are
+unchanged; the two new result files are not replacements for them.
+
+Final normal public verification passed32 Sea checks with zero skips18.171s
+(`PublicSeaDomainTests`, `PublicSeaBootstrapTests`, `PublicSeaParserTests`,
+`PublicSeaPortableEnvelopeTests`, `PublicSeaOptimizationGuardTests`), plus the
+13 portable lifecycle checks5.058s/zero skips. These ran with the unchanged
+functional shared helperbaa; the later shared change was the independently
+verified three-line entry guard only. The exact guarded shared helper then
+passed the actual legacy CLI above. No duplicate full private mutation batch
+or game run was made. All owned public child processes and audit checks were
+reaped. Delivery owns mandatory CI selection and publication.
