@@ -143,3 +143,14 @@ and this docs-only proof handoff. Port only these additions onto the actual PR37
 successor; do not replay inherited P2/Workshop history. Shared CI/catalog/lane
 registration remains Delivery-owned. No identical browser or build rerun is
 needed for this documentation-only addition.
+
+
+## Current acceptance scope
+
+Historical “complete world” and “complete native worlds” describe the full retained observer field projections and their equality. Actual census/scalar unit-ID joins remain supported, but they do not supply the missing independent raw unit/base-detail identity echoes for complete entity/world credit.
+
+The retained legacy metadata does not prove independent raw identity for every unit/base detail object or exact message identity for every print callback. First-callback runtime output binding and the sealed raw byte/chunk relation remain supported within their recorded scopes.
+
+The static census/resource/instance association, actual nine-unit ownership/definition joins, two-read purity,102 body Float32 pairs, recorded all-seven-owner fields and mounted HUD identity remain bounded evidence. The actual static-census test pass and Node/application exits are unchanged. An evaluator’s `complete: true` still means completion of its stated bounded protocol; it is not generic complete-browser credit.
+
+[unit-body-census-current-acceptance-scope-v1.json](unit-body-census-current-acceptance-scope-v1.json) records `candidate_executed: false`, no new observations, and current completeness credit of zero complete worlds and zero full-browser passing cases where those missing capabilities are mandatory. This is a source/documentation clarification, with no new game, test, capture or runtime execution and no retroactive change to old proof JSON or counters.

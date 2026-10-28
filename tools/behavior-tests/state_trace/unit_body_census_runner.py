@@ -22,6 +22,14 @@ rebased or changed source/runtime requires its own reviewed profile and proof.
 from pathlib import Path
 import argparse,hashlib,json,os,signal,subprocess,sys,time
 
+# Assertions are part of this portable acceptance boundary. Reject optimized
+# import/CLI use before it can prepare, execute, audit or award case credit.
+if not __debug__ or sys.flags.optimize or "PYTHONOPTIMIZE" in os.environ:
+    raise RuntimeError("unit-body census acceptance requires unoptimized Python without PYTHONOPTIMIZE")
+if __package__ in (None, ""):
+    # Keep direct file CLI imports on the behavior-tests parent module path.
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+
 
 
 def sha(path):
