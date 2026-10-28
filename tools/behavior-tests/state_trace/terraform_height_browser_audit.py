@@ -1,4 +1,7 @@
 """Read-only audit of the bounded land-height browser capture, not a new run."""
+if not __debug__:
+    raise RuntimeError("Height capture audit requires non-optimized Python; assertions are acceptance gates")
+
 import argparse
 import copy
 import hashlib

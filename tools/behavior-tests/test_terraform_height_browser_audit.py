@@ -10,6 +10,8 @@ import json
 import os
 import hashlib
 import tempfile
+import subprocess
+import sys
 from pathlib import Path
 import unittest
 import struct
@@ -965,6 +967,30 @@ class FrameFileTests(unittest.TestCase):
             result = audit.decode_frame_png(png_model(row_filter=filter_mode), (3, 2))
             self.assertEqual(result['decoded_pixel_bytes'], 18)
             self.assertNotEqual(result['decoded_pixels_sha256'], first['decoded_pixels_sha256'])
+
+
+class InterpreterModeTests(unittest.TestCase):
+    def probe(self, args, optimize=None):
+        env = dict(os.environ); env.pop('PYTHONOPTIMIZE', None)
+        if optimize is not None: env['PYTHONOPTIMIZE'] = optimize
+        return subprocess.run([sys.executable, *args], cwd=MODULE_PATH.parent.parent, env=env,
+                              text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+
+    def rejected(self, result):
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Height capture audit requires non-optimized Python', result.stderr)
+
+    def test_optimized_file_cli_fails_before_acceptance(self):
+        for flag in ('-O', '-OO'):
+            self.rejected(self.probe([flag, str(MODULE_PATH), '--help']))
+
+    def test_optimized_module_and_import_fail_before_acceptance(self):
+        self.rejected(self.probe(['-O', '-m', 'state_trace.terraform_height_browser_audit', '--help']))
+        self.rejected(self.probe(['-O', '-c', 'from state_trace import terraform_height_browser_audit']))
+
+    def test_environment_optimization_rejected_normal_cli_preserved(self):
+        self.rejected(self.probe([str(MODULE_PATH), '--help'], optimize='2'))
+        self.assertEqual(self.probe([str(MODULE_PATH), '--help']).returncode, 0)
 
 
 if __name__ == '__main__':
