@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class NativeInputFenceTests(unittest.TestCase):
     def test_actual_dispatch_formatter_does_not_expose_stale_reused_union_fields(self):
-        compiler = shutil.which('g++')
+        compiler = shutil.which('c++')
         if not compiler:
             self.skipTest('host C++ compiler unavailable')
         source = r'''#include "src/input/PresentationTrace.h"
@@ -45,7 +45,7 @@ int main() {
                                 dict(common, type='mousedown', x=43, y=21, button=2)])
 
     def test_real_threaded_queue_barrier_order_errors_bounds_and_seal(self):
-        compiler = shutil.which('g++')
+        compiler = shutil.which('c++')
         if not compiler:
             self.skipTest('host C++ compiler unavailable')
         source = r'''

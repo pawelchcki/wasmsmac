@@ -152,7 +152,7 @@ def run_cases(cases, target):
     # Separate builds let simultaneous comparisons use their own executable.
     with tempfile.TemporaryDirectory(prefix=f"glsmac-{target}-", dir=build) as temporary:
         executable = Path(temporary) / ("glsmac.cjs" if target == "wasm" else "glsmac")
-        compiler = os.environ.get("EMXX", "em++") if target == "wasm" else "g++"
+        compiler = os.environ.get("EMXX", "em++") if target == "wasm" else os.environ.get("CXX", "c++")
         command = [
             compiler, str(DIRECTORY / "glsmac.cpp"),
             str(ROOT / "src/game/backend/technology/Table.cpp"), f"-I{ROOT / 'src'}",

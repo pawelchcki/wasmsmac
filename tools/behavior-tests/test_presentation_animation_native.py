@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class NativeAnimationTraceTests(unittest.TestCase):
     def test_scene_frames_completion_cancellation_epochs_and_disabled_observer(self):
-        compiler = shutil.which('g++')
+        compiler = shutil.which('c++')
         if not compiler:
             self.skipTest('host C++ compiler unavailable')
         source = r'''

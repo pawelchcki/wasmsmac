@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class NativeSoundEpochTests(unittest.TestCase):
     def test_surviving_actors_register_before_controls_and_callback_stays_realtime_safe(self):
-        compiler = shutil.which('g++')
+        compiler = shutil.which('c++')
         if not compiler:
             self.skipTest('host C++ compiler unavailable')
         source = r'''

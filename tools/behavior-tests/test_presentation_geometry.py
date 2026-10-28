@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class NativeGeometryPrecisionTests(unittest.TestCase):
     def test_producer_preserves_every_native_f32_coordinate_and_zindex(self):
-        compiler = shutil.which('g++')
+        compiler = shutil.which('c++')
         if not compiler:
             self.skipTest('host C++ compiler unavailable')
         source = r'''

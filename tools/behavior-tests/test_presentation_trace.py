@@ -200,7 +200,7 @@ class RecorderTests(unittest.TestCase):
         recorder.record(raw(9, 'node.destroy', target='select'))
 
     def test_actual_native_bounded_buffer(self):
-        compiler = shutil.which('g++')
+        compiler = shutil.which('c++')
         if not compiler: self.skipTest('host C++ compiler unavailable')
         source = r'''
 #include "src/ui/PresentationTrace.h"
