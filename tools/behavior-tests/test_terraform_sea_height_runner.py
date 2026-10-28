@@ -44,6 +44,8 @@ export function seaHeightOverrideManifest(original,executed){
         (modules / name / 'package.json').write_text(json.dumps({'name': name, 'version': 'public-model'}))
     runtime, web, assets, browsers = [Path(folder) / name for name in ('runtime', 'web', 'assets', 'browsers')]
     for path in (runtime, web, assets, browsers): path.mkdir()
+    (browsers / 'resources.pak').write_bytes(b'public-browser-resource-not-executed')
+    (browsers / 'libvk_swiftshader.so').write_bytes(b'public-library-not-loaded')
     for path in (runtime, web):
         (path / 'GLSMAC.js').write_bytes(b'public-js-not-executable')
         (path / 'GLSMAC.wasm').write_bytes(b'public-wasm-not-executable')
@@ -61,6 +63,32 @@ export function seaHeightOverrideManifest(original,executed){
 
 
 class SeaPreparationTests(unittest.TestCase):
+    def test_browser_payload_changes_reject_before_execution_claim(self):
+        for variant in ('resource', 'library', 'added', 'removed'):
+            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as folder:
+                config, expected = public_source(folder); record = prep.prepare(config, expected)
+                root = Path(config['browsers']); path = Path(config['output']) / 'preflight.json'
+                if variant == 'resource': (root / 'resources.pak').write_bytes(b'changed resource')
+                if variant == 'library': (root / 'libvk_swiftshader.so').write_bytes(b'changed library')
+                if variant == 'added': (root / 'new-resource').write_bytes(b'new input')
+                if variant == 'removed': (root / 'resources.pak').unlink()
+                with self.assertRaisesRegex(AssertionError, 'Inputs changed after prepare'):
+                    runner.load_preflight(path, prep.sha(path))
+                self.assertFalse((path.parent / 'execution-claim.json').exists())
+
+    def test_native_and_language_loader_variables_are_removed_and_policy_is_bound(self):
+        blocked = ['LD_PRELOAD', 'LD_LIBRARY_PATH', 'LD_AUDIT', 'LD_DEBUG',
+                   'DYLD_INSERT_LIBRARIES', 'GLIBC_TUNABLES', 'NODE_OPTIONS', 'PYTHONPATH']
+        with patch.dict(os.environ, {**{name: 'untracked-loader-value' for name in blocked}, 'LANG': 'C'}):
+            clean = prep.clean_environment()
+        self.assertTrue(all(name not in clean for name in blocked))
+        self.assertEqual(clean['LANG'], 'C')
+        with tempfile.TemporaryDirectory() as folder:
+            config, expected = public_source(folder); record = prep.prepare(config, expected)
+            self.assertEqual(record['loader_environment_policy'], prep.LOADER_POLICY)
+            del record['loader_environment_policy']
+            with self.assertRaises(KeyError): prep.validate_record(record)
+
     def test_real_prepare_derives_inputs_without_launch_and_is_immutable(self):
         with tempfile.TemporaryDirectory() as folder:
             config, expected = public_source(folder)
@@ -148,6 +176,28 @@ class SeaPreparationTests(unittest.TestCase):
 
 
 class SeaOwnedChildTests(unittest.TestCase):
+    def test_same_session_descendant_with_new_group_is_terminated_and_reaped(self):
+        code = """import os,time
+r,w=os.pipe();child=os.fork()
+if child==0:
+ os.close(r);os.setpgrp();os.write(w,b'x');os.close(w);time.sleep(10)
+else:
+ os.close(w);os.read(r,1);os.close(r);print('CHILD_GROUP|'+str(child),flush=True)
+"""
+        result, raw = self.run_child(code)
+        child = int(raw.decode().strip().split('|')[1])
+        self.assertNotEqual(child, result['pid'])
+        self.assertEqual(result['actual_os_process_exit_code'], 0)
+        self.assertTrue(result['actual_wait_returned']); self.assertTrue(result['forced_cleanup'])
+        self.assertTrue(result['owned_group_absent']); self.assertEqual(result['remaining_owned_identities'], [])
+        self.assertTrue(result['subreaper_restored'])
+
+    def test_reused_start_identity_is_not_signalled(self):
+        with patch.object(runner, 'members', side_effect=[[{'pid': 101, 'start_ticks': 1}],
+                                                         [{'pid': 101, 'start_ticks': 2}]]), patch.object(runner.os, 'kill') as kill:
+            runner.signal_members(100, 15)
+        kill.assert_not_called()
+
     def run_child(self, code, timeout=2):
         with tempfile.TemporaryDirectory() as folder:
             result = runner.run_owned([sys.executable, '-c', code], folder, os.environ.copy(), folder, timeout, cleanup_seconds=.5)

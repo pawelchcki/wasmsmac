@@ -23,6 +23,8 @@ FILES = ('tools/wasm-tests/terraform-sea-height-browser.test.mjs',
 DRIVER = FILES[0]
 SEED = '1651011033:1377505029:3019448108:3247278135'
 KIND = 'terraform-sea-portable-preflight.v1'
+LOADER_POLICY = {'removed_exact': ['NODE_OPTIONS', 'NODE_PATH', 'PYTHONPATH', 'PYTHONHOME', 'GLIBC_TUNABLES'],
+                 'removed_prefixes': ['LD_', 'DYLD_']}
 # These are candidate /tmp tools used historically, not newly executed evidence.
 HISTORICAL_TOOLS = {'preflight.py': '9137e1bb050fe2c174bbbee89fd8f4a6c407043106be9727874c61f2f404d187',
                    'run-once.py': '7ee2f069f429c07aa7ec48a1eac7d55e81384bb0e5eb65f7480562dd46cc27a9'}
@@ -58,7 +60,7 @@ def source_pins(root):
 
 def pins(config):
     result = {'source': source_pins(config['source_root'])}
-    for name in ('runtime', 'web', 'assets'): result[name] = directory_hashes(config[name])
+    for name in ('runtime', 'web', 'assets', 'browsers'): result[name] = directory_hashes(config[name])
     result['tools'] = {name: sha(config[name]) for name in ('node', 'browser_executable', 'font_config', 'server_python')}
     result['node_packages'] = {name: directory_hashes(Path(config['node_modules']) / name) for name in ('playwright', 'playwright-core', 'pngjs')}
     return result
@@ -71,11 +73,14 @@ def validate_record(record):
     assert record['native_timeout_override'] is None and type(record['outer_timeout_seconds']) is int and record['outer_timeout_seconds'] == 200
     assert record['argv'] == [record['config']['node'], '--test', '--test-concurrency=1', DRIVER]
     assert record['environment'] == environment(record['config'])
+    assert record['loader_environment_policy'] == LOADER_POLICY
 
 
 def clean_environment():
     env = os.environ.copy()
-    for key in ('NODE_OPTIONS', 'NODE_PATH', 'PYTHONPATH', 'PYTHONHOME'): env.pop(key, None)
+    for key in list(env):
+        if key in LOADER_POLICY['removed_exact'] or key.startswith(tuple(LOADER_POLICY['removed_prefixes'])):
+            env.pop(key, None)
     return env
 
 
@@ -135,6 +140,7 @@ def prepare(config, expected):
               'config': config, 'pins': before, 'expected': expected, 'seed_requested': SEED,
               'node_test_budget_ms': 180000, 'native_timeout_override': None, 'outer_timeout_seconds': 200,
               'argv': [config['node'], '--test', '--test-concurrency=1', DRIVER], 'environment': environment(config),
+              'loader_environment_policy': LOADER_POLICY,
               'inputs': inputs | {'map_sha256': hashlib.sha256(map_bytes).hexdigest(),
                                   'executed_rules_sha256': hashlib.sha256(rules).hexdigest()},
               'tool_sources': {str(Path(__file__).resolve()): sha(__file__),

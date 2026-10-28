@@ -25,18 +25,30 @@ def members(group):
         if not path.name.isdecimal(): continue
         try:
             text = (path / 'stat').read_text(); fields = text[text.rfind(')') + 2:].split()
-            if int(fields[2]) == group and int(fields[3]) == group:
+            # Descendants can change process group while still belonging to
+            # our new session. The session, not just its first group, is owned.
+            if int(fields[3]) == group:
                 result.append({'pid': int(path.name), 'start_ticks': int(fields[19])})
         except (FileNotFoundError, ProcessLookupError, PermissionError): pass
     return result
 
 
 def reap(group):
-    while True:
+    # Only observed session identities are considered. Never wait for an
+    # unrelated child merely because this process temporarily is a subreaper.
+    for row in members(group):
         try:
-            pid, _ = os.waitpid(-group, os.WNOHANG)
-            if pid == 0: return
-        except ChildProcessError: return
+            os.waitpid(row['pid'], os.WNOHANG)
+        except ChildProcessError: pass
+
+
+def signal_members(session, kill_signal):
+    for row in members(session):
+        # Revalidate start identity and session immediately before signalling;
+        # a numeric PID disappearing or being reused supplies no authority.
+        if row not in members(session): continue
+        try: os.kill(row['pid'], kill_signal)
+        except ProcessLookupError: pass
 
 
 def run_owned(argv, cwd, env, output, timeout, cleanup_seconds=5):
@@ -72,10 +84,10 @@ def run_owned(argv, cwd, env, output, timeout, cleanup_seconds=5):
                 code = process.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
                 record['outer_timed_out'] = True; record['forced_cleanup'] = True
-                os.killpg(process.pid, signal.SIGTERM)
+                signal_members(process.pid, signal.SIGTERM)
                 try: code = process.wait(timeout=cleanup_seconds)
                 except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    signal_members(process.pid, signal.SIGKILL)
                     code = process.wait(timeout=cleanup_seconds)
             record.update(actual_os_process_exit_code=code, actual_wait_returned=True)
         return record
@@ -86,11 +98,11 @@ def run_owned(argv, cwd, env, output, timeout, cleanup_seconds=5):
         if process is not None:
             if process.poll() is None:
                 record['forced_cleanup'] = True
-                try: os.killpg(process.pid, signal.SIGTERM)
+                try: signal_members(process.pid, signal.SIGTERM)
                 except ProcessLookupError: pass
                 try: process.wait(timeout=cleanup_seconds)
                 except subprocess.TimeoutExpired:
-                    try: os.killpg(process.pid, signal.SIGKILL)
+                    try: signal_members(process.pid, signal.SIGKILL)
                     except ProcessLookupError: pass
                     try: process.wait(timeout=cleanup_seconds)
                     except subprocess.TimeoutExpired: record['lifecycle_error'] = 'Owned leader did not reap within bounded SIGKILL wait'
@@ -101,7 +113,7 @@ def run_owned(argv, cwd, env, output, timeout, cleanup_seconds=5):
             for kill_signal in (signal.SIGTERM, signal.SIGKILL):
                 if not alive: break
                 record['forced_cleanup'] = True
-                try: os.killpg(process.pid, kill_signal)
+                try: signal_members(process.pid, kill_signal)
                 except ProcessLookupError: pass
                 deadline = time.monotonic() + cleanup_seconds
                 while time.monotonic() < deadline:
