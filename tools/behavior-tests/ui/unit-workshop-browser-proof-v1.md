@@ -67,3 +67,14 @@ facing/cadence, original UI/pixel/audio/video agreement, consuming native DOM ID
 and GSE callback ingress-ID telemetry remain outside this proof. The separate
 cached-order graphics witness is source-prepared and unexecuted. CI, source
 integration and final-head review/merge are Delivery's subsequent gates.
+
+
+## Current acceptance scope
+
+The historical phrase “complete final native world comparison” means equality of the retained seven-owner field projection, with only its documented UI observation field excluded. It does not establish complete entity-detail identity.
+
+The retained legacy metadata does not prove independent raw identity for every unit/base detail object or exact message identity for every print callback. First-callback runtime output binding and the sealed raw byte/chunk relation remain supported within their recorded scopes.
+
+The component-material comparison, Workshop window/session/draft behavior, actual inputs, native production receipt, all-seven-owner recorded fields and Float checks remain bounded evidence. The historical strict-pass status and actual Node/application exits are unchanged. An evaluator’s `complete: true` still means completion of its stated bounded protocol; it is not generic complete-browser credit.
+
+[unit-workshop-current-acceptance-scope-v1.json](unit-workshop-current-acceptance-scope-v1.json) records `candidate_executed: false`, no new observations, and current completeness credit of zero complete worlds and zero full-browser passing cases where those missing capabilities are mandatory. This is a source/documentation clarification, with no new game, test, capture or runtime execution and no retroactive change to old proof JSON or counters.
