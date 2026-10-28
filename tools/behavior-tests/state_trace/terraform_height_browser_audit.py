@@ -521,13 +521,14 @@ def validate_preflight(directory, preflight, preflight_bytes, report, native_inp
         assert preflight['phase'] == 'before-native-launch'
         assert report['preflight_sha256'] == digest
         binding = preflight['runtime_build_binding']
-        assert set(binding) == {'schema', 'provenance_sha256', 'source_head', 'native_tree', 'runtime', 'scope'}
+        assert set(binding) == {'schema', 'provenance_sha256', 'source_head', 'native_tree', 'runtime', 'scope', 'compile_attribution_verified'}
         assert binding['schema'] == 'native-source-runtime.v1'
         assert type(binding['provenance_sha256']) is str and re.fullmatch(r'[0-9a-f]{64}', binding['provenance_sha256'])
         assert type(binding['source_head']) is str and re.fullmatch(r'[0-9a-f]{40}', binding['source_head'])
         assert binding['native_tree'] == preflight['native_tree'] == report['native_source_tree']
         assert binding['runtime'] == {'GLSMAC.js': report['runtime_js_sha256'], 'GLSMAC.wasm': report['runtime_wasm_sha256']}
-        assert binding['scope'] == 'Native C++ tree/runtime pair; Default scripts separately captured'
+        assert binding['compile_attribution_verified'] is False
+        assert binding['scope'] == 'Declared native source/runtime consistency; compile attribution unverified; Default scripts separately captured'
         assert preflight['production_default_sha256'] == report['production_default_sha256']
         assert preflight['native_policy_observation'] == 'not available before launch; require actual TH_INPUTS and every retained native world in the auditor'
         source = preflight['input_sha256']

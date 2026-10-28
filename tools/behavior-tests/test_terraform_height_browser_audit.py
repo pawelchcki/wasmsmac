@@ -1231,7 +1231,7 @@ class PreflightSchemaTests(unittest.TestCase):
                      'input_sha256': {'main': sha(main), 'world': sha(world), 'map': sha(self.map), 'helpers': '2' * 64},
                      'production_default_sha256': '3' * 64, 'declared_map': {'width': 16, 'height': 16, 'tiles': 128, 'bytes': 8379},
                      'seed_requested': '1651011033:1377505029:3019448108:3247278135', 'browser_budget_ms': 180000,
-                     'runtime_build_binding': {'schema': 'native-source-runtime.v1', 'provenance_sha256': '6' * 64, 'source_head': '7' * 40, 'native_tree': 'b' * 40, 'runtime': {'GLSMAC.js': 'd' * 64, 'GLSMAC.wasm': 'e' * 64}, 'scope': 'Native C++ tree/runtime pair; Default scripts separately captured'},
+                     'runtime_build_binding': {'schema': 'native-source-runtime.v1', 'compile_attribution_verified': False, 'provenance_sha256': '6' * 64, 'source_head': '7' * 40, 'native_tree': 'b' * 40, 'runtime': {'GLSMAC.js': 'd' * 64, 'GLSMAC.wasm': 'e' * 64}, 'scope': 'Declared native source/runtime consistency; compile attribution unverified; Default scripts separately captured'},
                      'native_policy_observation': 'not available before launch; require actual TH_INPUTS and every retained native world in the auditor',
                      'override_table': [{'row': i, 'field': 'shared_turns', 'field_index': 4, 'old': 12, 'new': 1, 'applies_to': ['land', 'sea'], 'land_name': f'Land {i}', 'sea_name': f'Sea {i}', 'land_prerequisite': 'None', 'sea_prerequisite': 'None'} for i in range(20)]}
         self.report = {'host_head': self.pref['head'], 'native_source_tree': self.pref['native_tree'], 'default_tree': self.pref['default_tree'],
@@ -1279,12 +1279,14 @@ class PreflightSchemaTests(unittest.TestCase):
             with self.assertRaises((AssertionError, KeyError)): self.validate()
 
     def test_modern_runtime_source_binding_cannot_be_absent_or_mismatched(self):
-        for change in ('missing', 'wrong-tree', 'wrong-js', 'bad-source', 'wrong-schema'):
+        for change in ('missing', 'wrong-tree', 'wrong-js', 'bad-source', 'wrong-schema', 'false-compile-credit', 'missing-compile-scope'):
             self.setUp()
             if change == 'missing': self.pref.pop('runtime_build_binding')
             elif change == 'wrong-tree': self.pref['runtime_build_binding']['native_tree'] = 'f' * 40
             elif change == 'wrong-js': self.pref['runtime_build_binding']['runtime']['GLSMAC.js'] = '9' * 64
             elif change == 'bad-source': self.pref['runtime_build_binding']['source_head'] = 'not a Git object'
+            elif change == 'false-compile-credit': self.pref['runtime_build_binding']['compile_attribution_verified'] = True
+            elif change == 'missing-compile-scope': self.pref['runtime_build_binding'].pop('compile_attribution_verified')
             else: self.pref['runtime_build_binding']['schema'] = 'unknown'
             with self.assertRaises((AssertionError, KeyError)): self.validate()
 

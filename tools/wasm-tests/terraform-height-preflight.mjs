@@ -19,7 +19,7 @@ export function bindHeightRuntime({manifest,manifestBytes,nativeTree,compiledTre
   const runtime={'GLSMAC.js':sha(runtimeJS),'GLSMAC.wasm':sha(runtimeWasm)};
   for(const[name,digest]of Object.entries(runtime))assert.equal(manifest.runtime[name],digest,`Runtime build bytes differ: ${name}`);
   return{schema:'native-source-runtime.v1',provenance_sha256:sha(manifestBytes),source_head:manifest.source_head,
-    native_tree:tree,runtime,scope:'Native C++ tree/runtime pair; Default scripts separately captured'};
+    native_tree:tree,runtime,compile_attribution_verified:false,scope:'Declared native source/runtime consistency; compile attribution unverified; Default scripts separately captured'};
 }
 
 export function claimHeightCapture({artifacts,prepared,report}){
@@ -70,6 +70,7 @@ export function terrainOverrideTable(original,executed){
 export function buildHeightPreflight({source,runtimeJS,runtimeWasm,runtimeBuildBinding,originalRules,executedRules,map,main,world,helpers,seed}){
   assert.ok(Buffer.isBuffer(map));assert.equal(map.subarray(0,11).toString('binary'),'TERRANMAP\0\x1a');
   for(const key of ['head','native_tree','default_tree'])assert.match(source[key],/^[0-9a-f]{40}$/);
+  assert.equal(runtimeBuildBinding.compile_attribution_verified,false,'Caller metadata is not an authenticated build receipt');
   assert.equal(runtimeBuildBinding.schema,'native-source-runtime.v1');assert.equal(runtimeBuildBinding.native_tree,source.native_tree);
   assert.deepEqual(runtimeBuildBinding.runtime,{'GLSMAC.js':sha(runtimeJS),'GLSMAC.wasm':sha(runtimeWasm)});
   const width=map.readUInt32LE(15),height=map.readUInt32LE(19),tiles=map.readUInt32LE(35);
