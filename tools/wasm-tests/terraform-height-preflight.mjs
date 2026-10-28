@@ -3,11 +3,40 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync,lstatSync} from 'node:fs';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {declaredTerrain,fixtureSources,rateOneSource} from './terraform-browser-inputs.mjs';
 const sha=value=>createHash('sha256').update(value).digest('hex');
+
+export function bindHeightRuntime({manifest,manifestBytes,nativeTree,compiledTree,runtimeJS,runtimeWasm}){
+  assert.match(manifest.source_head,/^[0-9a-f]{40}$/,'Runtime build source revision is required');
+  const tree=manifest.source_tree??manifest.src_tree;
+  assert.match(tree,/^[0-9a-f]{40}$/);
+  if(manifest.source_tree!==undefined&&manifest.src_tree!==undefined)assert.equal(manifest.source_tree,manifest.src_tree);
+  assert.equal(tree,compiledTree,'Build revision does not contain declared native source');
+  assert.equal(tree,nativeTree,'Runtime was built from different native source');
+  const runtime={'GLSMAC.js':sha(runtimeJS),'GLSMAC.wasm':sha(runtimeWasm)};
+  for(const[name,digest]of Object.entries(runtime))assert.equal(manifest.runtime[name],digest,`Runtime build bytes differ: ${name}`);
+  return{schema:'native-source-runtime.v1',provenance_sha256:sha(manifestBytes),source_head:manifest.source_head,
+    native_tree:tree,runtime,scope:'Native C++ tree/runtime pair; Default scripts separately captured'};
+}
+
+export function claimHeightCapture({artifacts,prepared,report}){
+  const allowed=new Set(['preflight.json','fixture-main.gls.js','fixture-world.gls.js','fixture-map.MP']);
+  if(existsSync(artifacts)){
+    assert.ok(lstatSync(artifacts).isDirectory()&&!lstatSync(artifacts).isSymbolicLink(),'Capture directory must be a real directory');
+    for(const name of readdirSync(artifacts)){
+      assert.ok(allowed.has(name),`Capture directory already contains run output: ${name}`);
+      const entry=lstatSync(resolve(artifacts,name));assert.ok(entry.isFile()&&!entry.isSymbolicLink(),'Prepared inputs must be regular files');
+    }
+  }
+  const digest=writeHeightPreflight({artifacts,...prepared,report});
+  // Cooperative concurrent launches share this atomic one-use claim. Even an
+  // unsuccessful launch consumes it; historical output is never truncated.
+  writeFileSync(resolve(artifacts,'capture-claim.json'),JSON.stringify({version:1,preflight_sha256:digest,candidate_execution_requested:true})+'\n',{flag:'wx'});
+  return digest;
+}
 
 export function assertHeightSourcesClean(scriptsRoot){
   const consumed=['src','GLSMAC_data/default','tools/serve-wasm.py','tools/wasm-tests/terraform-height-preflight.mjs','GLSMAC_data/tests/_state_trace_observer.gls.js',
@@ -38,13 +67,15 @@ export function terrainOverrideTable(original,executed){
   });
 }
 
-export function buildHeightPreflight({source,runtimeJS,runtimeWasm,originalRules,executedRules,map,main,world,helpers,seed}){
+export function buildHeightPreflight({source,runtimeJS,runtimeWasm,runtimeBuildBinding,originalRules,executedRules,map,main,world,helpers,seed}){
   assert.ok(Buffer.isBuffer(map));assert.equal(map.subarray(0,11).toString('binary'),'TERRANMAP\0\x1a');
   for(const key of ['head','native_tree','default_tree'])assert.match(source[key],/^[0-9a-f]{40}$/);
+  assert.equal(runtimeBuildBinding.schema,'native-source-runtime.v1');assert.equal(runtimeBuildBinding.native_tree,source.native_tree);
+  assert.deepEqual(runtimeBuildBinding.runtime,{'GLSMAC.js':sha(runtimeJS),'GLSMAC.wasm':sha(runtimeWasm)});
   const width=map.readUInt32LE(15),height=map.readUInt32LE(19),tiles=map.readUInt32LE(35);
   return{version:1,kind:'terraform-height-producer-preflight.v1',candidate_executed:false,phase:'before-native-launch',
     head:source.head,native_tree:source.native_tree,default_tree:source.default_tree,
-    runtime:{js:sha(runtimeJS),wasm:sha(runtimeWasm)},original_rules_sha256:sha(originalRules),executed_rules_sha256:sha(executedRules),
+    runtime:{js:sha(runtimeJS),wasm:sha(runtimeWasm)},runtime_build_binding:runtimeBuildBinding,original_rules_sha256:sha(originalRules),executed_rules_sha256:sha(executedRules),
     override_table:terrainOverrideTable(originalRules,executedRules),source_sha256:source.files,
     input_sha256:{main:sha(main),world:sha(world),helpers:sha(JSON.stringify(helpers)),map:sha(map)},
     production_default_sha256:source.production_default_sha256,
@@ -52,7 +83,7 @@ export function buildHeightPreflight({source,runtimeJS,runtimeWasm,originalRules
     native_policy_observation:'not available before launch; require actual TH_INPUTS and every retained native world in the auditor'};
 }
 
-export function loadHeightPreflight({scriptsRoot,build,assets,seed,driverPath=resolve(scriptsRoot,'tools/wasm-tests/terraform-height-browser.test.mjs')}){
+export function loadHeightPreflight({scriptsRoot,build,assets,seed,runtimeProvenancePath=process.env.WASM_RUNTIME_PROVENANCE||resolve(build,'provenance.json'),driverPath=resolve(scriptsRoot,'tools/wasm-tests/terraform-height-browser.test.mjs')}){
   // A future producer must reject ambiguity before it reads/emits a clean
   // HEAD-labelled snapshot. Historical captures gain no retrospective receipt.
   assertHeightSourcesClean(scriptsRoot);
@@ -72,14 +103,19 @@ export function loadHeightPreflight({scriptsRoot,build,assets,seed,driverPath=re
   const scripts=Object.fromEntries(readdirSync(resolve(scriptsRoot,'GLSMAC_data/default'),{recursive:true}).filter(name=>name.endsWith('.gls.js')).sort()
     .map(name=>[`GLSMAC_data/default/${name}`,read(`GLSMAC_data/default/${name}`).toString('utf8')]));
   const rev=ref=>execFileSync('git',['rev-parse',ref],{cwd:scriptsRoot,encoding:'utf8'}).trim();
+  const runtimeJS=readFileSync(resolve(build,'GLSMAC.js')),runtimeWasm=readFileSync(resolve(build,'GLSMAC.wasm'));
+  const manifestBytes=readFileSync(runtimeProvenancePath),manifest=JSON.parse(manifestBytes);
+  assert.match(manifest.source_head,/^[0-9a-f]{40}$/,'Runtime build source revision is required');
+  const runtimeBuildBinding=bindHeightRuntime({manifest,manifestBytes,nativeTree:rev('HEAD:src'),compiledTree:rev(`${manifest.source_head}:src`),runtimeJS,runtimeWasm});
   const originalRules=readFileSync(resolve(assets,'alphax.txt')),executedRules=rateOneSource(originalRules),map=declaredTerrain();
   const record=buildHeightPreflight({source:{head:rev('HEAD'),native_tree:rev('HEAD:src'),default_tree:rev('HEAD:GLSMAC_data/default'),files,production_default_sha256:sha(JSON.stringify(scripts))},
-    runtimeJS:readFileSync(resolve(build,'GLSMAC.js')),runtimeWasm:readFileSync(resolve(build,'GLSMAC.wasm')),originalRules,executedRules,map,main,world,helpers,seed});
+    runtimeJS,runtimeWasm,runtimeBuildBinding,originalRules,executedRules,map,main,world,helpers,seed});
   return{record,main,world,map};
 }
 
 export function writeHeightPreflight({artifacts,record,main,world,map,report}){
   if(report){
+    assert.deepEqual(report.runtime_build_binding,record.runtime_build_binding,'Capture runtime provenance differs from preparation');
     for(const[reportKey,value]of Object.entries({host_head:record.head,native_source_tree:record.native_tree,default_tree:record.default_tree,
       runtime_js_sha256:record.runtime.js,runtime_wasm_sha256:record.runtime.wasm,observer_sha256:record.input_sha256.main,
       world_input_sha256:record.input_sha256.world,observer_helpers_sha256:record.input_sha256.helpers,
@@ -103,9 +139,9 @@ export function writeHeightPreflight({artifacts,record,main,world,map,report}){
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const args=process.argv.slice(2),options={};
   assert.equal(args.length%2,0,'Expected --scripts-root/--app-dir/--assets-dir/--artifacts-dir pairs');
-  const keys={'--scripts-root':'scriptsRoot','--app-dir':'build','--assets-dir':'assets','--artifacts-dir':'artifacts'};
+  const keys={'--scripts-root':'scriptsRoot','--app-dir':'build','--assets-dir':'assets','--artifacts-dir':'artifacts','--runtime-provenance':'runtimeProvenancePath'};
   for(let i=0;i<args.length;i+=2){assert.ok(keys[args[i]]);assert.equal(options[keys[args[i]]],undefined);options[keys[args[i]]]=resolve(args[i+1]);}
-  for(const key of Object.values(keys))assert.ok(options[key],`Missing ${key}`);
+  for(const key of ['scriptsRoot','build','assets','artifacts'])assert.ok(options[key],`Missing ${key}`);
   const prepared=loadHeightPreflight({...options,seed:'1651011033:1377505029:3019448108:3247278135'});
   const digest=writeHeightPreflight({...options,...prepared});
   console.log(JSON.stringify({candidate_executed:false,preflight_sha256:digest,path:resolve(options.artifacts,'preflight.json')}));

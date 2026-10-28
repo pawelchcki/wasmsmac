@@ -14,6 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 import unittest
+from state_trace import terrain_observation as terrain_schema
 import struct
 import zlib
 
@@ -60,32 +61,62 @@ def paid_fixture_world(before, plan, actor_id, payer):
 def protocol_fixture():
     """Synthetic schema inputs only, never an original/candidate observation."""
     players = [{'id': f'p{i}', 'raw_id': i, 'faction': 'GAIANS' if i == 0 else f'other{i}'} for i in range(7)]
-    units = [{'id': f'u{i}', 'raw_id': i, 'owner': f'p{(i - 1) % 7}', 'x': 8, 'y': 8, 'movement': 1.0, 'health': 1.0, 'order': 'NO_ORDERS'} for i in range(1, 9)]
+    units = [{'id': f'u{i}', 'raw_id': i, 'owner': f'p{(i - 1) % 7}', 'x': 8, 'y': 8, 'movement': 1.0, 'health': 1.0, 'order': 'NO_ORDERS', 'morale': 2, 'prototype': 'formers' if i in (2, 8) else 'scout-patrol'} for i in range(1, 9)]
     units[-1]['owner'] = 'p0'
-    bases = [{'id': f'b{i}', 'raw_id': i, 'owner': f'p{i - 1}'} for i in range(1, 8)]
+    bases = [{'id': f'b{i}', 'raw_id': i, 'owner': f'p{i - 1}', 'x': 8, 'y': 8, 'population': 1,
+              'jobs': {'workers': 0, 'doctors': 1}, 'project': 'formers', 'resources': {'minerals': i - 1}, 'nutrients_native': 0} for i in range(1, 8)]
     tiles = {}
     for y in range(16):
         for x in range(y % 2, 16, 2):
             tiles[f'{x},{y}'] = {'x': x, 'y': y, 'elevation': {'center': 240, **{name: 240 for name in audit.CORNERS}},
                 'neighbors': {}, 'terrain_epoch': 0, 'canonical': {'active': False, 'elevation': None, 'is_water': None},
                 'imported': {'active': True, 'source_elevation': 240, 'source_water': False, 'source_corners': [240] * 4},
-                'is_land': True, 'is_water': False, 'native_type': {'domain': 'land'},
-                'native_height_band': {name: False for name in audit.BANDS}, 'unknown_native': {'value': -0.0}}
+                'is_land': True, 'is_water': False, 'native_type': {'domain': 'land', 'rockiness': 'flat', 'moisture': 'arid'},
+                'native_height_band': {name: False for name in audit.BANDS}}
     directions = dict(zip(('W', 'NW', 'N', 'NE', 'E', 'SE', 'S', 'SW'),
                           ((-2, 0), (-1, -1), (0, -2), (1, -1), (2, 0), (1, 1), (0, 2), (-1, 1))))
     for tile in tiles.values():
         x, y = tile['x'], tile['y']
         tile['neighbors'] = {name: {'x': (x + dx) % 16, 'y': y + dy} if 0 <= y + dy < 16 else None
                              for name, (dx, dy) in directions.items()}
+    for tile in tiles.values():
+        tile.update(version=1, width=16, height=16, rockiness=1, moisture=1, bonus=0, locked=False,
+            features_raw=0, features={name: False for name in terrain_schema.FEATURES},
+            terraforming_raw=0, terraforming={name: False for name in terrain_schema.IMPROVEMENTS},
+            terraforming_owners={name: -1 for name in terrain_schema.IMPROVEMENTS},
+            resources={p['id']: {'ENERGY': 0, 'MINERALS': 0, 'NUTRIENTS': 0} for p in players})
+    unit_details = {}
+    for unit in units:
+        quotes = {}
+        for direction, destination in tiles['8,8']['neighbors'].items():
+            quotes[direction] = None if destination is None else {
+                'source': {'x': 8, 'y': 8}, 'destination': copy.deepcopy(destination), 'movement_kind': 'land',
+                'nominal_mp_per_turn': 1.0, 'allowed_now': True, 'reason': None, 'quoted_step_cost_mp': 1.0,
+                'zero_cost_quote': False, 'quoted_tiles_per_turn': 1.0, 'policy_quote_version': 1,
+                'policy_quote': {'road_rate': 3, 'base_cost': 1.0, 'after_cost': 0.0, 'total_cost': 1.0}}
+        unit_details[unit['id']] = {'definition_id': 'Formers' if unit['prototype'] == 'formers' else 'ScoutPatrol',
+            'morale_set': 'STANDARD', 'movement_kind': 'land', 'nominal_mp_per_turn': 1.0,
+            'can_terraform': unit['prototype'] == 'formers', 'moved_this_turn': False, 'quotes': quotes,
+            'work': {'action': '', 'active': False, 'work_units': 0, 'required_work': 0, 'last_turn': 0,
+                     'previous_work_units': 0, 'previous_movement': -0.0, 'previous_moved': False, 'tile_x': 0, 'tile_y': 0},
+            'automation': {'version': 2, 'command': '', 'phase': 0, **{name: 0 for name in ('epoch', 'owner', 'issued_turn', 'last_turn', 'target_x', 'target_y', 'origin_x', 'origin_y', 'cursor')}},
+            'home_base_id': 0, 'terraforming_recovery': {'active': False, 'x': 0, 'y': 0},
+            'cooperative_work': {'supported': True, 'native_schema_version': 2, 'reason': None, 'state': None},
+            'combat': {'kind': 'conventional', 'offense': 1, 'defense': 1, 'reactor': 1}}
+    base_details = {b['id']: {'name': 'Declared ' + b['id'],
+        'production': {'choice_id': 'FORMERS', 'minerals': b['resources']['minerals'], 'last_processed_turn': 1},
+        'intake': {'ENERGY': 2, 'MINERALS': 1, 'NUTRIENTS': 2}, 'consumption': {'ENERGY': 0, 'MINERALS': 0, 'NUTRIENTS': 2},
+        'nutrients_present': True, 'nutrients': 0, 'citizens': [{'id': b['raw_id'], 'type': 'DOCTOR', 'worked_tile': None}],
+        'worked_tiles': [], 'facilities': {}} for b in bases}
     capabilities = {name: True for name in ('all_players', 'terrain_height', 'terrain_type', 'terrain_resources',
         'traverse_quotes', 'canonical_height', 'energy_initialization', 'automation_context', 'automation_phase',
         'home_identity', 'improvement_owners', 'terrain_epoch', 'paid_height_work', 'naval_recovery',
         'energy_revision', 'cooperative_work', 'ui')}
     trace = {'schema': 'game.terrain_observation.v4', 'elevation_units': 'native-engine-elevation',
              'terrain_units': {'rockiness': 'native-enum-0-none-1-flat-2-rolling-3-rocky', 'moisture': 'native-enum-0-none-1-arid-2-moist-3-rainy',
-                               'original_raw_height_class': 'unsupported', 'original_raw_rockiness': 'unsupported'}, 'coverage': capabilities, 'policy': {'version': 1, 'ignore_technologies': True}, 'ui': {}, 'tiles': tiles, 'unit_details': {u['id']: {'moved_this_turn': False, 'quotes': {'E': {'allowed_now': True, 'reason': None}}} for u in units},
-             'player_details': {p['id']: {'raw_id': p['raw_id'], 'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}, 'energy_revision': 1} for p in players},
-             'base_details': {b['id']: {'unknown': 'unchanged'} for b in bases}}
+                               'original_raw_height_class': 'unsupported', 'original_raw_rockiness': 'unsupported'}, 'coverage': {**capabilities, 'animation_timing': False, 'audio': False, 'original_height_byte': False}, 'policy': {'version': 1, 'ignore_technologies': True}, 'ui': {}, 'tiles': tiles, 'unit_details': unit_details,
+             'player_details': {p['id']: {'raw_id': p['raw_id'], 'role': 'declared', 'name': 'Player ' + p['id'], 'identity': ['declared'] * 6, 'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}, 'energy_revision': 1} for p in players},
+             'base_details': base_details}
     research = [{'player': p['id'], 'owned_tech_ids': [p['raw_id']], 'target_id': -1, 'accumulated': 0} for p in players]
     world = {'research': research, 'width': 16, 'height': 16, 'turn': 1, 'players': players, 'units': units, 'bases': bases, 'terrain_trace': trace}
     quote = {'version': 1, 'supported': True, 'action': 'raise', 'resuming': False, 'paid_fee': 0, 'base_fee': 4, 'fee': 4, 'credits': 10,
@@ -107,6 +138,7 @@ def protocol_fixture():
     final = packets[-1]
     final['ui'].update(movement=0.0, movement_bits=0)
     final['world'] = paid_fixture_world(world, quote['plan'], 'u8', 'p0')
+    for packet in packets: packet['world']['terrain_trace']['ui'] = copy.deepcopy(packet['ui'])
     receipt = {'name': 'unit_terraform', 'event_id': '0_68', 'caller': 0, 'success': True, 'data': {'unit_id': 8, 'action': 'raise', 'confirmed_height': True}}
     inputs = {'policy': {'version': 1, 'ignore_technologies': True}, 'actor': 8, 'can_terraform': True, 'raise_rule': {'turns': 1},
               'starting_credits': 10, 'faction_bonus': 0, 'energy': {'credits': 10, 'initialized': True, 'last_income_turn': 0}}
@@ -134,19 +166,25 @@ class AuditMutations:
     def packets(self):
         return [value for kind, value, _ in self.records if kind == 'TH_NATIVE']
 
-    def sync_report(self):
+    def sync_report(self, sync_ui=True):
         for item, row in zip(self.report['native_snapshots'], self.packets()):
+            if sync_ui: row['world']['terrain_trace']['ui'] = copy.deepcopy(row['ui'])
             item['observation'] = audit.node_projection(row)
         receipt = next((value for kind, value, _ in self.records if kind == 'TH_RECEIPT'), None)
         if receipt is not None:
             self.report['height_receipt'] = copy.deepcopy(receipt)
 
-    def reject(self):
+    def reject(self, sync_ui=True):
         # Update the reported copy as well: semantic checks must reject facts,
         # not merely a stale hash or a report/raw mismatch.
-        self.sync_report()
+        self.sync_report(sync_ui)
         with self.assertRaises((AssertionError, KeyError, TypeError)):
             audit.audit_records(self.records, self.report)
+
+    def test_native_confirmation_receipt_is_bool_not_integer_one(self):
+        receipt = next(value for kind, value, _ in self.records if kind == 'TH_RECEIPT')
+        receipt['data']['confirmed_height'] = 1
+        self.reject()
 
     def test_valid_capture_and_readonly_inputs(self):
         before = copy.deepcopy((self.records, self.report))
@@ -154,6 +192,54 @@ class AuditMutations:
         self.assertEqual(result['per_world'], {'players': 7, 'units': 8, 'bases': 7, 'tiles': 128})
         self.assertEqual(result['native_float_unit_fields_checked'], 96)
         self.assertTrue(audit.equal(before, (self.records, self.report)))
+
+    def test_native_detail_echo_gaps_are_not_complete_entity_worlds(self):
+        result = audit.audit_records(self.records, self.report)
+        self.assertEqual(result['observed_worlds'], 6)
+        self.assertEqual(result['complete_worlds'], 0)
+        self.assertFalse(result['entity_detail_identity']['supported'])
+
+    def test_reject_swapped_native_unit_and_base_detail_mirrors(self):
+        for domain in ('units', 'bases'):
+            self.setUp()
+            for packet in self.packets():
+                rows = packet['world'][domain]
+                details = packet['world']['terrain_trace']['unit_details' if domain == 'units' else 'base_details']
+                # Native rows remain untouched; swap their detail observations.
+                a, b = rows[0]['id'], rows[1]['id']
+                details[a], details[b] = details[b], details[a]
+            if domain == 'bases':
+                state = self.packets()[0]['world']
+                signature = lambda row: (row['resources'], row['project'], row['population'], row['jobs'], row['nutrients_native'])
+                if signature(state['bases'][0]) == signature(state['bases'][1]):
+                    # The retained v4 schema has no raw base handle echo.
+                    # An indistinguishable swap must stay unsupported rather
+                    # than inventing an identity or promising rejection.
+                    self.sync_report()
+                    result = audit.audit_records(self.records, self.report)
+                    self.assertEqual(result['complete_worlds'], 0)
+                    self.assertFalse(result['entity_detail_identity']['supported'])
+                    continue
+            self.reject()
+
+    def test_reject_contradictory_duplicate_ui_before_dropping_projection(self):
+        for key, value in (('selected', 999), ('modal', 'not-a-native-bool'), ('owner', 6)):
+            self.setUp()
+            for packet in self.packets(): packet['world']['terrain_trace']['ui'][key] = value
+            self.reject(sync_ui=False)
+
+    def test_reject_remote_full_tile_schema_corruption(self):
+        changes = (lambda t: t['elevation'].update(center=True), lambda t: t['elevation'].update(left='height'),
+                   lambda t: t.update(is_water=1), lambda t: t.update(rockiness=4),
+                   lambda t: t['features'].update(river=1), lambda t: t['neighbors'].update(E={'x': 16, 'y': 0}),
+                   lambda t: t['canonical'].update(active=1), lambda t: t['imported'].update(source_water=0),
+                   lambda t: t['terraforming_owners'].update(road=True),
+                   lambda t: next(iter(t['resources'].values())).update(ENERGY=False),
+                   lambda t: t.update(unknown_native_field=0))
+        for mutate in changes:
+            self.setUp()
+            for packet in self.packets(): mutate(packet['world']['terrain_trace']['tiles']['0,0'])
+            self.reject()
 
     def test_reject_candidate_execution_flag_before_any_case_credit(self):
         for value in (False, None, 1, 0, 'true'):
@@ -261,6 +347,15 @@ class AuditMutations:
             payer = next(p['id'] for p in row['world']['players'] if p['raw_id'] == 0)
             row['world']['terrain_trace']['player_details'][payer]['energy_revision'] = True
         self.reject()
+
+    def test_reject_untyped_energy_fields_for_every_nonpayer(self):
+        for raw_id in range(1, 7):
+            for key, value in (('credits', True), ('credits', 10.0), ('initialized', 1), ('last_income_turn', False), ('last_income_turn', 0.0)):
+                self.setUp()
+                for packet in self.packets():
+                    state = packet['world']; player = next(p for p in state['players'] if p['raw_id'] == raw_id)
+                    state['terrain_trace']['player_details'][player['id']]['energy'][key] = value
+                self.reject()
 
     def test_reject_nonint_foreign_revision_even_when_unchanged(self):
         for row in self.packets():
@@ -440,8 +535,8 @@ class ActualCaptureAuditTests(AuditMutations, unittest.TestCase):
         cls.directory = Path(os.environ['TERRAFORM_HEIGHT_CAPTURE'])
         cls.original = (audit.parse_records((cls.directory / 'application.log').read_bytes()), json.loads((cls.directory / 'report.json').read_bytes()))
 
-    def sync_report(self):
-        super().sync_report()
+    def sync_report(self, sync_ui=True):
+        super().sync_report(sync_ui)
         self.report['height_receipt'] = copy.deepcopy(next(value for kind, value, _ in self.records if kind == 'TH_RECEIPT' and value['name'] == 'unit_terraform'))
 
     def test_exact_retained_artifact_audit(self):
@@ -587,10 +682,50 @@ class FinalizationMutations:
 
 class ProtocolFinalizationTests(FinalizationMutations, unittest.TestCase):
 
+    def test_semantic_json_records_require_exact_source_framing(self):
+        for kind, value in (('TH_INPUTS', {'policy': 'model'}), ('TH_NATIVE', {'world': 'model'}),
+                            ('TH_RECEIPT', {'event_id': 'opaque'}), ('TH_TRACE', json.dumps({'events': []})),
+                            ('TH_HEADERS', []), ('TH_ROWS', [])):
+            encoded = kind + '|' + json.dumps(value)
+            for prefix in ('', '    [/height-snapshot/GLSMAC_data/default/browser_height_main.gls.js:129:6] '):
+                self.assertEqual(audit.parse_records((prefix + encoded + '\n').encode()), [(kind, json.loads(value) if kind == 'TH_TRACE' else value, 0)])
+            for prefix in ('noise', 'prefix:', '    [other.gls.js:129:6] '):
+                self.assertEqual(audit.parse_records((prefix + encoded + '\n').encode()), [])
+            with self.assertRaises(ValueError): audit.parse_records((encoded + ' trailing-noise\n').encode())
+
+    def test_exit_request_must_be_a_complete_permitted_record(self):
+        for marker in ('noise:TH_EXIT_REQUEST', 'TH_EXIT_REQUEST suffix', 'TH_EXIT_REQUEST|{}',
+                       '    [other-source.gls.js:132:27] TH_EXIT_REQUEST'):
+            self.setUp()
+            text = self.raw.decode().replace('\nTH_EXIT_REQUEST\n', '\n' + marker + '\n')
+            self.raw = text.encode()
+            self.records = audit.parse_records(self.raw)
+            length = audit.utf16_length(text)
+            self.chunks = [{'start_utf16': 0, 'end_utf16': length, 'text': text}]
+            digest = hashlib.sha256(self.raw).hexdigest()
+            self.report['log_transport'].update(raw_sha256=digest, joined_chunk_sha256=digest,
+                retained_utf8=len(self.raw), retained_utf16=length,
+                reads=[{'start_utf16': 0, 'end_utf16': length, 'transferred_utf16': length, 'transferred_utf8': len(self.raw)}])
+            offset = 0
+            calls = self.report['native_log_configuration']['callbacks']['calls']
+            for call, line in zip(calls, text.splitlines(keepends=True)):
+                size = audit.utf16_length(line)
+                call.update(before_utf16=offset, after_utf16=offset + size, message_utf16=size - 1, message=line[:-1])
+                offset += size
+            self.assertEqual(offset, length)
+            self.reject()
+
+    def test_exact_gse_exit_record_and_synthetic_standalone_record(self):
+        for line in ('TH_EXIT_REQUEST',
+                     '    [/height-snapshot/GLSMAC_data/default/browser_height_main.gls.js:132:27] TH_EXIT_REQUEST',
+                     '    [/height-snapshot/GLSMAC_data/default/browser_height_main.gls.js:144:27] TH_EXIT_REQUEST'):
+            self.assertEqual(audit.parse_records((line + '\n').encode()), [('TH_EXIT_REQUEST', None, 0)])
+
     def test_modern_callback_messages_bind_each_interval(self):
         result = audit.validate_finalization(self.report, self.raw, self.chunks, self.records)
         self.assertTrue(result['exact_callback_message_identity']['supported'])
-        self.assertEqual(audit.classify_browser_credit(result, {'supported': True})['complete_browser_cases_audited'], 1)
+        self.assertEqual(audit.classify_browser_credit(result, {'supported': True})['complete_browser_cases_audited'], 0)
+        # Complete callback messages do not supply absent native detail identities.
         calls = self.report['native_log_configuration']['callbacks']['calls']
         calls[1]['message'] = 'changed message'
         self.reject()
@@ -737,7 +872,10 @@ class ExternalOutcomeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'outcome.json'
             self.assertFalse(audit.validate_external_exit(path, native, bindings)['supported'])
-            path.write_text(json.dumps(data)); self.assertTrue(audit.validate_external_exit(path, native, bindings)['supported'])
+            path.write_text(json.dumps(data)); external = audit.validate_external_exit(path, native, bindings)
+            self.assertFalse(external['supported'], 'Caller-authored session/chunk JSON is not an independent process witness')
+            credit = audit.classify_browser_credit({'exact_callback_message_identity': {'supported': True}}, external)
+            self.assertEqual(credit['execution_cases_audited'], 0); self.assertEqual(credit['complete_browser_cases_audited'], 0)
             for change in (lambda d: d.update(kind='unknown'), lambda d: d['capture_bindings'].update(raw_sha256='wrong'),
                            lambda d: d.update(raw_process_exit=1), lambda d: d['tool_completion_result'].update(exit_code=1),
                            lambda d: d.pop('tool_completion_result'), lambda d: d.update(browser_server_driver_reaped=False),
@@ -832,6 +970,47 @@ class PointerRouteMutations:
         before = copy.deepcopy((self.records, self.report))
         self.assertEqual(audit.validate_pointer_route(self.records, self.report)['physical_clicks_verified'], 8)
         self.assertTrue(audit.equal(before, (self.records, self.report)))
+
+    def insert_target_event(self, pointer, edge, kind, data):
+        receipt = self.report['processed_pointers'][pointer]
+        cut, target = receipt[edge]['seq'], receipt['target']['id']
+        selected = next(packet for name, packet, _ in self.records if name == 'TH_TRACE' and any(e['seq'] == cut for e in packet['events']))
+        for name, packet, _ in self.records:
+            if name == 'TH_TRACE':
+                for event in packet['events']:
+                    if event['seq'] >= cut: event['seq'] += 1
+        selected['events'].append({'seq': cut, 'target': target, 'kind': kind, 'data': data})
+        selected['events'].sort(key=lambda event: event['seq'])
+        for item in self.report['processed_pointers']:
+            if item['fence'] >= cut: item['fence'] += 1
+            for key in ('hover', 'down_ingress', 'down', 'down_end', 'up_ingress', 'up', 'end'):
+                if item[key]['seq'] >= cut: item[key]['seq'] += 1
+        for item in self.report['native_snapshots']:
+            if item['query_after_native_key'] >= cut: item['query_after_native_key'] += 1
+        for item in self.report.get('processed_keys', []):
+            for key in ('ingress', 'begin', 'end'):
+                if item[key]['seq'] >= cut: item[key]['seq'] += 1
+
+    def test_reject_widget_hidden_destroyed_or_disabled_before_actual_click_edges(self):
+        for edge in ('hover', 'down', 'up'):
+            for kind, data in (('node.hide', {}), ('node.destroy', {}), ('node.property', {'key': 'color', 'value': 'black'})):
+                self.setUp()
+                pointer = 7 if kind == 'node.destroy' else 2
+                receipt = self.report['processed_pointers'][pointer]
+                target = receipt['target']['id']
+                colors = [event['data']['value'] for name, packet, _ in self.records if name == 'TH_TRACE'
+                          for event in packet['events'] if event['seq'] <= receipt['fence'] and event.get('target') == target
+                          and event['kind'] == 'node.property' and event['data']['key'] == 'color']
+                self.insert_target_event(pointer, edge, kind, data)
+                # Restore the first row only after its mouseup begins. This
+                # isolates the in-click anomaly from any later reopen check.
+                if kind == 'node.hide': self.insert_target_event(pointer, 'end', 'node.show', {})
+                if kind == 'node.property': self.insert_target_event(pointer, 'end', 'node.property', {'key': 'color', 'value': colors[-1]})
+                self.reject()
+
+    def test_mouseup_handler_may_hide_its_widget_before_dispatch_end(self):
+        self.insert_target_event(7, 'end', 'node.hide', {})
+        self.assertEqual(audit.validate_pointer_route(self.records, self.report)['physical_clicks_verified'], 8)
 
     def test_reject_missing_empty_or_reordered_physical_route(self):
         self.report['processed_pointers'] = []; self.reject()
@@ -943,6 +1122,7 @@ class PreflightSchemaTests(unittest.TestCase):
                      'input_sha256': {'main': sha(main), 'world': sha(world), 'map': sha(self.map), 'helpers': '2' * 64},
                      'production_default_sha256': '3' * 64, 'declared_map': {'width': 16, 'height': 16, 'tiles': 128, 'bytes': 8379},
                      'seed_requested': '1651011033:1377505029:3019448108:3247278135', 'browser_budget_ms': 180000,
+                     'runtime_build_binding': {'schema': 'native-source-runtime.v1', 'provenance_sha256': '6' * 64, 'source_head': '7' * 40, 'native_tree': 'b' * 40, 'runtime': {'GLSMAC.js': 'd' * 64, 'GLSMAC.wasm': 'e' * 64}, 'scope': 'Native C++ tree/runtime pair; Default scripts separately captured'},
                      'native_policy_observation': 'not available before launch; require actual TH_INPUTS and every retained native world in the auditor',
                      'override_table': [{'row': i, 'field': 'shared_turns', 'field_index': 4, 'old': 12, 'new': 1, 'applies_to': ['land', 'sea'], 'land_name': f'Land {i}', 'sea_name': f'Sea {i}', 'land_prerequisite': 'None', 'sea_prerequisite': 'None'} for i in range(20)]}
         self.report = {'host_head': self.pref['head'], 'native_source_tree': self.pref['native_tree'], 'default_tree': self.pref['default_tree'],
@@ -987,6 +1167,16 @@ class PreflightSchemaTests(unittest.TestCase):
             if mutation == 'missing-server': files.pop('tools/serve-wasm.py')
             elif mutation == 'missing-preflight': files.pop('tools/wasm-tests/terraform-height-preflight.mjs')
             else: files['tools/wasm-tests/terraform-height-preflight.mjs'] = '9' * 64
+            with self.assertRaises((AssertionError, KeyError)): self.validate()
+
+    def test_modern_runtime_source_binding_cannot_be_absent_or_mismatched(self):
+        for change in ('missing', 'wrong-tree', 'wrong-js', 'bad-source', 'wrong-schema'):
+            self.setUp()
+            if change == 'missing': self.pref.pop('runtime_build_binding')
+            elif change == 'wrong-tree': self.pref['runtime_build_binding']['native_tree'] = 'f' * 40
+            elif change == 'wrong-js': self.pref['runtime_build_binding']['runtime']['GLSMAC.js'] = '9' * 64
+            elif change == 'bad-source': self.pref['runtime_build_binding']['source_head'] = 'not a Git object'
+            else: self.pref['runtime_build_binding']['schema'] = 'unknown'
             with self.assertRaises((AssertionError, KeyError)): self.validate()
 
     def test_actual_override_load_and_manifest_identity_are_required(self):

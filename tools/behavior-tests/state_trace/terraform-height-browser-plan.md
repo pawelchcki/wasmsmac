@@ -483,3 +483,9 @@ guard, while normal commands remain unchanged. A final actual read-only replay
 passed with the guarded source; the compact `reaudit-guard.json` receipt binds
 and exactly reconstructs its result from the preceding result plus its sole
 source-hash change. No Native or browser run was added.
+
+## Current capture preparation and evidence scope
+
+Future land captures require a runtime provenance manifest (WASM_RUNTIME_PROVENANCE, or build/provenance.json) whose source_head resolves to the current native source tree and whose JS/WASM digests match the actual runtime files. Active Default scripts are hashed separately. Missing or stale manifests fail before launch. Preparation and capture may share one fresh directory only when its prepared inputs match exactly; the atomic capture claim consumes that directory even after a failed attempt. Retained run output is never overwritten.
+
+The latest historical re-audit observes six typed worlds and bounded state/receipt facts, with one independently recognized legacy execution receipt. Complete entity/world and complete browser counts remain zero: v4 detail rows lack native raw identity echoes and callback metadata lacks exact per-call content. Self-declared modern outcome JSON does not establish an independent OS execution witness. Historical captures, source/runtime versions and earlier result files remain unchanged.
