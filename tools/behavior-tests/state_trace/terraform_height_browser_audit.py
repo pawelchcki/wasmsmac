@@ -475,7 +475,8 @@ def audit_records(records, report):
         assert int.from_bytes(struct.pack('>f', ui['movement']), 'big') == ui['movement_bits']
         assert equal(ui['movement'], next(unit['movement'] for unit in row['world']['units'] if unit['raw_id'] == ui['actor']))
     assert packets[0]['ui']['movement_bits'] == 1065353216 and packets[-1]['ui']['movement_bits'] == 0
-    return {'status': 'partial-readonly-native-fields-audit', 'native_cases_added': 0, 'browser_cases_audited': 0, 'native_capture_field_cases_audited': 1,
+    return {'status': 'observations-only-readonly-native-fields-audit', 'native_cases_added': 0, 'browser_cases_audited': 0, 'native_capture_field_cases_audited': 0,
+            'compile_attribution_verified': False, 'public_retained_replay_available': False,
             'typed_pure_checkpoints': 5, 'complete_worlds': 0, 'observed_worlds': len(packets),
             'entity_detail_identity': validate_detail_mirrors(base), 'per_world': validate_coverage(packets[0]['world']),
             'native_receipts': {'total': len(all_receipts), 'startup_before_first_checkpoint': len(all_receipts) - 1,
@@ -1044,16 +1045,21 @@ def classify_browser_credit(finalization, external, entity_identity=None):
     execution = external.get('supported') is True
     callbacks = finalization['exact_callback_message_identity']['supported'] is True
     entities = entity_identity is not None and entity_identity.get('supported') is True
-    complete = execution and callbacks and entities
-    unsupported = []
+    # Source/runtime hash consistency and private retained observations do not
+    # authenticate compilation or supply a publicly replayable passing case.
+    # Preserve independently recognized OS receipt facts in external_node_exit;
+    # they must not become source-execution or fidelity case credit here.
+    unsupported = ['Runtime metadata consistency is UNVERIFIED build attribution',
+                   'Retained raw replay unavailable in public CI; observations are not published passing-case credit']
     if not execution: unsupported.append('Independent OS execution witness unsupported; self-declared outcome metadata is not tool evidence')
     if not callbacks: unsupported.append('exact per-callback message identity; legacy offset-only metadata cannot earn complete-browser case credit')
     if not entities: unsupported.append('native entity detail raw identity echoes absent; complete entity/world observation unsupported')
-    return {'browser_cases_audited': 1 if complete else 0,
-            'complete_browser_cases_audited': 1 if complete else 0,
-            'execution_cases_audited': 1 if execution else 0,
-            'bounded_state_receipt_cases_audited': 1,
-            'status': 'passed-readonly-complete-browser-audit' if complete else 'partial-readonly-bounded-state-receipt-audit',
+    return {'native_cases_added': 0, 'native_capture_field_cases_audited': 0,
+            'browser_cases_audited': 0, 'complete_browser_cases_audited': 0,
+            'execution_cases_audited': 0, 'bounded_state_receipt_cases_audited': 0,
+            'bounded_journal_field_cases_audited': 0,
+            'compile_attribution_verified': False, 'public_retained_replay_available': False,
+            'status': 'observations-only-readonly-audit',
             'unsupported_capabilities': unsupported}
 
 
@@ -1075,9 +1081,6 @@ def audit_artifacts(directory, outer_outcome=None):
                 'preflight_sha256': hashlib.sha256(preflight_bytes).hexdigest(), 'host_head': report['host_head']}
     external = validate_external_exit(Path(outer_outcome) if outer_outcome else directory / 'raw-outcome.json', report['native_exit'], bindings)
     result.update(classify_browser_credit(finalization, external, result['entity_detail_identity']))
-    if not external['supported']:
-        result['native_capture_field_cases_audited'] = 0
-        result['bounded_journal_field_cases_audited'] = 1
     result.update(raw_sha256=hashlib.sha256(raw).hexdigest(), raw_bytes=len(raw), report_sha256=hashlib.sha256(report_bytes).hexdigest(),
                   preflight_sha256=hashlib.sha256(preflight_bytes).hexdigest(), source_audit_script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   source_validation_dependencies_sha256={str(path.relative_to(Path(__file__).resolve().parent.parent)): hashlib.sha256(path.read_bytes()).hexdigest()

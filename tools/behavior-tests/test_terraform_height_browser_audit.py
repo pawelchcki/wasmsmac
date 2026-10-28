@@ -527,6 +527,20 @@ class ProtocolAuditTests(AuditMutations, unittest.TestCase):
     def setUpClass(cls):
         cls.original = protocol_fixture()
 
+    def test_checked_native_fields_remain_observations_without_case_credit(self):
+        result = audit.audit_records(self.records, self.report)
+        self.assertEqual(result['observed_worlds'], 6)
+        self.assertEqual(result['typed_pure_checkpoints'], 5)
+        self.assertGreater(result['parsed_native_world_changed_fields'], 0)
+        self.assertEqual(result['native_float_unit_fields_checked'], 96)
+        self.assertEqual(result['native_receipts']['observed_completions'], 1)
+        self.assertEqual(result['complete_worlds'], 0)
+        self.assertTrue(result['status'].startswith('observations-only-'))
+        self.assertFalse(result['compile_attribution_verified'])
+        self.assertFalse(result['public_retained_replay_available'])
+        for key in ('native_cases_added', 'browser_cases_audited', 'native_capture_field_cases_audited'):
+            self.assertEqual(result[key], 0)
+
     def test_unreported_native_completion_cannot_leave_final_snapshot_stale(self):
         for name in ('move_unit', 'advance_turn', 'unknown_action'):
             for line in (15, 54, 56, 64, 71):
@@ -577,8 +591,11 @@ class ActualCaptureAuditTests(AuditMutations, unittest.TestCase):
         self.assertEqual(result['parsed_native_world_changed_fields'], 229)
         self.assertEqual(result['browser_cases_audited'], 0)
         self.assertEqual(result['complete_browser_cases_audited'], 0)
-        self.assertEqual(result['bounded_state_receipt_cases_audited'], 1)
-        self.assertEqual(result['status'], 'partial-readonly-bounded-state-receipt-audit')
+        self.assertEqual(result['bounded_state_receipt_cases_audited'], 0)
+        self.assertEqual(result['execution_cases_audited'], 0)
+        self.assertEqual(result['native_capture_field_cases_audited'], 0)
+        self.assertTrue(result['external_node_exit']['supported'])
+        self.assertEqual(result['status'], 'observations-only-readonly-audit')
         self.assertFalse(result['finalization']['exact_callback_message_identity']['supported'])
         self.assertEqual(result['raw_bytes'], 14465994)
         self.assertEqual(result['raw_sha256'], '7877baed15b88c2700f3042fe5c31f64c6ee66517dcef04541c1ced832bad473')
@@ -714,6 +731,26 @@ class FinalizationMutations:
 
 
 class ProtocolFinalizationTests(FinalizationMutations, unittest.TestCase):
+    def test_reported_capabilities_and_os_receipt_cannot_create_passing_case_credit(self):
+        for execution in (False, True):
+            for callbacks in (False, True):
+                for entities in (False, True):
+                    with self.subTest(execution=execution, callbacks=callbacks, entities=entities):
+                        external = {'supported': execution, 'receipt_verification': 'public-model-only'}
+                        original = copy.deepcopy(external)
+                        result = audit.classify_browser_credit(
+                            {'exact_callback_message_identity': {'supported': callbacks}},
+                            external, {'supported': entities})
+                        for key in ('native_cases_added', 'native_capture_field_cases_audited',
+                                    'browser_cases_audited', 'complete_browser_cases_audited',
+                                    'execution_cases_audited', 'bounded_state_receipt_cases_audited',
+                                    'bounded_journal_field_cases_audited'):
+                            self.assertEqual(result[key], 0, key)
+                        self.assertFalse(result['compile_attribution_verified'])
+                        self.assertFalse(result['public_retained_replay_available'])
+                        self.assertEqual(result['status'], 'observations-only-readonly-audit')
+                        self.assertEqual(external, original, 'Independent receipt observations must remain unchanged')
+
 
     def test_semantic_json_records_require_exact_source_framing(self):
         for kind, value in (('TH_INPUTS', {'policy': 'model'}), ('TH_NATIVE', {'world': 'model'}),
@@ -788,8 +825,8 @@ class ProtocolFinalizationTests(FinalizationMutations, unittest.TestCase):
         credit = audit.classify_browser_credit(result, {'supported': True})
         self.assertEqual(credit['complete_browser_cases_audited'], 0)
         self.assertEqual(credit['browser_cases_audited'], 0)
-        self.assertEqual(credit['bounded_state_receipt_cases_audited'], 1)
-        self.assertTrue(credit['status'].startswith('partial-'))
+        self.assertEqual(credit['bounded_state_receipt_cases_audited'], 0)
+        self.assertTrue(credit['status'].startswith('observations-only-'))
         calls = self.report['native_log_configuration']['callbacks']['calls']
         # Source-only legacy metadata can absorb one omitted entry. Preserve
         # the fact that even contiguous offsets cannot prove callback identity.
