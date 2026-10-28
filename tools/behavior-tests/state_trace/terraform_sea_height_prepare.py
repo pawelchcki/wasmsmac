@@ -18,7 +18,7 @@ FILES = ('tools/wasm-tests/terraform-sea-height-browser.test.mjs',
  'tools/wasm-tests/runtime-fetch-barrier.mjs', 'tools/wasm-tests/terraform-browser-geometry.mjs',
  'tools/wasm-tests/terraform-browser-pointer.mjs', 'GLSMAC_data/tests/_state_trace_observer.gls.js',
  'GLSMAC_data/tests/_terrain_trace_observer.gls.js', 'GLSMAC_data/tests/_terraform_cooperation_observer.gls.js',
- 'tools/serve-wasm.py', 'tools/wasm-tests/terraform-sea-height-observation.test.mjs',
+ 'tools/serve-wasm.py', 'tools/wasm_assets.py', 'tools/wasm-tests/terraform-sea-height-observation.test.mjs',
  'tools/wasm-tests/terraform-height-observation.test.mjs')
 DRIVER = FILES[0]
 SEED = '1651011033:1377505029:3019448108:3247278135'

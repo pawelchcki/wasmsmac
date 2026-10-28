@@ -63,6 +63,68 @@ export function seaHeightOverrideManifest(original,executed){
 
 
 class SeaPreparationTests(unittest.TestCase):
+    def test_imported_asset_helper_is_pinned_and_rejects_dirty_or_prepared_changes(self):
+        helper = 'tools/wasm_assets.py'
+        self.assertIn(helper, prep.FILES)
+        for phase in ('before-prepare', 'after-prepare'):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as folder:
+                config, expected = public_source(folder)
+                path = Path(config['source_root']) / helper
+                if phase == 'before-prepare':
+                    path.write_text('# changed imported asset selection\n')
+                    with self.assertRaisesRegex(AssertionError, 'Relevant source differs from clean HEAD'):
+                        prep.prepare(config, expected)
+                    self.assertFalse(Path(config['output']).exists())
+                else:
+                    record = prep.prepare(config, expected)
+                    self.assertEqual(record['pins']['source']['files'][helper], prep.sha(path))
+                    path.write_text('# replaced after preparation\n')
+                    preflight = Path(config['output']) / 'preflight.json'
+                    with self.assertRaisesRegex(AssertionError, 'Relevant source differs from clean HEAD'):
+                        runner.load_preflight(preflight, prep.sha(preflight))
+                    self.assertFalse((preflight.parent / 'execution-claim.json').exists())
+
+    def test_actual_spawn_error_after_preflight_writes_strict_failed_completion(self):
+        with tempfile.TemporaryDirectory() as folder:
+            config, expected = public_source(folder)
+            # A private executable shim performs only the public input derivation.
+            # Remove it AFTER genuine preflight checks, immediately before Popen.
+            shim = Path(folder) / 'owned-node'
+            shim.write_text('#!/bin/sh\nexec ' + config['node'] + ' "$@"\n')
+            shim.chmod(0o700)
+            config['node'] = str(shim)
+            record = prep.prepare(config, expected)
+            out = Path(config['output']); path = out / 'preflight.json'
+            clean_environment = prep.clean_environment
+            def remove_executable_after_preflight():
+                shim.unlink()
+                return clean_environment()
+            with patch.object(prep, 'clean_environment', side_effect=remove_executable_after_preflight):
+                result, code = runner.execute(path, prep.sha(path))
+            self.assertEqual(code, 1)
+            self.assertEqual(result['command_argv'], record['argv'])
+            self.assertIn('No such file or directory', result['spawn_error'])
+            self.assertIsNone(result['actual_os_process_exit_code'])
+            self.assertIsNone(result['actual_os_node_exit_code'])
+            self.assertFalse(result['actual_wait_returned'])
+            self.assertIsNone(result['native_app_exit'])
+            self.assertEqual(result['status'], 'failed-or-unsupported')
+            # No process started: this path has no invented ownership/session
+            # observation and must never report an OS wait or successful exit.
+            self.assertNotIn('pid', result)
+            self.assertNotIn('known_owned_identities_absent', result)
+            self.assertIsNone(result['owned_group_absent'])
+            self.assertNotIn('observed_owned_session_absent', result)
+            self.assertTrue(result['subreaper_restored'])
+            self.assertEqual(result['complete_browser_cases'], 0)
+            self.assertFalse(result['postpins_match'])
+            self.assertTrue(result['postpins_error'])
+            self.assertEqual(json.loads((out / 'portable-external-completion.json').read_bytes()), result)
+            self.assertTrue((out / 'execution-claim.json').exists())
+            self.assertFalse((out / 'external-start.json').exists())
+            self.assertFalse((out / 'report.json').exists())
+            self.assertEqual((out / 'driver.log').read_bytes(), b'')
+
     def test_browser_payload_changes_reject_before_execution_claim(self):
         for variant in ('resource', 'library', 'added', 'removed'):
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as folder:
