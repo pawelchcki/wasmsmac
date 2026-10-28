@@ -281,6 +281,50 @@ class RetainedSeaBootstrapTests(BootstrapMutations, unittest.TestCase):
     def setUpClass(cls):
         directory = Path(os.environ['TERRAFORM_SEA_HEIGHT_CAPTURE']); cls.original = sea.parse_records((directory / 'application.log').read_bytes()), json.loads((directory / 'report.json').read_bytes())
 
+class PublicSeaOptimizationGuardTests(unittest.TestCase):
+    def sources(self):
+        return [('terraform_sea_height_browser_audit.py', 'Sea auditor'),
+                ('terraform_sea_height_prepare.py', 'Sea preflight'),
+                ('terraform_sea_height_run.py', 'Sea outer runner')]
+
+    def call(self, path, args, optimize=None):
+        import os, subprocess, sys
+        env = os.environ.copy(); env.pop('PYTHONOPTIMIZE', None)
+        if optimize is not None: env['PYTHONOPTIMIZE'] = optimize
+        return subprocess.run([sys.executable, *args, str(path), '--help'], capture_output=True, text=True, env=env)
+
+    def test_normal_direct_clis_keep_help_without_launching_anything(self):
+        for name, _ in self.sources():
+            result = self.call(ROOT / 'state_trace' / name, [])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('usage:', result.stdout)
+
+    def test_O_and_OO_direct_file_guards_run_before_parser_or_credit(self):
+        for name, label in self.sources():
+            for mode in ('-O', '-OO'):
+                result = self.call(ROOT / 'state_trace' / name, [mode])
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(label + ' refuses optimized Python', result.stderr)
+                self.assertNotIn('usage:', result.stdout)
+
+    def test_optimized_environment_direct_clis_fail_closed(self):
+        for name, label in self.sources():
+            result = self.call(ROOT / 'state_trace' / name, [], optimize='2')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(label + ' refuses optimized Python', result.stderr)
+
+    def test_optimized_imports_fail_at_their_own_module_entry(self):
+        import os, subprocess, sys
+        env = os.environ.copy(); env.pop('PYTHONOPTIMIZE', None)
+        for name, label in self.sources():
+            path = ROOT / 'state_trace' / name
+            code = 'import runpy; runpy.run_path(' + repr(str(path)) + ', run_name="guard_import_probe")'
+            for mode in ('-O', '-OO'):
+                result = subprocess.run([sys.executable, mode, '-c', code], capture_output=True, text=True, env=env)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(label + ' refuses optimized Python', result.stderr)
+
+
 class PublicSeaPortableEnvelopeTests(unittest.TestCase):
     """Real prepare/Node OS wait + SYNTHETIC report; never a game or case pass."""
     @classmethod

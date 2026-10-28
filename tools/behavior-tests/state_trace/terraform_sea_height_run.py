@@ -3,6 +3,9 @@
 This process can witness Popen/wait, not its own caller's tool session/chunk.
 No automatic retry, complete-browser credit or fabricated historical schema.
 """
+if not __debug__:
+    raise RuntimeError('Sea outer runner refuses optimized Python: assertion checking is required')
+
 import argparse
 import ctypes
 import json

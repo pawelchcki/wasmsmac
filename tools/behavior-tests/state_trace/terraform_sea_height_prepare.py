@@ -1,4 +1,7 @@
 """Prepare NEW Sea capture inputs; never starts WASM, browser, server or test."""
+if not __debug__:
+    raise RuntimeError('Sea preflight refuses optimized Python: assertion checking is required')
+
 import argparse
 import hashlib
 import json

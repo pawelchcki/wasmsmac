@@ -1,4 +1,7 @@
 """Read-only, typed audit of the bounded installed-source Sea Raise capture."""
+if not __debug__:
+    raise RuntimeError('Sea auditor refuses optimized Python: assertion checking is required')
+
 import argparse
 import base64
 import shutil
