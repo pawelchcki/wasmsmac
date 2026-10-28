@@ -35,12 +35,18 @@ def dependency_contents(root):
         package=Path(root)/name
         assert package.is_dir() and not package.is_symlink(), 'Actual package directory required'
         files={}
-        for path in sorted(package.rglob('*')):
-            assert not path.is_symlink(), 'Symlinked package content is unsupported'
-            if path.is_file():files[str(path.relative_to(package))]=sha(path)
-            else:assert path.is_dir(), 'Unsupported package content type'
+        directories=[package]
+        while directories:
+            # Unlike rglob, iterdir propagates nested scan failures: an omitted
+            # directory must never become a successful partial content binding.
+            for path in sorted(directories.pop().iterdir()):
+                assert not path.is_symlink(), 'Symlinked package content is unsupported'
+                if path.is_file():files[str(path.relative_to(package))]=sha(path)
+                else:
+                    assert path.is_dir(), 'Unsupported package content type'
+                    directories.append(path)
         assert 'package.json' in files and files, 'Missing package content'
-        result[name]=files
+        result[name]={relative:files[relative] for relative in sorted(files)}
     return result
 
 

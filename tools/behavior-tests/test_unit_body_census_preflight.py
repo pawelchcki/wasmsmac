@@ -2,6 +2,7 @@
 from pathlib import Path
 import ast
 import hashlib
+import os
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -102,6 +103,32 @@ class CensusPreparationTests(unittest.TestCase):
             root = Path(directory); packages(root); (root / 'playwright-core/package.json').unlink()
             with self.assertRaisesRegex(AssertionError, 'Missing package content'):
                 preparation.dependency_binding(root)
+
+    def test_nested_scan_errors_reject_preparation_and_execution_bindings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); packages(root)
+            pre = dict(dependency_symlink=str(root), **preparation.dependency_binding(root))
+            actual_scandir = os.scandir
+            for name in ('playwright', 'playwright-core'):
+                blocked = root / name / 'lib'
+                # Known-path code stays readable even when directory listing
+                # fails. Inject the scan error deterministically (also as root).
+                self.assertEqual((blocked / 'driver.js').read_bytes(), b'original executable bytes')
+                for error in (PermissionError('nested listing denied'), OSError('nested scan failed')):
+                    scanned = []
+                    def strict_scan(path):
+                        scanned.append(Path(path))
+                        if Path(path) == blocked: raise error
+                        return actual_scandir(path)
+                    for check in (lambda: preparation.dependency_binding(root),
+                                  lambda: executor.unchanged_dependencies(pre)):
+                        with self.subTest(package=name, error=type(error).__name__), \
+                                patch.object(os, 'scandir', strict_scan):
+                            with self.assertRaises(type(error)) as caught:
+                                check()
+                            self.assertIs(caught.exception, error)
+                            self.assertIn(blocked, scanned)
+            executor.unchanged_dependencies(pre)
 
     def test_declared_executor_count_matches_pinned_module_inventory(self):
         path = Path(__file__).with_name('test_unit_body_census_runner.py')
