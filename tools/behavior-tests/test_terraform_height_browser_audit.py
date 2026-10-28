@@ -527,6 +527,39 @@ class ProtocolAuditTests(AuditMutations, unittest.TestCase):
     def setUpClass(cls):
         cls.original = protocol_fixture()
 
+    def test_unreported_native_completion_cannot_leave_final_snapshot_stale(self):
+        for name in ('move_unit', 'advance_turn', 'unknown_action'):
+            for line in (15, 54, 56, 64, 71):
+                with self.subTest(name=name, line=line):
+                    records, report = protocol_fixture()
+                    records.extend([('TH_EXIT_REQUEST', None, 70), ('TH_RECEIPT', {
+                        'name': name, 'event_id': 'opaque-extra', 'caller': 0, 'success': True,
+                        'data': {'unit_id': 8}}, line)])
+                    with self.assertRaisesRegex(AssertionError, 'Unexpected native completion'):
+                        audit.audit_records(records, report)
+
+    def test_startup_receipts_are_preserved_before_observed_flow(self):
+        records, report = protocol_fixture()
+        records.extend([('TH_RECEIPT', {'name': 'spawn_unit', 'event_id': 'opaque-startup',
+            'caller': 0, 'success': True, 'data': {'type': 'Formers'}}, 1), ('TH_EXIT_REQUEST', None, 70)])
+        result = audit.audit_records(records, report)
+        self.assertEqual(result['native_receipts'], {'total': 2, 'startup_before_first_checkpoint': 1,
+                                                   'observed_completions': 1, 'unexpected_completions': 0})
+
+    def test_all_receipt_envelopes_and_final_completion_order_are_checked(self):
+        for key, value in (('caller', True), ('success', 1), ('success', False),
+                           ('data', []), ('event_id', '0_68'), ('name', '')):
+            with self.subTest(key=key, value=value):
+                records, report = protocol_fixture()
+                startup = {'name': 'spawn_unit', 'event_id': 'opaque-startup', 'caller': 0,
+                           'success': True, 'data': {'type': 'Formers'}}
+                startup[key] = value
+                records.append(('TH_RECEIPT', startup, 1))
+                with self.assertRaises(AssertionError): audit.audit_records(records, report)
+        records, report = protocol_fixture()
+        records.append(('TH_EXIT_REQUEST', None, 59))
+        with self.assertRaises(AssertionError): audit.audit_records(records, report)
+
 
 @unittest.skipUnless(os.environ.get('TERRAFORM_HEIGHT_CAPTURE'), 'Set TERRAFORM_HEIGHT_CAPTURE for retained actual six-packet mutation replay')
 class ActualCaptureAuditTests(AuditMutations, unittest.TestCase):

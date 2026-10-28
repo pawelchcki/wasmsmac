@@ -418,11 +418,27 @@ def audit_records(records, report):
         assert row['ui']['dialog']['fee'] == quote['fee'] and row['ui']['dialog']['reserves'] == quote['credits']
     patches, region = expected_paid_world(base, after, quote, actor_id, payer)
     assert patches[f"{quote['x']},{quote['y']}"]['canonical']['elevation'] == quote['destination_elevation']
-    receipts = [(value, line) for kind, value, line in records if kind == 'TH_RECEIPT' and value['name'] == 'unit_terraform']
+    all_receipts = [(value, line) for kind, value, line in records if kind == 'TH_RECEIPT']
+    event_ids = set()
+    for value, _ in all_receipts:
+        assert type(value) is dict and set(value) == {'name', 'event_id', 'caller', 'success', 'data'}, 'Different native receipt schema'
+        assert type(value['name']) is str and value['name']
+        assert type(value['event_id']) is str and value['event_id'] and value['event_id'] not in event_ids, 'Duplicate/invalid native receipt identity'
+        assert type(value['caller']) is int and value['success'] is True and type(value['data']) is dict, 'Invalid/rejected native completion'
+        event_ids.add(value['event_id'])
+    # configure_game installs the observer before startup, so legitimate setup
+    # receipts precede the first checkpoint. During/after the observed flow the
+    # only native event completion is the confirmed payment; do not ignore an
+    # extra completion merely because its name differs from unit_terraform.
+    receipts = [(value, line) for value, line in all_receipts if value['name'] == 'unit_terraform']
     assert len(receipts) == 1
     receipt, receipt_line = receipts[0]
+    assert [(value, line) for value, line in all_receipts if line >= native[0][1]] == receipts, 'Unexpected native completion after the initial checkpoint'
     assert equal(receipt, report['height_receipt']), 'Reported receipt is not the actual raw receipt'
     assert native[4][1] < receipt_line < native[5][1], 'Payment ACK is outside draft/complete sequence'
+    for kind, _, line in records:
+        if kind == 'TH_EXIT_REQUEST':
+            assert native[5][1] < line, 'Final native completion checkpoint must precede exit'
     assert type(receipt['event_id']) is str and receipt['event_id']
     assert receipt['success'] is True and type(receipt['caller']) is int and receipt['caller'] == quote['owner']
     assert equal(receipt['data'], {'unit_id': quote['unit_id'], 'action': 'raise', 'confirmed_height': True}), 'Native scalar receipt types differ'
@@ -462,6 +478,8 @@ def audit_records(records, report):
     return {'status': 'partial-readonly-native-fields-audit', 'native_cases_added': 0, 'browser_cases_audited': 0, 'native_capture_field_cases_audited': 1,
             'typed_pure_checkpoints': 5, 'complete_worlds': 0, 'observed_worlds': len(packets),
             'entity_detail_identity': validate_detail_mirrors(base), 'per_world': validate_coverage(packets[0]['world']),
+            'native_receipts': {'total': len(all_receipts), 'startup_before_first_checkpoint': len(all_receipts) - 1,
+                                'observed_completions': 1, 'unexpected_completions': 0},
             'parsed_native_world_changed_fields': len(changes), 'allowed_diff_categories': categories,
             'native_float_unit_fields_checked': len(f32), 'unit_float_bits': f32,
             'actor_movement_bits': [row['ui']['movement_bits'] for row in packets],
