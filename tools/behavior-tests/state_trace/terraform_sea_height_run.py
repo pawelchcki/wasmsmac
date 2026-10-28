@@ -179,7 +179,8 @@ def wait_owned(process, ownership, timeout):
 
 def run_owned(argv, cwd, env, output, timeout, cleanup_seconds=5):
     """Owned ancestry/adoption only; no shell, unrelated wait or pattern kill."""
-    assert sys.platform.startswith('linux') and Path('/proc/self/stat').exists(), 'Unsupported process ownership platform'
+    if not sys.platform.startswith('linux') or not Path('/proc/self/stat').exists():
+        raise OwnershipPrelaunchUnavailable('Unsupported process ownership platform before launch')
     assert type(argv) is list and argv and all(type(value) is str for value in argv)
     assert timeout > 0 and cleanup_seconds > 0
     output = Path(output)

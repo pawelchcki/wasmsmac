@@ -65,12 +65,19 @@ export function seaHeightOverrideManifest(original,executed){
 class SeaPreparationTests(unittest.TestCase):
     def test_prelaunch_ownership_errors_consume_claim_and_record_no_execution(self):
         from unittest.mock import Mock
-        for phase in ('missing-children', 'concurrent-tasks', 'get-subreaper-denied', 'set-subreaper-denied'):
+        for phase in ('unsupported-platform', 'missing-proc-stat', 'missing-children', 'concurrent-tasks',
+                      'get-subreaper-denied', 'set-subreaper-denied'):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as folder:
                 config, expected = public_source(folder)
                 record = prep.prepare(config, expected)
                 path = Path(config['output']) / 'preflight.json'
-                if phase == 'missing-children':
+                if phase == 'unsupported-platform':
+                    boundary = patch.object(runner.sys, 'platform', 'unsupported-process-model')
+                elif phase == 'missing-proc-stat':
+                    actual_exists = Path.exists
+                    boundary = patch.object(Path, 'exists', lambda value:
+                        False if value == Path('/proc/self/stat') else actual_exists(value))
+                elif phase == 'missing-children':
                     boundary = patch.object(runner, 'direct_children', return_value=None)
                 elif phase == 'concurrent-tasks':
                     boundary = patch.object(runner, 'task_count', return_value=2)
