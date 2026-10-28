@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined( DEBUG ) || defined( FASTDEBUG )
+namespace gse::tests::mocks { struct UnitBodyCensusFixture; }
+#endif
+
 #include <unordered_set>
 #include <unordered_map>
 
@@ -237,6 +241,9 @@ CLASS( Game, common::Module )
 	void ClearWidgetRelation( const ui::widget_type_t type, ui::dom::Widget* const widget );
 
 private:
+#if defined( DEBUG ) || defined( FASTDEBUG )
+	friend struct ::gse::tests::mocks::UnitBodyCensusFixture;
+#endif
 
 	faction::FactionManager* m_fm = nullptr;
 	tile::TileManager* m_tm = nullptr;
