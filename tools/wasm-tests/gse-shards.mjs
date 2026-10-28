@@ -89,7 +89,8 @@ export function nativeCensusEvidence(observed,expectedResources) {
   assert.equal(footers.length,1,'Exactly one full native success footer required');
   assert.equal(resources.length,1,'Exactly one mounted native resource record required');
   const start=starts[0],marker=markers[0],footer=footers[0];
-  assert.ok(resources[0]<start,'Native resource verification must precede the Census test');
+  const first=lines.findIndex(line=>/^ {2}\S.*\.\.\.$/.test(line));
+  assert.ok(resources[0]<first,'Native resource verification must precede the first registered native test');
   const resourceRecord=JSON.parse(lines[resources[0]].slice('GSE_NATIVE_RESOURCES|'.length));
   assert.deepEqual(resourceRecord,{version:1,resources:expectedResources},'Mounted native resource differs from source snapshot');
   assert.ok(lines.slice(footer+1).every(line=>line===''),'Native footer must be terminal');

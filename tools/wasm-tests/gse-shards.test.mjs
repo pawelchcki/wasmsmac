@@ -286,3 +286,14 @@ test('producer and aggregate require exactly the current verified mounted resour
   const reports=fixture();reports[0].native_census.resources[0].sha256='0'.repeat(64);
   assert.throws(()=>combine(reports,source,2));
 });
+
+test('native resource identity must precede the first registered native test',()=>{
+  const original=nativeOutput(),line=resourceLine(),header='  test if tests work...\n';
+  assert.deepEqual(nativeCensusEvidence(original).resources,nativeResources(source));
+  // Keep every marker/count/exit/footer fact, but move the valid resource record
+  // after the first real header and before Census. The old parser accepted it.
+  const moved={...original,stdout:original.stdout.replace(line+'\n','').replace(header,header+line+'\n')};
+  assert.throws(()=>nativeCensusEvidence(moved),/first registered native test/);
+  const reports=fixture();reports[0].native_result=moved;
+  assert.throws(()=>combine(reports,source,2),/first registered native test/);
+});
