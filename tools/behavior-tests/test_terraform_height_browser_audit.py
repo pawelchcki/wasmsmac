@@ -535,8 +535,8 @@ class ActualCaptureAuditTests(AuditMutations, unittest.TestCase):
         cls.directory = Path(os.environ['TERRAFORM_HEIGHT_CAPTURE'])
         cls.original = (audit.parse_records((cls.directory / 'application.log').read_bytes()), json.loads((cls.directory / 'report.json').read_bytes()))
 
-    def sync_report(self):
-        super().sync_report()
+    def sync_report(self, sync_ui=True):
+        super().sync_report(sync_ui)
         self.report['height_receipt'] = copy.deepcopy(next(value for kind, value, _ in self.records if kind == 'TH_RECEIPT' and value['name'] == 'unit_terraform'))
 
     def test_exact_retained_artifact_audit(self):
