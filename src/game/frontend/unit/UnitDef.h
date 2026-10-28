@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined( DEBUG ) || defined( FASTDEBUG )
+namespace gse::tests::mocks { struct UnitBodyCensusFixture; }
+#endif
+
 #include <string>
 #include <unordered_map>
 
@@ -58,6 +62,9 @@ public:
 	const std::string GetStatsString() const;
 
 private:
+#if defined( DEBUG ) || defined( FASTDEBUG )
+	friend struct ::gse::tests::mocks::UnitBodyCensusFixture;
+#endif
 
 	sprite::InstancedSpriteManager* const m_ism;
 

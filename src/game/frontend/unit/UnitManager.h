@@ -1,5 +1,9 @@
 #pragma once
 
+#if defined( DEBUG ) || defined( FASTDEBUG )
+namespace gse::tests::mocks { struct UnitBodyCensusFixture; }
+#endif
+
 #include <unordered_map>
 #include <vector>
 
@@ -96,6 +100,9 @@ CLASS( UnitManager, common::Class )
 	const types::Vec3 GetCloserCoords( const types::Vec3& coords, const types::Vec3& ref_coords ) const;
 
 private:
+#if defined( DEBUG ) || defined( FASTDEBUG )
+	friend struct ::gse::tests::mocks::UnitBodyCensusFixture;
+#endif
 
 	Game* m_game;
 	sprite::InstancedSpriteManager* m_ism;

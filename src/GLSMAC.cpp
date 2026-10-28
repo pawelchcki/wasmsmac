@@ -13,6 +13,7 @@
 
 #include "util/FS.h"
 #include "engine/Engine.h"
+#include "graphics/Graphics.h"
 #include "config/Config.h"
 #include "resource/ResourceManager.h"
 #include "scheduler/Scheduler.h"
@@ -171,6 +172,10 @@ GLSMAC::GLSMAC()
 
 	// there can only be one GLSMAC
 	ASSERT( !s_glsmac, "GLSMAC already defined" );
+	// UI construction requires nonempty layout bounds. Reject this invalid
+	// environment before publishing the singleton or registering a GC root.
+	ASSERT( g_engine->GetGraphics()->GetViewportWidth() > 0 && g_engine->GetGraphics()->GetViewportHeight() > 0,
+		"GLSMAC UI requires a nonzero viewport" );
 	s_glsmac = this;
 
 	Log( "Creating global state" );
@@ -363,7 +368,7 @@ WRAPIMPL_BEGIN( GLSMAC )
 		},
 		{
 			"game",
-			game->Wrap( GSE_CALL ),
+			game ? game->Wrap( GSE_CALL ) : VALUE( gse::value::Undefined ),
 		},
 		{
 			"connect",
@@ -456,8 +461,8 @@ WRAPIMPL_BEGIN( GLSMAC )
 			"get_unit_body_census", NATIVE_CALL( this ) {
 				// This stable owner check must precede every frontend pointer read.
 				if ( !m_gc_space || !m_gc_space->IsOwnerThread() ) { return VALUE( gse::value::String,, BodyUnavailable( "wrong-owner-thread" ) ); }
+				N_EXPECT_ARGS( 1 ); N_GETVALUE_UNWRAP( requested, 0, game::backend::Game );
 				try {
-					N_EXPECT_ARGS( 1 ); N_GETVALUE_UNWRAP( requested, 0, game::backend::Game );
 					if ( !requested ) { return VALUE( gse::value::String,, BodyUnavailable( "native-game-unavailable" ) ); }
 					if ( !m_game || !m_game->CanObserveUnitBodies() ) { return VALUE( gse::value::String,, BodyUnavailable( "frontend-unavailable" ) ); }
 					if ( m_game->GetBackend() != requested ) { return VALUE( gse::value::String,, BodyUnavailable( "different-current-game" ) ); }
@@ -631,7 +636,7 @@ void GLSMAC::WithGSE( const std::function<void( GSE_CALLABLE )>& f ) {
 void GLSMAC::GetReachableObjects( std::unordered_set< gc::Object* >& reachable_objects ) {
 	gse::GCWrappable::GetReachableObjects( reachable_objects );
 
-	g_engine->GetGame()->GetReachableObjects( reachable_objects );
+	if ( auto* game = g_engine->GetGame() ) { game->GetReachableObjects( reachable_objects ); }
 
 	if ( m_state ) {
 		GC_DEBUG_BEGIN( "state" );

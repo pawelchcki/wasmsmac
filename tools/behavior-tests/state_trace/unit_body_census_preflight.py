@@ -8,6 +8,7 @@ SOURCE='23e54d08b7dbb00f6b42d325c180a8c868b30ee2'
 DEFAULT='a69dd4e0a9620f90bd12c8eb8636ca22e24ed47c'
 RUNTIME_HASHES={'GLSMAC.js':'32446906441924bb1b1ad7a505682757c590ef8ebdcacd186a0e3fd259d8bea1',
                 'GLSMAC.wasm':'cdc6d8f29400451fdca33a60909a24ad62b3c04b5bacbb2123006ca619177a22'}
+EXECUTOR_PURE_CHECKS=7
 
 SHARED_HASHES={
     'browser-log-cursor.mjs':'959cd36fec3d798f889a9de6d8889d23808195a2a2cfc37830497c061cc1eed3',
@@ -21,6 +22,40 @@ def sha(path):
     with path.open('rb') as stream:
         for block in iter(lambda:stream.read(1024*1024),b''):h.update(block)
     return h.hexdigest()
+
+
+def dependency_contents(root):
+    """Future profiles pin both executable packages; never follow symlinks.
+
+    The historical capture pinned only package manifests and the browser.
+    This regular-file map does not retroactively bind that capture's code.
+    """
+    result={}
+    for name in ('playwright','playwright-core'):
+        package=Path(root)/name
+        assert package.is_dir() and not package.is_symlink(), 'Actual package directory required'
+        files={}
+        directories=[package]
+        while directories:
+            # Unlike rglob, iterdir propagates nested scan failures: an omitted
+            # directory must never become a successful partial content binding.
+            for path in sorted(directories.pop().iterdir()):
+                assert not path.is_symlink(), 'Symlinked package content is unsupported'
+                if path.is_file():files[str(path.relative_to(package))]=sha(path)
+                else:
+                    assert path.is_dir(), 'Unsupported package content type'
+                    directories.append(path)
+        assert 'package.json' in files and files, 'Missing package content'
+        result[name]={relative:files[relative] for relative in sorted(files)}
+    return result
+
+
+def dependency_binding(root):
+    contents=dependency_contents(root)
+    return {'dependency_contents_sha256':contents,
+            'dependency_package_sha256':{name:files['package.json'] for name,files in contents.items()},
+            'dependency_content_scope':'Future unexecuted profile: every regular file in playwright and playwright-core; symlinks rejected. Historical capture pinned only manifests/browser, not package contents.'}
+
 
 def add_arguments(parser):
     for name in ('source-root','web','runtime-provenance','assets','artifacts','dependencies','browser','fontconfig','playwright-browsers-path'):
@@ -78,12 +113,13 @@ def prepare(args,driver):
          'runtime':RUNTIME_HASHES,'runtime_provenance':str(prov),'runtime_provenance_sha256':sha(prov),
          'web_shell':str(WEB),'web_files_sha256':{str(path.relative_to(WEB)):sha(path) for path in sorted(WEB.rglob('*')) if path.is_file()},
          'assets':str(ASSETS),'asset_manifest_id':manifest['id'],'asset_manifest_sha256':hashlib.sha256(manifest_bytes(manifest)).hexdigest(),
-         'dependency_symlink':str(DEPS),'dependency_package_sha256':{name:sha(DEPS/name/'package.json') for name in ('playwright','playwright-core')},
+         'dependency_symlink':str(DEPS),**dependency_binding(DEPS),
          'node':str(node),'node_sha256':sha(node),'node_version':subprocess.check_output([str(node),'--version'],text=True).strip(),
          'browser':str(browser),'browser_sha256':sha(browser),'fontconfig':str(args.fontconfig.resolve()),'fontconfig_sha256':sha(args.fontconfig.resolve()),'playwright_browsers_path':str(args.playwright_browsers_path.resolve()),
          'fixture_sha256':fixture,'driver':str(DRIVER),'driver_sha256':sha(DRIVER),
          'preflight_builder':str(Path(__file__).resolve()),'preflight_builder_sha256':sha(Path(__file__)),
-         'executor_pure_tests':str(ROOT/'tools/behavior-tests/test_unit_body_census_runner.py'),'executor_pure_tests_sha256':sha(ROOT/'tools/behavior-tests/test_unit_body_census_runner.py'),'executor_pure_checks':6,
+         'executor_pure_tests':str(ROOT/'tools/behavior-tests/test_unit_body_census_runner.py'),'executor_pure_tests_sha256':sha(ROOT/'tools/behavior-tests/test_unit_body_census_runner.py'),'executor_pure_checks':EXECUTOR_PURE_CHECKS,
+         'executor_pure_checks_scope':'Declared methods in the pinned executor test module; inventory only, not evidence those checks executed during prepare',
          'source_review':'Portable successor source; NEVER game-executed. Separate final-source review and exclusive run authorization required',
          'node_test_budget_seconds':180,'native_observation_seconds':120,'outer_timeout_seconds':190,'cleanup_seconds':8,
          'command':[str(node),'--test','--test-concurrency=1','tools/wasm-tests/unit-body-census-browser.test.mjs'],
