@@ -1,5 +1,7 @@
 """Read-only, typed audit of the bounded installed-source Sea Raise capture."""
 import argparse
+import base64
+import shutil
 import copy
 import hashlib
 import importlib.util
@@ -293,8 +295,94 @@ def validate_bootstrap(records, report):
             'production_receipts': 1, 'growth_receipts': 7, 'scope': 'scalar receipts plus all-seven source/current-turn state; no fabricated per-base ACK echo'}
 
 
-def validate_provenance(directory, report, source_root):
+def portable_preparer():
+    path = Path(__file__).with_name('terraform_sea_height_prepare.py')
+    module_spec = importlib.util.spec_from_file_location('sea_portable_prepare_contract', path)
+    module = importlib.util.module_from_spec(module_spec); module_spec.loader.exec_module(module)
+    return module
+
+
+def validate_portable_provenance(directory, report, source_root, preflight, portable_node=None):
+    """Explicit portable ABI, independent of the strict historical v3 branch."""
+    prep = portable_preparer(); prep.validate_record(preflight)
+    assert report['candidate_executed'] is True
+    config = preflight['config']; source_root = Path(source_root).resolve(strict=True)
+    assert Path(config['source_root']).resolve(strict=True) == source_root
+    assert Path(config['output']).resolve() == directory.resolve()
+    for value in config.values():
+        assert type(value) is str and Path(value).is_absolute() and str(Path(value).resolve()) == value, 'Noncanonical portable input path'
+    actual = prep.pins(config)
+    assert height.equal(actual, preflight['pins']), 'Prepared inputs/source changed'
+    expected = preflight['expected']
+    for field in ('head', 'native_tree', 'default_tree'): assert actual['source'][field] == expected[field]
+    for name, field in [('GLSMAC.js', 'js'), ('GLSMAC.wasm', 'wasm')]:
+        assert actual['runtime'][name] == actual['web'][name] == expected[field]
+    provenance = json.loads((Path(config['runtime']) / 'provenance.json').read_bytes())
+    assert provenance['src_tree'] == expected['native_tree']
+    assert all(provenance['runtime'][name] == actual['runtime'][name] for name in ('GLSMAC.js', 'GLSMAC.wasm'))
+    tool_names = {'terraform_sea_height_prepare.py', 'terraform_sea_height_run.py'}
+    assert len(preflight['tool_sources']) == 2
+    assert {Path(name).name for name in preflight['tool_sources']} == tool_names
+    for name, value in preflight['tool_sources'].items():
+        assert Path(name).is_absolute() and '..' not in Path(name).parts
+        assert value == digest(Path(__file__).with_name(Path(name).name)), 'Different portable tool version'
+    prepared = {'declared-map.MP', 'executed-rules.txt', 'fixture-main.gls.js', 'fixture-world.gls.js'}
+    assert set(preflight['prepared_files']) == prepared
+    for name in prepared: assert digest(directory / name) == preflight['prepared_files'][name]
+    # Never execute a binary selected only by untrusted JSON metadata. The
+    # operator selects a local trusted Node, whose bytes must match preparation.
+    node = Path(portable_node or shutil.which('node')).resolve(strict=True)
+    assert digest(node) == actual['tools']['node']
+    assert subprocess.check_output([str(node), '--version'], text=True, env=prep.clean_environment()).strip() == preflight['node_version']
+    derived = json.loads(subprocess.check_output([str(node), '--input-type=module', '-e', prep.NODE_INPUTS,
+        str(source_root), config['assets']], text=True, encoding='utf8', env=prep.clean_environment()))
+    map_bytes = base64.b64decode(derived.pop('map'), validate=True)
+    rules = base64.b64decode(derived.pop('executed_rules'), validate=True)
+    derived.update(map_sha256=hashlib.sha256(map_bytes).hexdigest(), executed_rules_sha256=hashlib.sha256(rules).hexdigest())
+    assert height.equal(derived, preflight['inputs']), 'Prepared input summary differs from source-derived bytes'
+    declared = derived['declared']
+    for field, value in {'version': 2, 'width': 16, 'height': 16, 'players': 7, 'actor': {'x': 8, 'y': 8},
+                         'port': {'x': 10, 'y': 8}, 'action': 'raise'}.items():
+        assert height.equal(declared[field], value), 'Different bounded Sea input profile'
+    assert map_bytes == (directory / 'declared-map.MP').read_bytes()
+    assert rules == (directory / 'executed-rules.txt').read_bytes()
+    assert actual['assets']['alphax.txt'] == expected['rules']
+    assert derived['executed_rules_sha256'] == expected['executed_rules']
+    files = actual['source']['files']
+    mapping = {'driver_sha256': 'terraform-sea-height-browser.test.mjs', 'height_observation_sha256': 'terraform-height-observation.mjs',
+               'sea_observation_sha256': 'terraform-sea-height-observation.mjs', 'sea_input_sha256': 'terraform-sea-height-inputs.mjs',
+               'observer_sha256': 'fixtures/terraform-sea-height-main.gls.js', 'world_input_sha256': 'fixtures/terraform-sea-height-world.gls.js'}
+    for field, name in mapping.items(): assert report[field] == files['tools/wasm-tests/' + name]
+    for name, field in [('fixture-main.gls.js', 'observer_sha256'), ('fixture-world.gls.js', 'world_input_sha256')]:
+        assert digest(directory / name) == report[field]
+    assert report['host_head'] == actual['source']['head'] and report['native_source_tree'] == actual['source']['native_tree']
+    assert report['default_tree'] == actual['source']['default_tree']
+    assert report['runtime_js_sha256'] == actual['runtime']['GLSMAC.js'] and report['runtime_wasm_sha256'] == actual['runtime']['GLSMAC.wasm']
+    assert report['seed_requested'] == preflight['seed_requested']
+    assert type(report['sea_menu_contract_version']) is int and report['sea_menu_contract_version'] == 3
+    assert report['map_sha256'] == derived['map_sha256']
+    assert height.equal(report['declared_input'], dict(derived['declared'], bases=7, units=8, normal_source_funding=True))
+    override = report['source_override']
+    assert type(override['reads']) is int and override['reads'] == 1
+    assert override['original_sha256'] == actual['assets']['alphax.txt'] and override['rate_one_sha256'] == derived['executed_rules_sha256']
+    assert type(override['bytes']) is int and override['bytes'] == len(rules)
+    assert height.equal(override['rows'], derived['override_table'])
+    shared = ['browser-log-cursor.mjs', 'browser-native-log-hook.mjs', 'runtime-fetch-barrier.mjs', 'terraform-browser-geometry.mjs', 'terraform-browser-pointer.mjs']
+    assert report['shared_helpers_sha256'] == {name: files['tools/wasm-tests/' + name] for name in shared}
+    assert report['web_sha256'] == {name: actual['web'][name] for name in ('index.html', 'bootstrap.js', 'asset-store.js')}
+    helpers = {name: (source_root / ('GLSMAC_data/tests/' + name + '.gls.js')).read_bytes().decode('utf8')
+               for name in ('_state_trace_observer', '_terrain_trace_observer', '_terraform_cooperation_observer')}
+    defaults = {'GLSMAC_data/default/' + name: (source_root / 'GLSMAC_data/default' / name).read_bytes().decode('utf8')
+                for name in sorted(actual['source']['default_files']) if name.endswith('.gls.js')}
+    for field, value in [('observer_helpers_sha256', helpers), ('production_default_sha256', defaults)]:
+        assert report[field] == hashlib.sha256(json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode('utf8')).hexdigest()
+    return preflight
+
+
+def validate_provenance(directory, report, source_root, portable_node=None):
     preflight = json.loads((directory / 'preflight.json').read_bytes())
+    if preflight['kind'] == 'terraform-sea-portable-preflight.v1':
+        return validate_portable_provenance(directory, report, source_root, preflight, portable_node)
     assert preflight['kind'] == 'terraform-sea-height-preflight.v3' and preflight['candidate_executed'] is False
     assert preflight['head'] == report['host_head'] == HEAD
     assert preflight['native_tree'] == report['native_source_tree'] == NATIVE
@@ -325,7 +413,61 @@ def validate_provenance(directory, report, source_root):
     return preflight
 
 
+def validate_portable_outer(directory, report, raw, preflight):
+    completion = json.loads((directory / 'portable-external-completion.json').read_bytes())
+    start = json.loads((directory / 'external-start.json').read_bytes())
+    claim = json.loads((directory / 'execution-claim.json').read_bytes())
+    assert completion['kind'] == 'terraform-sea-portable-external-completion.v1'
+    assert start['kind'] == 'terraform-sea-owned-process-completion.v1'
+    assert completion['status'] == 'process-and-reported-native-exit-zero-not-complete-browser-credit'
+    assert height.equal(claim, {'preflight_sha256': digest(directory / 'preflight.json'), 'argv': preflight['argv'], 'candidate_execution_requested': True})
+    for field in ('actual_os_process_exit_code', 'actual_os_node_exit_code', 'native_app_exit', 'complete_browser_cases'):
+        assert type(completion[field]) is int and completion[field] == 0
+    for field in ('actual_wait_returned', 'owned_group_absent', 'subreaper_restored', 'postpins_match'): assert completion[field] is True
+    for field in ('forced_cleanup', 'outer_timed_out'): assert completion[field] is False
+    for field in ('spawn_error', 'postpins_error', 'lifecycle_error', 'report_read_error'): assert completion.get(field) is None
+    assert completion['remaining_owned_identities'] == []
+    assert completion['reported_status'] == report['status'] == 'passed'
+    assert height.equal(completion['reported_native_exit'], report['native_exit'])
+    assert height.equal(report['native_exit'], {'body_state': 'exited', 'status_text': 'GLSMAC exited (0).', 'raw_code': 0})
+    assert height.equal(completion['report_input_bindings'], {'match': True, 'mismatched_fields': []})
+    assert completion['source_head'] == preflight['pins']['source']['head']
+    assert completion['preflight_sha256'] == digest(directory / 'preflight.json')
+    assert completion['report_sha256'] == digest(directory / 'report.json')
+    assert completion['application.log_sha256'] == hashlib.sha256(raw).hexdigest()
+    assert completion['application-log-chunks.jsonl_sha256'] == digest(directory / 'application-log-chunks.jsonl')
+    assert completion['runner_sha256'] == digest(Path(__file__).with_name('terraform_sea_height_run.py'))
+    for packet in (start, completion):
+        assert packet['command_argv'] == preflight['argv'] and packet['cwd'] == preflight['config']['source_root']
+        assert type(packet['timeout_seconds']) is int and packet['timeout_seconds'] == preflight['outer_timeout_seconds']
+        assert all(type(packet[field]) is int and packet[field] > 0 for field in ('pid', 'process_group', 'session_id'))
+        assert packet['pid'] == packet['process_group'] == packet['session_id']
+        assert height.finite_number(packet['started_wall_time']) and packet['started_wall_time'] > 0
+        ids = packet['initial_owned_identities']
+        assert ids and len({row['pid'] for row in ids}) == len(ids)
+        assert all(type(row['pid']) is int and type(row['start_ticks']) is int and row['pid'] > 0 and row['start_ticks'] > 0 for row in ids)
+        assert packet['pid'] in {row['pid'] for row in ids}
+    for field in ('pid', 'process_group', 'session_id', 'started_wall_time', 'initial_owned_identities'):
+        assert height.equal(start[field], completion[field])
+    assert start['actual_os_process_exit_code'] is None and start['actual_wait_returned'] is False and start['spawn_error'] is None
+    assert height.finite_number(completion['elapsed_seconds']) and completion['elapsed_seconds'] >= 0
+    receipt = completion['external_tool_receipt']
+    assert set(receipt) == {'supported', 'reason'} and receipt['supported'] is False
+    assert type(receipt['reason']) is str and receipt['reason']
+    # The same finalization checks apply; a process-summary flag is not a
+    # substitute for the actual retained raw/chunk/callback/exit journal.
+    chunks = [json.loads(line) for line in (directory / 'application-log-chunks.jsonl').read_text().splitlines() if line]
+    height.validate_finalization(report, raw, chunks, parse_records(raw))
+    return {'supported': False, 'bounded_process_witness_supported': True, 'external_node_os_exit': 0, 'native_app_exit': 0,
+            'reason': 'Portable OS wait is bound, but no independently genuine external tool-level completion witness is supplied',
+            'portable_completion_sha256': digest(directory / 'portable-external-completion.json')}
+
+
 def validate_outer(directory, report, raw):
+    preflight = json.loads((directory / 'preflight.json').read_bytes())
+    if preflight['kind'] == 'terraform-sea-portable-preflight.v1':
+        return validate_portable_outer(directory, report, raw, preflight)
+    assert preflight['kind'] == 'terraform-sea-height-preflight.v3'
     # One genuine retained external receipt, not a fallback for new captures.
     assert digest(directory / 'raw-outcome.json') == '95ef0e7d413ffd9c11787d9034c56fd8e2eace4323c4e552d9c92a55a2c13da3'
     outcome = json.loads((directory / 'raw-outcome.json').read_bytes())
@@ -346,14 +488,26 @@ def validate_outer(directory, report, raw):
             'raw_outcome_sha256': digest(directory / 'raw-outcome.json'), 'owned_reaped_without_forced_cleanup': True}
 
 
-def audit_artifacts(directory, source_root):
+def classify_evidence(finalization, external_exit):
+    if external_exit['supported']:
+        return height.classify_browser_credit(finalization, external_exit)
+    assert external_exit['bounded_process_witness_supported'] is True
+    unsupported = [external_exit['reason']]
+    if not finalization['exact_callback_message_identity']['supported']:
+        unsupported.append(finalization['exact_callback_message_identity']['scope'])
+    return {'status': 'partial-readonly-bounded-state-receipt-audit', 'browser_cases_audited': 0,
+            'complete_browser_cases_audited': 0, 'bounded_state_receipt_cases_audited': 1,
+            'unsupported_capabilities': unsupported}
+
+
+def audit_artifacts(directory, source_root, portable_node=None):
     directory, source_root = Path(directory), Path(source_root)
     raw = (directory / 'application.log').read_bytes()
     records = parse_records(raw)
     report = json.loads((directory / 'report.json').read_bytes())
     result = audit_records(records, report)
     result['bootstrap'] = validate_bootstrap(records, report)
-    validate_provenance(directory, report, source_root)
+    provenance = validate_provenance(directory, report, source_root, portable_node)
     chunks = [json.loads(line) for line in (directory / 'application-log-chunks.jsonl').read_text().splitlines() if line]
     result['finalization'] = height.validate_finalization(report, raw, chunks, records)
     result['pointer_route'] = height.validate_pointer_route(records, report)
@@ -361,9 +515,10 @@ def audit_artifacts(directory, source_root):
     result['external_exit'] = validate_outer(directory, report, raw)
     result['frames_decoded'] = height.validate_frames(directory, report)
     clip = [result['frames_decoded']['decoded_frames'][0][key] for key in ('width', 'height')]
-    result.update(height.classify_browser_credit(result['finalization'], result['external_exit']))
+    result.update(classify_evidence(result['finalization'], result['external_exit']))
     result.update(raw_bytes=len(raw), raw_sha256=hashlib.sha256(raw).hexdigest(),
                   report_sha256=digest(directory / 'report.json'), preflight_sha256=digest(directory / 'preflight.json'),
+                  provenance_schema=provenance['kind'],
                   auditor_sha256=digest(__file__), shared_height_auditor_sha256=digest(SHARED), frames=5,
                   native_viewport={'width': 1024, 'height': 768}, png_clip_dimensions=list(clip),
                   unsupported=['original height/price/wording parity', 'numeric render-mesh vertices/resident Z/facing/tool frames/audio/animation',
@@ -374,11 +529,12 @@ def audit_artifacts(directory, source_root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--artifacts', required=True, type=Path)
-    parser.add_argument('--source-root', required=True, type=Path, help='Unmodified actual7d frozen source checkout')
+    parser.add_argument('--source-root', required=True, type=Path, help='Exact clean capture source checkout; historical7d or explicit portable prepared source')
+    parser.add_argument('--portable-node', type=Path, help='Operator-trusted local Node for read-only source input rederivation; defaults to PATH node, must match prepared binary')
     parser.add_argument('--output', required=True, type=Path, help='NEW derived result; original report/raw are never rewritten')
     args = parser.parse_args()
     assert not args.output.exists(), 'Keep each previous derived result immutable'
-    result = audit_artifacts(args.artifacts, args.source_root)
+    result = audit_artifacts(args.artifacts, args.source_root, args.portable_node)
     args.output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({k: v for k, v in result.items() if k != 'unit_float_bits'}, indent=2))
 

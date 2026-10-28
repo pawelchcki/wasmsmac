@@ -281,5 +281,147 @@ class RetainedSeaBootstrapTests(BootstrapMutations, unittest.TestCase):
     def setUpClass(cls):
         directory = Path(os.environ['TERRAFORM_SEA_HEIGHT_CAPTURE']); cls.original = sea.parse_records((directory / 'application.log').read_bytes()), json.loads((directory / 'report.json').read_bytes())
 
+class PublicSeaPortableEnvelopeTests(unittest.TestCase):
+    """Real prepare/Node OS wait + SYNTHETIC report; never a game or case pass."""
+    @classmethod
+    def setUpClass(cls):
+        import hashlib
+        import tempfile
+        import subprocess
+        from pathlib import Path
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.tools = load('public_sea_runner_models', ROOT / 'test_terraform_sea_height_runner.py')
+        config, expected = cls.tools.public_source(cls.folder.name)
+        source = Path(config['source_root']); cls.source = source
+        report, raw, chunks, _ = land_models.finalization_fixture()
+        # The actual child below is a tiny Node metadata writer, not the
+        # candidate browser fixture. All native/UI facts remain public models.
+        payload = {'report': report, 'raw': raw.decode('utf8'), 'chunks': chunks}
+        program = r"""
+import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const seed='1651011033:1377505029:3019448108:3247278135';
+const test={timeout:180000};
+const data=PAYLOAD;
+const out=process.env.TERRAFORM_SEA_HEIGHT_ARTIFACTS_DIR,p=JSON.parse(readFileSync(out+'/preflight.json'));
+const r=data.report,f=p.pins.source.files,hash=x=>createHash('sha256').update(x).digest('hex');
+Object.assign(r,{candidate_executed:true,sea_menu_contract_version:3,host_head:p.pins.source.head,
+ native_source_tree:p.pins.source.native_tree,default_tree:p.pins.source.default_tree,
+ runtime_js_sha256:p.pins.runtime['GLSMAC.js'],runtime_wasm_sha256:p.pins.runtime['GLSMAC.wasm'],seed_requested:seed,
+ map_sha256:p.inputs.map_sha256,declared_input:{...p.inputs.declared,bases:7,units:8,normal_source_funding:true}});
+for(const[field,name]of Object.entries({driver_sha256:'terraform-sea-height-browser.test.mjs',height_observation_sha256:'terraform-height-observation.mjs',
+ sea_observation_sha256:'terraform-sea-height-observation.mjs',sea_input_sha256:'terraform-sea-height-inputs.mjs',
+ observer_sha256:'fixtures/terraform-sea-height-main.gls.js',world_input_sha256:'fixtures/terraform-sea-height-world.gls.js'}))r[field]=f['tools/wasm-tests/'+name];
+r.shared_helpers_sha256=Object.fromEntries(['browser-log-cursor.mjs','browser-native-log-hook.mjs','runtime-fetch-barrier.mjs','terraform-browser-geometry.mjs','terraform-browser-pointer.mjs'].map(n=>[n,f['tools/wasm-tests/'+n]]));
+r.web_sha256=Object.fromEntries(['index.html','bootstrap.js','asset-store.js'].map(n=>[n,p.pins.web[n]]));
+const helperNames=['_state_trace_observer','_terrain_trace_observer','_terraform_cooperation_observer'];
+r.observer_helpers_sha256=hash(JSON.stringify(Object.fromEntries(helperNames.map(n=>[n,readFileSync(p.config.source_root+'/GLSMAC_data/tests/'+n+'.gls.js','utf8')]))));
+r.production_default_sha256=hash(JSON.stringify(Object.fromEntries(Object.keys(p.pins.source.default_files).filter(n=>n.endsWith('.gls.js')).sort().map(n=>['GLSMAC_data/default/'+n,readFileSync(p.config.source_root+'/GLSMAC_data/default/'+n,'utf8')]))));
+r.source_override={reads:1,original_sha256:p.expected.rules,rate_one_sha256:p.inputs.executed_rules_sha256,
+ bytes:readFileSync(out+'/executed-rules.txt').length,rows:p.inputs.override_table};
+writeFileSync(out+'/report.json',JSON.stringify(r));writeFileSync(out+'/application.log',data.raw);
+writeFileSync(out+'/application-log-chunks.jsonl',data.chunks.map(x=>JSON.stringify(x)).join('\n')+'\n');
+""".replace('PAYLOAD', json.dumps(payload))
+        (source / cls.tools.prep.DRIVER).write_text(program)
+        controls = source / 'tools/wasm-tests/terraform-sea-height-inputs.mjs'
+        controls.write_text(controls.read_text().replace('version:2,players:7,', "version:2,width:16,height:16,players:7,actor:{x:8,y:8},port:{x:10,y:8},action:'raise',"))
+        for name in ('index.html', 'asset-store.js'): (Path(config['web']) / name).write_text('public web bytes only')
+        subprocess.run(['git', 'add', cls.tools.prep.DRIVER, 'tools/wasm-tests/terraform-sea-height-inputs.mjs'], cwd=source, check=True)
+        subprocess.run(['git', '-c', 'user.name=Public fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'synthetic portable protocol writer'], cwd=source, check=True)
+        expected['head'] = cls.tools.prep.git(source, 'rev-parse', 'HEAD')
+        cls.prepared = cls.tools.prep.prepare(config, expected)
+        cls.directory = Path(config['output'])
+        completion, code = cls.tools.runner.execute(cls.directory / 'preflight.json', cls.tools.prep.sha(cls.directory / 'preflight.json'))
+        assert code == 0 and completion['actual_os_node_exit_code'] == 0, (completion, (cls.directory / 'driver.log').read_text()[-2000:])
+        cls.original = {path.name: path.read_bytes() for path in cls.directory.iterdir() if path.is_file()}
+
+    @classmethod
+    def tearDownClass(cls): cls.folder.cleanup()
+
+    def setUp(self):
+        self.preflight = json.loads(self.original['preflight.json'])
+        self.report = json.loads(self.original['report.json'])
+        self.completion = json.loads(self.original['portable-external-completion.json'])
+
+    def tearDown(self):
+        for path in self.directory.iterdir():
+            if path.name not in self.original and path.is_file(): path.unlink()
+        for name, data in self.original.items(): (self.directory / name).write_bytes(data)
+
+    def save(self):
+        for name, value in [('preflight.json', self.preflight), ('report.json', self.report), ('portable-external-completion.json', self.completion)]:
+            (self.directory / name).write_bytes(self.tools.prep.encoded(value))
+        # This is public model data: rebind ordinary byte references so the
+        # semantic mutation, not an incidental whitespace hash, must reject.
+        self.completion['preflight_sha256'] = self.tools.prep.sha(self.directory / 'preflight.json')
+        self.completion['report_sha256'] = self.tools.prep.sha(self.directory / 'report.json')
+        (self.directory / 'portable-external-completion.json').write_bytes(self.tools.prep.encoded(self.completion))
+        claim = json.loads(self.original['execution-claim.json']); claim['preflight_sha256'] = self.completion['preflight_sha256']
+        (self.directory / 'execution-claim.json').write_bytes(self.tools.prep.encoded(claim))
+
+    def audit_envelope(self):
+        sea.validate_provenance(self.directory, self.report, self.source)
+        return sea.validate_outer(self.directory, self.report, self.original['application.log'])
+
+    def reject(self):
+        self.save()
+        with self.assertRaises((AssertionError, KeyError, TypeError, FileNotFoundError)):
+            self.audit_envelope()
+
+    def test_real_prepare_executor_and_auditor_abi_compose_without_full_credit(self):
+        result = self.audit_envelope()
+        self.assertTrue(result['bounded_process_witness_supported'])
+        self.assertEqual(result['external_node_os_exit'], 0)
+        self.assertFalse(result['supported'])  # No minted tool session/chunk.
+        self.assertTrue(self.completion['owned_group_absent'])
+        self.assertEqual(self.completion['complete_browser_cases'], 0)
+        finalization = sea.height.validate_finalization(self.report, self.original['application.log'],
+            [json.loads(line) for line in self.original['application-log-chunks.jsonl'].decode().splitlines()],
+            sea.parse_records(self.original['application.log']))
+        credit = sea.classify_evidence(finalization, result)
+        self.assertEqual(credit['complete_browser_cases_audited'], 0)
+        self.assertEqual(credit['bounded_state_receipt_cases_audited'], 1)
+        self.assertTrue(credit['status'].startswith('partial-'))
+
+    def test_candidate_flag_false_or_integer_never_means_true(self):
+        for value in (False, 1):
+            self.setUp(); self.report['candidate_executed'] = value; self.reject()
+
+    def test_app_zero_does_not_hide_os_failure_missing_wait_or_cleanup(self):
+        for field, value in [('actual_os_node_exit_code', 1), ('actual_os_process_exit_code', 1),
+                             ('actual_wait_returned', False), ('owned_group_absent', False),
+                             ('forced_cleanup', True), ('subreaper_restored', False), ('postpins_match', False)]:
+            self.setUp(); self.completion[field] = value; self.reject()
+        for field in ('actual_wait_returned', 'owned_group_absent'):
+            self.setUp(); self.completion.pop(field); self.reject()
+
+    def test_malformed_kinds_and_fictional_tool_receipt_reject(self):
+        self.preflight['kind'] = 'unknown'; self.reject()
+        self.setUp(); self.completion['kind'] = 'sea-height-v3-genuine-external-outcome'; self.reject()
+        self.setUp(); self.completion['external_tool_receipt'] = {'supported': True, 'session_id': 52401, 'chunk_id': '60a1a5'}; self.reject()
+        self.tearDown(); self.setUp()
+        (self.directory / 'portable-external-completion.json').unlink()
+        (self.directory / 'raw-outcome.json').write_text(json.dumps({'kind': 'sea-height-v3-genuine-external-outcome', 'session_id': 52401}))
+        with self.assertRaises(FileNotFoundError): self.audit_envelope()
+
+    def test_coherent_map_summary_tampering_cannot_replace_source_derivation(self):
+        import hashlib
+        changed = (self.directory / 'declared-map.MP').read_bytes() + b'not authored by source'
+        (self.directory / 'declared-map.MP').write_bytes(changed)
+        new = hashlib.sha256(changed).hexdigest()
+        self.preflight['prepared_files']['declared-map.MP'] = new
+        self.preflight['inputs']['map_sha256'] = self.report['map_sha256'] = new
+        self.reject()
+
+    def test_source_path_escape_and_unlisted_prepared_file_reject(self):
+        self.preflight['config']['source_root'] = str(self.source / '..' / self.source.name)
+        self.reject()
+        self.setUp(); self.preflight['prepared_files']['../outside'] = '0' * 64; self.reject()
+
+    def test_source_manifest_and_observed_override_flags_are_not_trusted_summaries(self):
+        self.preflight['pins']['source']['files']['../../outside'] = '0' * 64; self.reject()
+        for value in (0, True):
+            self.setUp(); self.report['source_override']['reads'] = value; self.reject()
+
 
 if __name__ == '__main__': unittest.main()
