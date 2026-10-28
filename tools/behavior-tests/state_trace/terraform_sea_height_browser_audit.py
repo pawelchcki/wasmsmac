@@ -34,6 +34,15 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def validation_identity():
+    """Bind the same validation dependency set emitted by the shared auditor."""
+    root = SHARED.resolve().parent.parent
+    paths = (Path(height.terrain_schema.__file__).resolve(), SHARED.resolve().parent / 'schema.py',
+             root / 'protocol.py', root / 'fast.py')
+    return {'auditor_sha256': digest(__file__), 'shared_height_auditor_sha256': digest(SHARED),
+            'source_validation_dependencies_sha256': {str(path.relative_to(root)): digest(path) for path in paths}}
+
+
 def parse_records(raw):
     kinds = ('TH_NATIVE', 'TH_RECEIPT', 'TH_INPUTS', 'TH_TRACE', 'TH_HEADERS', 'TH_ROWS',
              'TH_SEA_DECLARED', 'TH_SEA_ACCOUNTING', 'TH_SEA_PRETURN', 'TH_SEA_BIRTH', 'TH_SEA_SETUP')
@@ -526,10 +535,11 @@ def audit_artifacts(directory, source_root, portable_node=None):
     result['frames_decoded'] = height.validate_frames(directory, report)
     clip = [result['frames_decoded']['decoded_frames'][0][key] for key in ('width', 'height')]
     result.update(classify_evidence(result['finalization'], result['external_exit'], result['entity_detail_identity']))
+    result.update(validation_identity())
     result.update(raw_bytes=len(raw), raw_sha256=hashlib.sha256(raw).hexdigest(),
                   report_sha256=digest(directory / 'report.json'), preflight_sha256=digest(directory / 'preflight.json'),
                   provenance_schema=provenance['kind'],
-                  auditor_sha256=digest(__file__), shared_height_auditor_sha256=digest(SHARED), frames=5,
+                  frames=5,
                   native_viewport={'width': 1024, 'height': 768}, png_clip_dimensions=list(clip),
                   unsupported=['original height/price/wording parity', 'numeric render-mesh vertices/resident Z/facing/tool frames/audio/animation',
                                'fixed camera (only viewport fixed)', 'Sea water-to-land/coast/stranded worker/lower scenarios', 'actual movement (traversal quotes only)'])
@@ -545,7 +555,10 @@ def main():
     args = parser.parse_args()
     assert not args.output.exists(), 'Keep each previous derived result immutable'
     result = audit_artifacts(args.artifacts, args.source_root, args.portable_node)
-    args.output.write_text(json.dumps(result, indent=2) + '\n')
+    # The early exists check is only a fast rejection. Exclusive creation is
+    # the authority after replay, when another writer may already have won.
+    with args.output.open('x', encoding='utf8') as output:
+        output.write(json.dumps(result, indent=2) + '\n')
     print(json.dumps({k: v for k, v in result.items() if k != 'unit_float_bits'}, indent=2))
 
 

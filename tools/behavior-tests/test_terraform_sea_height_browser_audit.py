@@ -265,6 +265,58 @@ class PublicSeaParserTests(unittest.TestCase):
         self.assertEqual(sea.parse_records(b'noiseTH_EXIT_REQUEST\n'), [])
         self.assertEqual(sea.parse_records(b'    [/height-snapshot/GLSMAC_data/default/game/world/browser_height.gls.js:35:4] TH_SEA_ACCOUNTING|{}\n'), [('TH_SEA_ACCOUNTING', {}, 0)])
 
+    def test_cli_interleaving_does_not_replace_a_completed_result(self):
+        import contextlib, io, sys, tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / 'derived.json'
+            winner = '{"winner":"first audit 🧭"}\n'.encode()
+            def other_writer_wins(*args):
+                self.assertFalse(output.exists(), 'Interleaving occurs after the initial exists check')
+                output.write_bytes(winner)
+                return {'winner': 'later audit'}
+            argv = ['sea-audit', '--artifacts', folder, '--source-root', folder, '--output', str(output)]
+            with patch.object(sys, 'argv', argv), patch.object(sea, 'audit_artifacts', side_effect=other_writer_wins), contextlib.redirect_stdout(io.StringIO()):
+                with self.assertRaises(FileExistsError): sea.main()
+            self.assertEqual(output.read_bytes(), winner, 'The exclusive-create winner must remain byte-for-byte immutable')
+
+    def test_cli_creates_new_utf8_result_and_rejects_existing_output(self):
+        import contextlib, io, sys, tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder) / 'derived.json'
+            result = {'scope': 'public Unicode 🧭 model', 'complete_browser_cases_audited': 0}
+            argv = ['sea-audit', '--artifacts', folder, '--source-root', folder, '--output', str(output)]
+            with patch.object(sys, 'argv', argv), patch.object(sea, 'audit_artifacts', return_value=result) as read_audit, contextlib.redirect_stdout(io.StringIO()):
+                sea.main(); self.assertEqual(json.loads(output.read_text(encoding='utf8')), result)
+                before = output.read_bytes()
+                with self.assertRaises(AssertionError): sea.main()
+                self.assertEqual(read_audit.call_count, 1, 'Known existing output must fail before expensive raw replay')
+                self.assertEqual(output.read_bytes(), before)
+
+    def test_validation_dependency_changes_are_bound_without_changing_auditor_hashes(self):
+        import hashlib, tempfile
+        from unittest.mock import patch
+        keys = ('state_trace/terrain_observation.py', 'state_trace/schema.py', 'protocol.py', 'fast.py')
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in (*keys, 'state_trace/terraform_sea_height_browser_audit.py', 'state_trace/terraform_height_browser_audit.py'):
+                path = root / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_text('declared ' + name)
+            shared = root / 'state_trace/terraform_height_browser_audit.py'
+            with patch.object(sea, '__file__', str(root / 'state_trace/terraform_sea_height_browser_audit.py')), patch.object(sea, 'SHARED', shared), patch.object(sea.height.terrain_schema, '__file__', str(root / keys[0])):
+                before = sea.validation_identity()
+                expected = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in keys}
+                self.assertEqual(before['source_validation_dependencies_sha256'], expected)
+                for name in keys:
+                    path = root / name; original = path.read_bytes(); path.write_bytes(original + b' changed acceptance')
+                    after = sea.validation_identity()
+                    self.assertEqual(after['auditor_sha256'], before['auditor_sha256'])
+                    self.assertEqual(after['shared_height_auditor_sha256'], before['shared_height_auditor_sha256'])
+                    changed = {key for key in keys if after['source_validation_dependencies_sha256'][key] != before['source_validation_dependencies_sha256'][key]}
+                    self.assertEqual(changed, {name}, 'Every imported validator must affect the emitted implementation binding')
+                    self.assertEqual(after['source_validation_dependencies_sha256'][name], hashlib.sha256(path.read_bytes()).hexdigest())
+                    path.write_bytes(original)
+
     def test_exit_marker_is_retained_for_the_last_query_interval(self):
         self.assertEqual(sea.parse_records(b'prefix\nTH_EXIT_REQUEST\n'), [('TH_EXIT_REQUEST', None, 1)])
 
