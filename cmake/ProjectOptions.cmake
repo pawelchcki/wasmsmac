@@ -1,3 +1,4 @@
+OPTION( GLSMAC_NATIVE_ARCH "Tune native Release builds for the build machine" ON )
 OPTION( GLSMAC_WARNINGS_AS_ERRORS "Treat first-party compiler warnings as errors" OFF )
 SET( GLSMAC_SANITIZER "none" CACHE STRING "Native instrumentation: none, address-undefined, thread" )
 SET_PROPERTY( CACHE GLSMAC_SANITIZER PROPERTY STRINGS none address-undefined thread )
@@ -26,6 +27,7 @@ FUNCTION( GLSMAC_CONFIGURE_TARGET TARGET )
 			$<$<BOOL:${GLSMAC_WARNINGS_AS_ERRORS}>:-Werror>
 			$<$<OR:$<CONFIG:Debug>,$<CONFIG:FastDebug>>:-g;-O0>
 			$<$<OR:$<CONFIG:Portable32>,$<CONFIG:Portable64>>:-O3>
+			$<$<AND:$<CONFIG:Release>,$<BOOL:${GLSMAC_NATIVE_ARCH}>,$<NOT:$<BOOL:${EMSCRIPTEN}>>>:-march=native>
 		)
 	ENDIF ()
 	IF ( NOT WIN32 )

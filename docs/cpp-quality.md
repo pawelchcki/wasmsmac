@@ -2,7 +2,8 @@
 
 The first-party application, native embedder and standalone WASM probes target
 C++23. CMake requires the standard, disables GNU language extensions and exports
-`compile_commands.json`. Vendor projects retain their own language settings.
+`compile_commands.json`. Vendor projects retain their own language settings. Native Release keeps the
+existing host tuning; use `GLSMAC_NATIVE_ARCH=OFF` for a general CPU target.
 No new C++23 library APIs are required by this initial migration: the native,
 Windows and Emscripten libraries have different feature coverage.
 
@@ -25,7 +26,8 @@ python3 tools/cpp-quality/run-native.py
 against `tools/cpp-quality/toolchain.json`. The shell includes Clang, tidy,
 format, lld, the matching LLVM symbolizer, CMake, Ninja, Python/PyYAML and the native development libraries.
 `nix develop --command COMMAND ...` runs the identical environment in CI.
-The initial supported Nix systems are x86_64-linux and aarch64-linux; only systems
+CMake caches its compiler: use a fresh build directory when switching compiler
+environments. The initial supported Nix systems are x86_64-linux and aarch64-linux; only systems
 with recorded execution evidence should be treated as tested. Nix is optional
 for normal builds, but delivery checks require the pinned tool versions.
 
