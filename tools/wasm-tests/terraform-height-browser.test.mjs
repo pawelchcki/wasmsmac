@@ -13,7 +13,7 @@ import {attachRuntimeLogBarrier} from './runtime-fetch-barrier.mjs';
 import {nativeToCanvas} from './terraform-browser-geometry.mjs';
 import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs';
 import {declaredTerrain,rateOneSource,fixtureSources} from './terraform-browser-inputs.mjs';
-import {loadHeightPreflight,writeHeightPreflight} from './terraform-height-preflight.mjs';
+import {loadHeightPreflight,claimHeightCapture} from './terraform-height-preflight.mjs';
 import {HeightPresentation,completedHeightKey,nativeHeightWorld,verifyHeightCapture,auditPaidLandHeight,heightFatal,verifyHeightFinalization} from './terraform-height-observation.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const scriptsRoot=process.env.WASM_SCRIPTS_ROOT||root;
@@ -54,8 +54,8 @@ test('real land Raise quote Cancel draft and paid completion preserve the seven-
     native_log_configuration:{installations:0,debug_autoscroll:'unsupported',hook_source_sha256:hash(installNativeLogHook.toString()),original_log_source_sha256:hash(originalLogSource)},
     native_snapshots:[],processed_pointers:[],processed_keys:[],captures:[],errors:[]};
   const prepared=loadHeightPreflight({scriptsRoot,build,assets,seed,driverPath:fileURLToPath(import.meta.url)});
-  report.preflight_sha256=writeHeightPreflight({artifacts,...prepared,report});
-  writeFileSync(`${artifacts}/fixture-main.gls.js`,main);writeFileSync(`${artifacts}/fixture-world.gls.js`,world);
+  report.runtime_build_binding=prepared.record.runtime_build_binding;
+  report.preflight_sha256=claimHeightCapture({artifacts,prepared,report});
   const server=spawn('python3',['tools/serve-wasm.py',build,'--port','0','--assets',assets],{cwd:root});
   const serverDone=new Promise(resolve=>server.once('exit',(code,signal)=>resolve({code,signal})));
   t.after(async()=>{
