@@ -418,11 +418,27 @@ def audit_records(records, report):
         assert row['ui']['dialog']['fee'] == quote['fee'] and row['ui']['dialog']['reserves'] == quote['credits']
     patches, region = expected_paid_world(base, after, quote, actor_id, payer)
     assert patches[f"{quote['x']},{quote['y']}"]['canonical']['elevation'] == quote['destination_elevation']
-    receipts = [(value, line) for kind, value, line in records if kind == 'TH_RECEIPT' and value['name'] == 'unit_terraform']
+    all_receipts = [(value, line) for kind, value, line in records if kind == 'TH_RECEIPT']
+    event_ids = set()
+    for value, _ in all_receipts:
+        assert type(value) is dict and set(value) == {'name', 'event_id', 'caller', 'success', 'data'}, 'Different native receipt schema'
+        assert type(value['name']) is str and value['name']
+        assert type(value['event_id']) is str and value['event_id'] and value['event_id'] not in event_ids, 'Duplicate/invalid native receipt identity'
+        assert type(value['caller']) is int and value['success'] is True and type(value['data']) is dict, 'Invalid/rejected native completion'
+        event_ids.add(value['event_id'])
+    # configure_game installs the observer before startup, so legitimate setup
+    # receipts precede the first checkpoint. During/after the observed flow the
+    # only native event completion is the confirmed payment; do not ignore an
+    # extra completion merely because its name differs from unit_terraform.
+    receipts = [(value, line) for value, line in all_receipts if value['name'] == 'unit_terraform']
     assert len(receipts) == 1
     receipt, receipt_line = receipts[0]
+    assert [(value, line) for value, line in all_receipts if line >= native[0][1]] == receipts, 'Unexpected native completion after the initial checkpoint'
     assert equal(receipt, report['height_receipt']), 'Reported receipt is not the actual raw receipt'
     assert native[4][1] < receipt_line < native[5][1], 'Payment ACK is outside draft/complete sequence'
+    for kind, _, line in records:
+        if kind == 'TH_EXIT_REQUEST':
+            assert native[5][1] < line, 'Final native completion checkpoint must precede exit'
     assert type(receipt['event_id']) is str and receipt['event_id']
     assert receipt['success'] is True and type(receipt['caller']) is int and receipt['caller'] == quote['owner']
     assert equal(receipt['data'], {'unit_id': quote['unit_id'], 'action': 'raise', 'confirmed_height': True}), 'Native scalar receipt types differ'
@@ -459,9 +475,12 @@ def audit_records(records, report):
         assert int.from_bytes(struct.pack('>f', ui['movement']), 'big') == ui['movement_bits']
         assert equal(ui['movement'], next(unit['movement'] for unit in row['world']['units'] if unit['raw_id'] == ui['actor']))
     assert packets[0]['ui']['movement_bits'] == 1065353216 and packets[-1]['ui']['movement_bits'] == 0
-    return {'status': 'partial-readonly-native-fields-audit', 'native_cases_added': 0, 'browser_cases_audited': 0, 'native_capture_field_cases_audited': 1,
+    return {'status': 'observations-only-readonly-native-fields-audit', 'native_cases_added': 0, 'browser_cases_audited': 0, 'native_capture_field_cases_audited': 0,
+            'compile_attribution_verified': False, 'public_retained_replay_available': False,
             'typed_pure_checkpoints': 5, 'complete_worlds': 0, 'observed_worlds': len(packets),
             'entity_detail_identity': validate_detail_mirrors(base), 'per_world': validate_coverage(packets[0]['world']),
+            'native_receipts': {'total': len(all_receipts), 'startup_before_first_checkpoint': len(all_receipts) - 1,
+                                'observed_completions': 1, 'unexpected_completions': 0},
             'parsed_native_world_changed_fields': len(changes), 'allowed_diff_categories': categories,
             'native_float_unit_fields_checked': len(f32), 'unit_float_bits': f32,
             'actor_movement_bits': [row['ui']['movement_bits'] for row in packets],
@@ -502,13 +521,14 @@ def validate_preflight(directory, preflight, preflight_bytes, report, native_inp
         assert preflight['phase'] == 'before-native-launch'
         assert report['preflight_sha256'] == digest
         binding = preflight['runtime_build_binding']
-        assert set(binding) == {'schema', 'provenance_sha256', 'source_head', 'native_tree', 'runtime', 'scope'}
+        assert set(binding) == {'schema', 'provenance_sha256', 'source_head', 'native_tree', 'runtime', 'scope', 'compile_attribution_verified'}
         assert binding['schema'] == 'native-source-runtime.v1'
         assert type(binding['provenance_sha256']) is str and re.fullmatch(r'[0-9a-f]{64}', binding['provenance_sha256'])
         assert type(binding['source_head']) is str and re.fullmatch(r'[0-9a-f]{40}', binding['source_head'])
         assert binding['native_tree'] == preflight['native_tree'] == report['native_source_tree']
         assert binding['runtime'] == {'GLSMAC.js': report['runtime_js_sha256'], 'GLSMAC.wasm': report['runtime_wasm_sha256']}
-        assert binding['scope'] == 'Native C++ tree/runtime pair; Default scripts separately captured'
+        assert binding['compile_attribution_verified'] is False
+        assert binding['scope'] == 'Declared native source/runtime consistency; compile attribution unverified; Default scripts separately captured'
         assert preflight['production_default_sha256'] == report['production_default_sha256']
         assert preflight['native_policy_observation'] == 'not available before launch; require actual TH_INPUTS and every retained native world in the auditor'
         source = preflight['input_sha256']
@@ -1026,16 +1046,21 @@ def classify_browser_credit(finalization, external, entity_identity=None):
     execution = external.get('supported') is True
     callbacks = finalization['exact_callback_message_identity']['supported'] is True
     entities = entity_identity is not None and entity_identity.get('supported') is True
-    complete = execution and callbacks and entities
-    unsupported = []
+    # Source/runtime hash consistency and private retained observations do not
+    # authenticate compilation or supply a publicly replayable passing case.
+    # Preserve independently recognized OS receipt facts in external_node_exit;
+    # they must not become source-execution or fidelity case credit here.
+    unsupported = ['Runtime metadata consistency is UNVERIFIED build attribution',
+                   'Retained raw replay unavailable in public CI; observations are not published passing-case credit']
     if not execution: unsupported.append('Independent OS execution witness unsupported; self-declared outcome metadata is not tool evidence')
     if not callbacks: unsupported.append('exact per-callback message identity; legacy offset-only metadata cannot earn complete-browser case credit')
     if not entities: unsupported.append('native entity detail raw identity echoes absent; complete entity/world observation unsupported')
-    return {'browser_cases_audited': 1 if complete else 0,
-            'complete_browser_cases_audited': 1 if complete else 0,
-            'execution_cases_audited': 1 if execution else 0,
-            'bounded_state_receipt_cases_audited': 1,
-            'status': 'passed-readonly-complete-browser-audit' if complete else 'partial-readonly-bounded-state-receipt-audit',
+    return {'native_cases_added': 0, 'native_capture_field_cases_audited': 0,
+            'browser_cases_audited': 0, 'complete_browser_cases_audited': 0,
+            'execution_cases_audited': 0, 'bounded_state_receipt_cases_audited': 0,
+            'bounded_journal_field_cases_audited': 0,
+            'compile_attribution_verified': False, 'public_retained_replay_available': False,
+            'status': 'observations-only-readonly-audit',
             'unsupported_capabilities': unsupported}
 
 
@@ -1057,9 +1082,6 @@ def audit_artifacts(directory, outer_outcome=None):
                 'preflight_sha256': hashlib.sha256(preflight_bytes).hexdigest(), 'host_head': report['host_head']}
     external = validate_external_exit(Path(outer_outcome) if outer_outcome else directory / 'raw-outcome.json', report['native_exit'], bindings)
     result.update(classify_browser_credit(finalization, external, result['entity_detail_identity']))
-    if not external['supported']:
-        result['native_capture_field_cases_audited'] = 0
-        result['bounded_journal_field_cases_audited'] = 1
     result.update(raw_sha256=hashlib.sha256(raw).hexdigest(), raw_bytes=len(raw), report_sha256=hashlib.sha256(report_bytes).hexdigest(),
                   preflight_sha256=hashlib.sha256(preflight_bytes).hexdigest(), source_audit_script_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   source_validation_dependencies_sha256={str(path.relative_to(Path(__file__).resolve().parent.parent)): hashlib.sha256(path.read_bytes()).hexdigest()

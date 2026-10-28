@@ -14,7 +14,7 @@ const hash=value=>createHash('sha256').update(value).digest('hex');
 const data=()=>{
  const originalRules=Buffer.from('#TERRAIN\n'+Array.from({length:20},(_,i)=>`Land ${i},None,Sea ${i},Disable,12,Build,Help,R`).join('\n')+'\n#NEXT\n');
  return{source:{head:'a'.repeat(40),native_tree:'b'.repeat(40),default_tree:'c'.repeat(40),files:{executed_node_driver:'d'.repeat(64),'tools/wasm-tests/terraform-height-observation.mjs':'e'.repeat(64)},production_default_sha256:'f'.repeat(64)},
-   runtimeJS:Buffer.from('not evaluated JS'),runtimeWasm:Buffer.from('not loaded WASM'),runtimeBuildBinding:{schema:'native-source-runtime.v1',provenance_sha256:'d'.repeat(64),source_head:'a'.repeat(40),native_tree:'b'.repeat(40),runtime:{'GLSMAC.js':hash(Buffer.from('not evaluated JS')),'GLSMAC.wasm':hash(Buffer.from('not loaded WASM'))},scope:'Native C++ tree/runtime pair; Default scripts separately captured'},originalRules,executedRules:rateOneSource(originalRules),map:declaredTerrain(),main:'source-main',world:'source-world',helpers:{sample:'source-helper'},seed:'declared seed'};
+   runtimeJS:Buffer.from('not evaluated JS'),runtimeWasm:Buffer.from('not loaded WASM'),runtimeBuildBinding:{schema:'native-source-runtime.v1',compile_attribution_verified:false,provenance_sha256:'d'.repeat(64),source_head:'a'.repeat(40),native_tree:'b'.repeat(40),runtime:{'GLSMAC.js':hash(Buffer.from('not evaluated JS')),'GLSMAC.wasm':hash(Buffer.from('not loaded WASM'))},scope:'Declared native source/runtime consistency; compile attribution unverified; Default scripts separately captured'},originalRules,executedRules:rateOneSource(originalRules),map:declaredTerrain(),main:'source-main',world:'source-world',helpers:{sample:'source-helper'},seed:'declared seed'};
 };
 
 test('preflight derives actual input hashes map dimensions and both-domain duration rows',()=>{
@@ -197,4 +197,16 @@ test('producer binds the imported asset helper next to the executed server',()=>
   assert.throws(()=>loadHeightPreflight({...f,driverPath}),/Executed asset helper differs/);
   assert.equal(existsSync(f.artifacts),false);
  }finally{rmSync(f.folder,{recursive:true,force:true});}
+});
+
+
+test('caller-authored source and runtime consistency never authenticates a compiler receipt',()=>{
+ const input=data(),manifest={source_head:input.source.head,source_tree:input.source.native_tree,
+  runtime:input.runtimeBuildBinding.runtime,compiler_verified:true,build_receipt:'caller authored'};
+ const binding=bindHeightRuntime({manifest,manifestBytes:Buffer.from(JSON.stringify(manifest)),
+  nativeTree:manifest.source_tree,compiledTree:manifest.source_tree,runtimeJS:input.runtimeJS,runtimeWasm:input.runtimeWasm});
+ assert.equal(binding.compile_attribution_verified,false);
+ assert.match(binding.scope,/compile attribution unverified/);
+ input.runtimeBuildBinding={...input.runtimeBuildBinding,compile_attribution_verified:true};
+ assert.throws(()=>buildHeightPreflight(input),/not an authenticated build receipt/);
 });

@@ -527,6 +527,53 @@ class ProtocolAuditTests(AuditMutations, unittest.TestCase):
     def setUpClass(cls):
         cls.original = protocol_fixture()
 
+    def test_checked_native_fields_remain_observations_without_case_credit(self):
+        result = audit.audit_records(self.records, self.report)
+        self.assertEqual(result['observed_worlds'], 6)
+        self.assertEqual(result['typed_pure_checkpoints'], 5)
+        self.assertGreater(result['parsed_native_world_changed_fields'], 0)
+        self.assertEqual(result['native_float_unit_fields_checked'], 96)
+        self.assertEqual(result['native_receipts']['observed_completions'], 1)
+        self.assertEqual(result['complete_worlds'], 0)
+        self.assertTrue(result['status'].startswith('observations-only-'))
+        self.assertFalse(result['compile_attribution_verified'])
+        self.assertFalse(result['public_retained_replay_available'])
+        for key in ('native_cases_added', 'browser_cases_audited', 'native_capture_field_cases_audited'):
+            self.assertEqual(result[key], 0)
+
+    def test_unreported_native_completion_cannot_leave_final_snapshot_stale(self):
+        for name in ('move_unit', 'advance_turn', 'unknown_action'):
+            for line in (15, 54, 56, 64, 71):
+                with self.subTest(name=name, line=line):
+                    records, report = protocol_fixture()
+                    records.extend([('TH_EXIT_REQUEST', None, 70), ('TH_RECEIPT', {
+                        'name': name, 'event_id': 'opaque-extra', 'caller': 0, 'success': True,
+                        'data': {'unit_id': 8}}, line)])
+                    with self.assertRaisesRegex(AssertionError, 'Unexpected native completion'):
+                        audit.audit_records(records, report)
+
+    def test_startup_receipts_are_preserved_before_observed_flow(self):
+        records, report = protocol_fixture()
+        records.extend([('TH_RECEIPT', {'name': 'spawn_unit', 'event_id': 'opaque-startup',
+            'caller': 0, 'success': True, 'data': {'type': 'Formers'}}, 1), ('TH_EXIT_REQUEST', None, 70)])
+        result = audit.audit_records(records, report)
+        self.assertEqual(result['native_receipts'], {'total': 2, 'startup_before_first_checkpoint': 1,
+                                                   'observed_completions': 1, 'unexpected_completions': 0})
+
+    def test_all_receipt_envelopes_and_final_completion_order_are_checked(self):
+        for key, value in (('caller', True), ('success', 1), ('success', False),
+                           ('data', []), ('event_id', '0_68'), ('name', '')):
+            with self.subTest(key=key, value=value):
+                records, report = protocol_fixture()
+                startup = {'name': 'spawn_unit', 'event_id': 'opaque-startup', 'caller': 0,
+                           'success': True, 'data': {'type': 'Formers'}}
+                startup[key] = value
+                records.append(('TH_RECEIPT', startup, 1))
+                with self.assertRaises(AssertionError): audit.audit_records(records, report)
+        records, report = protocol_fixture()
+        records.append(('TH_EXIT_REQUEST', None, 59))
+        with self.assertRaises(AssertionError): audit.audit_records(records, report)
+
 
 @unittest.skipUnless(os.environ.get('TERRAFORM_HEIGHT_CAPTURE'), 'Set TERRAFORM_HEIGHT_CAPTURE for retained actual six-packet mutation replay')
 class ActualCaptureAuditTests(AuditMutations, unittest.TestCase):
@@ -544,8 +591,11 @@ class ActualCaptureAuditTests(AuditMutations, unittest.TestCase):
         self.assertEqual(result['parsed_native_world_changed_fields'], 229)
         self.assertEqual(result['browser_cases_audited'], 0)
         self.assertEqual(result['complete_browser_cases_audited'], 0)
-        self.assertEqual(result['bounded_state_receipt_cases_audited'], 1)
-        self.assertEqual(result['status'], 'partial-readonly-bounded-state-receipt-audit')
+        self.assertEqual(result['bounded_state_receipt_cases_audited'], 0)
+        self.assertEqual(result['execution_cases_audited'], 0)
+        self.assertEqual(result['native_capture_field_cases_audited'], 0)
+        self.assertTrue(result['external_node_exit']['supported'])
+        self.assertEqual(result['status'], 'observations-only-readonly-audit')
         self.assertFalse(result['finalization']['exact_callback_message_identity']['supported'])
         self.assertEqual(result['raw_bytes'], 14465994)
         self.assertEqual(result['raw_sha256'], '7877baed15b88c2700f3042fe5c31f64c6ee66517dcef04541c1ced832bad473')
@@ -681,6 +731,26 @@ class FinalizationMutations:
 
 
 class ProtocolFinalizationTests(FinalizationMutations, unittest.TestCase):
+    def test_reported_capabilities_and_os_receipt_cannot_create_passing_case_credit(self):
+        for execution in (False, True):
+            for callbacks in (False, True):
+                for entities in (False, True):
+                    with self.subTest(execution=execution, callbacks=callbacks, entities=entities):
+                        external = {'supported': execution, 'receipt_verification': 'public-model-only'}
+                        original = copy.deepcopy(external)
+                        result = audit.classify_browser_credit(
+                            {'exact_callback_message_identity': {'supported': callbacks}},
+                            external, {'supported': entities})
+                        for key in ('native_cases_added', 'native_capture_field_cases_audited',
+                                    'browser_cases_audited', 'complete_browser_cases_audited',
+                                    'execution_cases_audited', 'bounded_state_receipt_cases_audited',
+                                    'bounded_journal_field_cases_audited'):
+                            self.assertEqual(result[key], 0, key)
+                        self.assertFalse(result['compile_attribution_verified'])
+                        self.assertFalse(result['public_retained_replay_available'])
+                        self.assertEqual(result['status'], 'observations-only-readonly-audit')
+                        self.assertEqual(external, original, 'Independent receipt observations must remain unchanged')
+
 
     def test_semantic_json_records_require_exact_source_framing(self):
         for kind, value in (('TH_INPUTS', {'policy': 'model'}), ('TH_NATIVE', {'world': 'model'}),
@@ -755,8 +825,8 @@ class ProtocolFinalizationTests(FinalizationMutations, unittest.TestCase):
         credit = audit.classify_browser_credit(result, {'supported': True})
         self.assertEqual(credit['complete_browser_cases_audited'], 0)
         self.assertEqual(credit['browser_cases_audited'], 0)
-        self.assertEqual(credit['bounded_state_receipt_cases_audited'], 1)
-        self.assertTrue(credit['status'].startswith('partial-'))
+        self.assertEqual(credit['bounded_state_receipt_cases_audited'], 0)
+        self.assertTrue(credit['status'].startswith('observations-only-'))
         calls = self.report['native_log_configuration']['callbacks']['calls']
         # Source-only legacy metadata can absorb one omitted entry. Preserve
         # the fact that even contiguous offsets cannot prove callback identity.
@@ -1161,7 +1231,7 @@ class PreflightSchemaTests(unittest.TestCase):
                      'input_sha256': {'main': sha(main), 'world': sha(world), 'map': sha(self.map), 'helpers': '2' * 64},
                      'production_default_sha256': '3' * 64, 'declared_map': {'width': 16, 'height': 16, 'tiles': 128, 'bytes': 8379},
                      'seed_requested': '1651011033:1377505029:3019448108:3247278135', 'browser_budget_ms': 180000,
-                     'runtime_build_binding': {'schema': 'native-source-runtime.v1', 'provenance_sha256': '6' * 64, 'source_head': '7' * 40, 'native_tree': 'b' * 40, 'runtime': {'GLSMAC.js': 'd' * 64, 'GLSMAC.wasm': 'e' * 64}, 'scope': 'Native C++ tree/runtime pair; Default scripts separately captured'},
+                     'runtime_build_binding': {'schema': 'native-source-runtime.v1', 'compile_attribution_verified': False, 'provenance_sha256': '6' * 64, 'source_head': '7' * 40, 'native_tree': 'b' * 40, 'runtime': {'GLSMAC.js': 'd' * 64, 'GLSMAC.wasm': 'e' * 64}, 'scope': 'Declared native source/runtime consistency; compile attribution unverified; Default scripts separately captured'},
                      'native_policy_observation': 'not available before launch; require actual TH_INPUTS and every retained native world in the auditor',
                      'override_table': [{'row': i, 'field': 'shared_turns', 'field_index': 4, 'old': 12, 'new': 1, 'applies_to': ['land', 'sea'], 'land_name': f'Land {i}', 'sea_name': f'Sea {i}', 'land_prerequisite': 'None', 'sea_prerequisite': 'None'} for i in range(20)]}
         self.report = {'host_head': self.pref['head'], 'native_source_tree': self.pref['native_tree'], 'default_tree': self.pref['default_tree'],
@@ -1209,12 +1279,14 @@ class PreflightSchemaTests(unittest.TestCase):
             with self.assertRaises((AssertionError, KeyError)): self.validate()
 
     def test_modern_runtime_source_binding_cannot_be_absent_or_mismatched(self):
-        for change in ('missing', 'wrong-tree', 'wrong-js', 'bad-source', 'wrong-schema'):
+        for change in ('missing', 'wrong-tree', 'wrong-js', 'bad-source', 'wrong-schema', 'false-compile-credit', 'missing-compile-scope'):
             self.setUp()
             if change == 'missing': self.pref.pop('runtime_build_binding')
             elif change == 'wrong-tree': self.pref['runtime_build_binding']['native_tree'] = 'f' * 40
             elif change == 'wrong-js': self.pref['runtime_build_binding']['runtime']['GLSMAC.js'] = '9' * 64
             elif change == 'bad-source': self.pref['runtime_build_binding']['source_head'] = 'not a Git object'
+            elif change == 'false-compile-credit': self.pref['runtime_build_binding']['compile_attribution_verified'] = True
+            elif change == 'missing-compile-scope': self.pref['runtime_build_binding'].pop('compile_attribution_verified')
             else: self.pref['runtime_build_binding']['schema'] = 'unknown'
             with self.assertRaises((AssertionError, KeyError)): self.validate()
 
