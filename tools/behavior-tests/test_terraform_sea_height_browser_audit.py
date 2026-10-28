@@ -371,6 +371,19 @@ class PublicSeaBootstrapTests(BootstrapMutations, unittest.TestCase):
             with self.subTest(accounting=key):
                 self.setUp(); self.row('TH_SEA_ACCOUNTING')[key] = value; self.reject()
 
+    def test_coherent_choice_replacement_cannot_become_its_own_source_oracle(self):
+        for choice in (123, 'FORMERS'):
+            with self.subTest(choice=choice):
+                self.setUp()
+                self.row('TH_SEA_SETUP')['declared']['recipe']['choice'] = choice
+                declaration = self.row('TH_SEA_DECLARED')
+                declaration['recipe']['choice'] = declaration['choice_id'] = choice
+                accounting = self.row('TH_SEA_ACCOUNTING')
+                accounting['source_recipe']['choice'] = accounting['choice_id'] = choice
+                accounting['actual_prefill']['choice_id'] = choice
+                next(base for base in self.row('TH_SEA_PRETURN')['bases'] if base['owner'] == 0)['production']['choice_id'] = choice
+                self.reject()
+
     def test_declaration_is_bound_to_the_before_input_and_native_home(self):
         self.row('TH_INPUTS')['actor'] = 9; self.reject()
         self.setUp()

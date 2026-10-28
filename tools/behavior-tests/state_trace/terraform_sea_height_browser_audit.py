@@ -284,6 +284,7 @@ def validate_bootstrap(records, report):
     rows = max(2, ((recipe['chassis_cost'] + 1) * recipe['weapon_cost'] + recipe['chassis_cost']) // 4)
     cost = rows * 8
     assert recipe['id'] == 'SeaFormers' and recipe['movement_type'] == 'water' and cost == 40
+    assert type(recipe['choice']) is str and recipe['choice'] == 'SEA_FORMERS', 'Different source Sea production choice'
     # The world fixture prints this native choice witness BEFORE restoring
     # production, then reads/prints actual_prefill synchronously afterwards.
     # Cost/stock are independently derived above, not taken from this witness.
