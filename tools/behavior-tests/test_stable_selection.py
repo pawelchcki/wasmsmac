@@ -36,13 +36,16 @@ class StableSelectionTests(unittest.TestCase):
         self.assertFalse(plan['candidate_executed'])
         self.assertFalse(plan['gate_satisfied'])
         self.assertTrue(plan['execution_required_before_merge'])
-        for kind, expected in [('regression', 180), ('ui', 60), ('economy', 2), ('helper', 22)]:
+        for kind, expected in [('regression', 183), ('ui', 60), ('economy', 2), ('helper', 22)]:
             hot, stable = set(plan['always_hot'][kind]), set(plan['required_stable'][kind])
             self.assertFalse(hot & stable)
             self.assertEqual(len(hot | stable), expected)
             self.assertEqual(hot | stable, set(self.current['ids'][kind]))
-        self.assertEqual(len(plan['always_hot']['regression']), 45)
+        self.assertEqual(len(plan['always_hot']['regression']), 48)
         self.assertEqual(len(plan['required_stable']['regression']), 135)
+        retained = {'unit-workshop', 'workshop-observation-native', 'unit-stack-health'}
+        self.assertTrue(retained <= set(plan['always_hot']['regression']))
+        self.assertFalse(retained & set(plan['required_stable']['regression']))
         self.assertEqual(len(plan['always_hot']['ui']), 11)
         self.assertEqual(len(plan['required_stable']['ui']), 49)
         self.assertEqual(set(plan['required_stable_captures']['terraform_actions']), set(self.current['action_ids']))
@@ -57,13 +60,31 @@ class StableSelectionTests(unittest.TestCase):
         plan = self.plan([dict(status='M', path='GLSMAC_data/default/game/terraforming.gls.js')])
         self.assert_complete(plan)
         old_hot = set(self.current['manifest']['kinds']['regression']['hot'])
-        self.assertEqual(len(old_hot), 76)
+        self.assertEqual(len(old_hot), 79)
         self.assertEqual(len(self.profile['moved_regression']), 31)
         self.assertEqual(set(plan['required_stable']['regression']) -
                          set(self.current['manifest']['kinds']['regression']['stable']),
                          set(self.profile['moved_regression']))
         self.assertNotIn('natural-first-city', plan['always_hot']['ui'])
         self.assertEqual(len(self.current['manifest']['kinds']['pending-ui']['hot']), 4)
+
+    def test_workshop_and_stack_health_remain_hot_for_their_actual_source_changes(self):
+        scripts = {'unit-workshop': 'GLSMAC_data/tests/unit_workshop.gls.js',
+                   'workshop-observation-native': 'GLSMAC_data/tests/workshop_observation_native.gls.js',
+                   'unit-stack-health': 'GLSMAC_data/tests/unit_stack_health_native.gls.js'}
+        for suite, script in scripts.items():
+            with self.subTest(suite=suite):
+                self.assertIn(suite, self.profile['hot_regression'])
+                self.assertNotIn(suite, self.profile['moved_regression'])
+                self.assert_complete(self.plan([dict(status='M', path=script)]))
+
+    def test_omitting_any_new_hot_suite_cannot_satisfy_the_coverage_union(self):
+        for suite in ('unit-workshop', 'workshop-observation-native', 'unit-stack-health'):
+            with self.subTest(suite=suite):
+                profile = deepcopy(self.profile)
+                profile['hot_regression'].remove(suite)
+                with self.assertRaisesRegex(ProtocolError, 'Changed Hot coverage union'):
+                    self.plan([], profile=profile)
 
     def test_every_area_example_keeps_full_required_coverage(self):
         examples = {

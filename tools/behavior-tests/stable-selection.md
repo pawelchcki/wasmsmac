@@ -4,8 +4,19 @@
 original, engine, browser or reference checks and cannot satisfy a CI gate.
 No existing workflow or lane membership consumes this plan yet.
 
-The v1 profile records the proposed partition, **45 Hot + 135 Stable = 180
-regression suites**, including 31 proposed moves from today's 76 Hot suites.
+The v1 profile records the proposed partition, **48 Hot + 135 Stable = 183
+regression suites**, including 31 proposed moves from the current 79 Hot suites.
+`unit-workshop`, `workshop-observation-native`, and `unit-stack-health` remain
+in the proposed Hot set. The actual lane manifest remains 79 Hot / 104 Stable;
+this profile does not move a suite or execute coverage.
+
+This private preparation uses the inventory available after reconciling Main
+`d5572d973c17a5638e5a4e3ddbf9ffba89a2818f`. Its inventory fingerprint and Git
+baseline are **provisional**: PR43 must merge last, after PR40 and PR44. Refresh
+the actual Main/base/head, complete inventory fingerprint and exact changed-path
+request after those merges, then obtain fresh applicable checks and review.
+This preliminary profile is not final-base verification or a satisfied gate.
+
 All 11 current Hot UI references, eight recorded startup native projections,
 complete seven-player terrain/traversal and identity observations, cooperative
 owner packets, Float/JSON transport, minimum-size native generation and Base

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventory_sha256": "fbf2579fbc170b972c9d9e23d6d9583a945c93a80e1ed62a4e554747e3a8aaaf",
+  "inventory_sha256": "0af7fd51108f32be37c89cf3d588a8f5e05caabf336b89067aef901e1bbd86b8",
   "hot_regression": [
     "aquifer-plan-reuse",
     "aquifer-routing",
@@ -43,9 +43,12 @@
     "unit-menu-context-orders",
     "unit-menu-rows",
     "unit-recycling-native",
+    "unit-stack-health",
     "unit-work-state",
+    "unit-workshop",
     "worker-order-cancellation",
     "worker-routes",
+    "workshop-observation-native",
     "world-single-player-setup"
   ],
   "moved_regression": [
