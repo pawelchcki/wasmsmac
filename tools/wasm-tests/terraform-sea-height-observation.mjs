@@ -3,6 +3,15 @@
 import assert from 'node:assert/strict';
 import {nativeHeightWorld} from './terraform-height-observation.mjs';
 
+// A successful launch is already owned even if page/cursor setup later fails.
+// Once the full log finalizer is installed, hand cleanup to it so its final
+// read still precedes browser close regardless of after-hook execution order.
+export function guardSeaBrowserCleanup(owner,browser){
+  let transferred=false;
+  owner.after(async()=>{if(!transferred&&browser.isConnected())await browser.close();});
+  return()=>{transferred=true;};
+}
+
 // A fixed source order can have identical land/sea text. Domain comes from
 // the actual selected native worker and quote, never from that shared label.
 const seaRaiseBinding=(input,record)=>{

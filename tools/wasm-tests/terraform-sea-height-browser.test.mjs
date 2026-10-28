@@ -15,7 +15,7 @@ import {completedNativeClick,nativeHover} from './terraform-browser-pointer.mjs'
 import {rateOneSource} from './terraform-browser-inputs.mjs';
 import {HeightPresentation,completedHeightKey,nativeHeightWorld,verifyHeightCapture,heightFatal,verifyHeightFinalization} from './terraform-height-observation.mjs';
 import {seaHeightTerrain,seaHeightInput,seaHeightOverrideManifest} from './terraform-sea-height-inputs.mjs';
-import {auditPaidSeaHeight,verifySeaBootstrap,verifySeaRaiseMenu,verifySeaRaiseQuote} from './terraform-sea-height-observation.mjs';
+import {auditPaidSeaHeight,verifySeaBootstrap,verifySeaRaiseMenu,verifySeaRaiseQuote,guardSeaBrowserCleanup} from './terraform-sea-height-observation.mjs';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const scriptsRoot=process.env.WASM_SCRIPTS_ROOT||root;
 const build=process.env.WASM_APP_DIR||`${root}build/wasm-release/bin`;
@@ -79,6 +79,7 @@ test('real produced SeaFormer Raise quote Cancel draft and paid completion prese
   });
   const browser=await chromium.launch({headless:true,executablePath:process.env.WASM_BROWSER_EXECUTABLE||undefined,
     args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+  const transferBrowserCleanup=guardSeaBrowserCleanup(t,browser);
   const page=await browser.newPage({viewport:{width:1100,height:1000}});page.setDefaultTimeout(60000);
   const errors=[];page.on('pageerror',error=>errors.push(error.stack||String(error)));page.on('crash',()=>errors.push('Chromium crashed'));
   const chunksPath=`${artifacts}/application-log-chunks.jsonl`;writeFileSync(chunksPath,'');
@@ -110,6 +111,7 @@ test('real produced SeaFormer Raise quote Cancel draft and paid completion prese
     writeFileSync(`${artifacts}/report.json`,JSON.stringify(report,null,2)+'\n');
     if(finalFailure)throw finalFailure;
   });
+  transferBrowserCleanup();
   runtimeBarrier=await attachRuntimeLogBarrier(page,browser,{runtimeURL:`${address}/GLSMAC.js`,bootstrapURL:`${address}/bootstrap.js`,originalLogSource,metadata:report.native_log_configuration,onError:error=>errors.push(String(error))});
   const presentation=new HeightPresentation(),records=[],events=[];let consumed=0,fatalTail='';
   const fatal=heightFatal;

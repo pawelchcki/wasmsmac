@@ -3,7 +3,23 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {declaredTerrain,rateOneSource} from './terraform-browser-inputs.mjs';
 import {seaHeightTerrain,seaHeightInput,seaHeightOverrideManifest} from './terraform-sea-height-inputs.mjs';
-import {auditPaidSeaHeight,verifySeaRaiseMenu,verifySeaRaiseQuote} from './terraform-sea-height-observation.mjs';
+import {auditPaidSeaHeight,verifySeaRaiseMenu,verifySeaRaiseQuote,guardSeaBrowserCleanup} from './terraform-sea-height-observation.mjs';
+
+test('page setup failure closes the launched browser, while installed finalizer retains its final-read ordering',async()=>{
+  const hooks=[];let connected=true,closes=0;
+  const browser={isConnected:()=>connected,close:async()=>{connected=false;closes++;},
+    newPage:async()=>{throw Error('actual page setup failure');}};
+  guardSeaBrowserCleanup({after:hook=>hooks.push(hook)},browser);
+  await assert.rejects(browser.newPage(),/page setup failure/);
+  await hooks[0]();assert.equal(closes,1);assert.equal(connected,false);
+  connected=true;closes=0;hooks.length=0;
+  const transfer=guardSeaBrowserCleanup({after:hook=>hooks.push(hook)},browser);
+  const final=[];
+  hooks.push(async()=>{final.push('final read');await browser.close();final.push('closed');});
+  transfer();
+  for(const hook of hooks)await hook();
+  assert.deepEqual(final,['final read','closed']);assert.equal(closes,1);
+});
 
 test('coastal map changes only the declared deep-water altitude and contour bytes',()=>{
   const base=declaredTerrain(),sea=seaHeightTerrain();assert.equal(sea.length,base.length);
