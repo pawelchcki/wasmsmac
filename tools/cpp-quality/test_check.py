@@ -49,6 +49,14 @@ class GateTests(unittest.TestCase):
         self.assertEqual(quality.translation_units(db, [Path("src/b.cpp")]), [Path("src/b.cpp")])
         self.assertEqual(quality.translation_units(db, [Path("README.md")]), [])
 
+    def test_included_cpp_selects_its_real_owning_unit(self):
+        db = [{"file": str(quality.ROOT / "src/ui/dom/Object.cpp"), "directory": str(quality.ROOT)}]
+        self.assertEqual(quality.translation_units(db, [Path("src/ui/dom/Object.colormap.cpp")]),
+                         [Path("src/ui/dom/Object.cpp")])
+        other = [{"file": str(quality.ROOT / "src/unrelated.cpp"), "directory": str(quality.ROOT)}]
+        with self.assertRaisesRegex(ValueError, "absent"):
+            quality.translation_units(other, [Path("src/ui/dom/Object.colormap.cpp")])
+
     def test_missing_compilation_entry_is_fatal(self):
         db = [{"file": str(quality.ROOT / "src/a.cpp"), "directory": str(quality.ROOT)}]
         with self.assertRaisesRegex(ValueError, "absent"):

@@ -139,6 +139,26 @@ ELSE ()
 	ELSE ()
 		PKG_SEARCH_MODULE( OSSPUUID REQUIRED IMPORTED_TARGET uuid )
 	ENDIF ()
+	# uuid.pc is also used by util-linux, whose API is incompatible with OSSP.
+	INCLUDE( CheckCXXSourceCompiles )
+	INCLUDE( CMakePushCheckState )
+	CMAKE_PUSH_CHECK_STATE( RESET )
+	SET( CMAKE_REQUIRED_LIBRARIES PkgConfig::OSSPUUID )
+	UNSET( GLSMAC_HAS_OSSP_UUID CACHE )
+	CHECK_CXX_SOURCE_COMPILES( "
+		#include <uuid.h>
+		int main() {
+			uuid_t* context = nullptr;
+			char* text = nullptr;
+			uuid_create(&context);
+			uuid_make(context, UUID_MAKE_V4);
+			uuid_export(context, UUID_FMT_STR, reinterpret_cast<void**>(&text), nullptr);
+			return uuid_destroy(context);
+		}" GLSMAC_HAS_OSSP_UUID )
+	CMAKE_POP_CHECK_STATE()
+	IF ( NOT GLSMAC_HAS_OSSP_UUID )
+		MESSAGE( FATAL_ERROR "The selected UUID package is not OSSP uuid. Install the OSSP uuid development package (uuid_create/uuid_make/uuid_export)." )
+	ENDIF ()
 	PKG_SEARCH_MODULE( YAMLCPP REQUIRED IMPORTED_TARGET yaml-cpp )
 
 	TARGET_LINK_LIBRARIES( ${PROJECT_NAME} PRIVATE

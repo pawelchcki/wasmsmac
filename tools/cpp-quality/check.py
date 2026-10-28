@@ -15,6 +15,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = ROOT / "tools/cpp-quality/baseline.json"
 CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".h", ".hpp"}
+# Included implementation fragments are analyzed through their real owning unit.
+INCLUDED_IMPLEMENTATIONS = {
+    Path("src/ui/dom/Object.colormap.cpp"): Path("src/ui/dom/Object.cpp"),
+}
 
 
 def run(args, **kwargs):
@@ -97,7 +101,7 @@ def translation_units(database, changed=None):
         raise ValueError("Compilation database contains no first-party translation units")
     if changed is None:
         return sorted(units)
-    cpp = {p for p in changed if first_party(p)}
+    cpp = {INCLUDED_IMPLEMENTATIONS.get(p, p) for p in changed if first_party(p)}
     # A changed header can affect every translation unit. Global build/profile
     # changes also require full analysis; never report a vacuous incremental pass.
     config = {"CMakeLists.txt", "flake.nix", "flake.lock", ".clang-tidy",
@@ -166,6 +170,8 @@ def source_snapshot(units, database):
     paths = {ROOT / unit for unit in units}
     paths.update(p for p in (ROOT / "src").rglob("*")
                  if p.suffix in {".h", ".hpp"} and "tmp" not in p.relative_to(ROOT).parts)
+    paths.update(ROOT / fragment for fragment, owner in INCLUDED_IMPLEMENTATIONS.items()
+                 if owner in units)
     paths.add(ROOT / ".clang-tidy")
     digest = hashlib.sha256(json.dumps(database, sort_keys=True).encode())
     for path in sorted(paths):

@@ -20,8 +20,9 @@ section 3; it does not complete the JavaScript migration or every ownership audi
   application compiles/links with `-std=c++23`. The shared feature probe executes
   in actual WASM and reports `C++ 202302; libc++ 200100`.
 - Windows: the added CI probe pins Clang 23.1.3 and records its C++23 library
-  floor on windows-2025. Its execution and the existing complete Windows build
-  require CI evidence before being declared verified. The Windows SDK/STL comes
+  floor on windows-2025. CI verified `C++ 202302; MSVC STL 145` with Clang
+  23.1.3, runner image windows-2025-vs2026/20261021.278.1. The existing complete
+  Windows application build remains a separate unverified item. The Windows SDK/STL comes
   from the runner image and is not independently locked by the Linux flake.
 - aarch64 Linux, macOS, Portable32 and full-application TSan are unverified.
   Supported configuration syntax is not counted as an executed platform test.
@@ -91,6 +92,13 @@ Two concrete owner losses were traced with the matching LLVM symbolizer:
 2. Parsed switch cases outlived their temporary Scope allocation. Switch now owns
    that Scope with `unique_ptr`; the Scope destroys cases once, preserving their
    order and the interpreter's borrowed case list.
+
+A review also reproduced GCC UBSan retaining unrelated Engine.cpp RTTI in the
+thread probe. An engine-free logging adapter now links and executes the actual
+Thread/Class probe without unrelated GC/Config definitions; no sanitizer checks
+are disabled. UUID package selection verifies the OSSP API rather than accepting
+util-linux uuid.pc, and included C++ fragments select their owning translation
+unit.
 
 The same existing scripts are the sanitizer regressions; their observations and
 assertions are unchanged. All four focused engine scripts, including both

@@ -58,7 +58,8 @@ files. Use `clang-format --lines=START:END -i PATH` for a focused correction.
 GSE `.gls.js` files are not JavaScript and never enter these checks.
 
 Tidy uses real compilation commands, including defines and include paths.
-Changed implementation files select their translation units. Any changed
+Changed implementation files select their translation units. Included implementation
+fragments have an explicit owner map (currently Object.colormap.cpp → Object.cpp). Any changed
 first-party header, CMake configuration, toolchain or analysis configuration
 selects the full first-party compilation database. An implementation file absent
 from the database fails the check; configure its actual target rather than
