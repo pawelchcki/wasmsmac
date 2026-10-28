@@ -1,6 +1,9 @@
 // Candidate-only normal movement. No original oracle, duration/pose override or C++ seam.
 import {spawn} from 'node:child_process';
 import {performance} from 'node:perf_hooks';
+import {accessSync,constants,readFileSync,realpathSync,statSync} from 'node:fs';
+import {isAbsolute} from 'node:path';
+import {createHash} from 'node:crypto';
 import {declaredTerrain} from './terraform-browser-inputs.mjs';
 import {stackOrderWorld} from './unit-stack-order-browser-fixture.mjs';
 // Metadata/evaluator subprocesses only. Async spawn avoids the independently
@@ -44,6 +47,36 @@ export function movementChild(command,args,{cwd,timeout_ms=10000,term_ms=1000,ki
       timeout=setTimeout(()=>stop('timeout'),timeout_ms);
     }catch(error){spawnError=error;finish(null,null,false);}
   });
+}
+// Current-profile tool inputs only. File hashes bind requested executable paths,
+// not executable memory, transitive libraries or independent compiler provenance.
+export function movementTool(pin){
+  if(!pin||Object.keys(pin).sort().join(',')!=='path,sha256'||typeof pin.path!=='string'||!isAbsolute(pin.path))throw Error('Explicit absolute tool binding required');
+  if(realpathSync(pin.path)!==pin.path||!statSync(pin.path).isFile())throw Error('Canonical executable tool required');
+  accessSync(pin.path,constants.X_OK);
+  if(createHash('sha256').update(readFileSync(pin.path)).digest('hex')!==pin.sha256)throw Error('Pinned executable changed');
+  return pin.path;
+}
+export async function movementBoundChild(pin,args,options){
+  const result=await movementChild(movementTool(pin),args,options);
+  try{movementTool(pin);result.tool_unchanged=true;}
+  catch(error){result.tool_unchanged=false;result.tool_binding_error=String(error);}
+  return result;
+}
+export function movementAssetServer(pin,{web,assets,cwd}){
+  const command={command:movementTool(pin),args:['tools/serve-wasm.py',web,'--port','0','--assets',assets],cwd};
+  return {child:spawn(command.command,command.args,{cwd:command.cwd}),command};
+}
+export function movementProfile(path,digest){
+  if(typeof path!=='string'||!isAbsolute(path)||typeof digest!=='string'||!/^[a-f0-9]{64}$/.test(digest))throw Error('Explicit reviewed movement preflight required');
+  const bytes=readFileSync(path);
+  if(createHash('sha256').update(bytes).digest('hex')!==digest)throw Error('Different movement preflight');
+  const pre=JSON.parse(bytes);
+  if(pre.version!==2||pre.profile!=='current-checkout'||pre.runtime_binding!=='metadata-consistent'||pre.independent_compile_proof_verified!==false||pre.fidelity_passing_cases!==0)throw Error('Unsupported movement profile');
+  if(!pre.tools||Object.keys(pre.tools).sort().join(',')!=='git,python')throw Error('Explicit Git/Python tools required');
+  movementTool(pre.tools.git);movementTool(pre.tools.python);
+  if(realpathSync(process.execPath)!==movementTool({path:pre.node,sha256:pre.node_sha256}))throw Error('Different running Node');
+  return pre;
 }
 export const movementWorld=stackOrderWorld;
 export function movementTerrain(){

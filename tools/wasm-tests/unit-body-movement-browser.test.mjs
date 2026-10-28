@@ -1,14 +1,14 @@
 // Candidate-only normal move; zero physical controls, no pose/original oracle.
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {appendFileSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
+import {resolve} from 'node:path';
 import {test} from 'node:test';
 import {BrowserLogCursor} from './browser-log-cursor.mjs';
 import {installNativeLogHook} from './browser-native-log-hook.mjs';
 import {attachRuntimeLogBarrier} from './runtime-fetch-barrier.mjs';
-import {movementMain,movementWorld,movementTerrain,movementBudgets,movementChild} from './unit-body-movement-browser-fixture.mjs';
+import {movementMain,movementWorld,movementTerrain,movementBudgets,movementBoundChild,movementTool,movementProfile,movementAssetServer} from './unit-body-movement-browser-fixture.mjs';
 import {performance} from 'node:perf_hooks';
 
 function bounded(operation,deadline,label){
@@ -27,6 +27,11 @@ const seed='1651011033:1377505029:3019448108:3247278135';
 test('one normal Scout move has actual intermediate body samples and guarded all-owner native effects',{
   skip:!assets&&'Requires installed assets and an explicitly exclusive candidate browser lease',timeout:movementBudgets.node_ms,
 },async t=>{
+  const preflightDigest=process.env.UNIT_BODY_MOVEMENT_PREFLIGHT_SHA256;
+  const pre=movementProfile(process.env.UNIT_BODY_MOVEMENT_PREFLIGHT_PATH,preflightDigest);
+  assert.equal(pre.host,resolve(scriptsRoot));assert.equal(pre.host,resolve(root));
+  assert.equal(pre.web_shell,resolve(build));assert.equal(pre.assets,resolve(assets));assert.equal(pre.command[0],process.execPath);
+  assert.equal(resolve(process.env.UNIT_BODY_MOVEMENT_PREFLIGHT_PATH),`${resolve(artifacts)}/preflight.json`);
   mkdirSync(artifacts,{recursive:true});
   const scripts=Object.fromEntries(readdirSync(`${scriptsRoot}/GLSMAC_data/default`,{recursive:true})
     .filter(name=>name.endsWith('.gls.js')).sort().map(name=>[`GLSMAC_data/default/${name}`,readFileSync(`${scriptsRoot}/GLSMAC_data/default/${name}`,'utf8')]));
@@ -38,9 +43,9 @@ test('one normal Scout move has actual intermediate body samples and guarded all
   for(const statement of ['if (Module["print"]) out = Module["print"];','if (Module["printErr"]) err = Module["printErr"];'])assert.ok(runtime.includes(statement));
   const setupChildren=[];
   const gitRead=async args=>{
-    const result=await movementChild('git',args,{cwd:scriptsRoot,timeout_ms:10000,signal:t.signal});
+    const result=await movementBoundChild(pre.tools.git,args,{cwd:scriptsRoot,timeout_ms:10000,signal:t.signal});
     setupChildren.push(result);appendFileSync(`${artifacts}/setup-processes.jsonl`,JSON.stringify(result)+'\n');
-    assert.equal(result.error,null);assert.equal(result.spawned,true);assert.equal(result.wait_completed,true);
+    assert.equal(result.tool_unchanged,true);assert.equal(result.error,null);assert.equal(result.spawned,true);assert.equal(result.wait_completed,true);
     assert.equal(result.timed_out,false);assert.equal(result.cancelled,false);assert.equal(result.output_limit,false);
     assert.equal(result.status,0,`Read-only Git failed: ${result.stderr}`);assert.equal(result.signal,null);
     return result.stdout;
@@ -49,22 +54,26 @@ test('one normal Scout move has actual intermediate body samples and guarded all
   const defaultTree=(await gitRead(['rev-parse','HEAD:GLSMAC_data/default'])).trim();
   await gitRead(['diff','--exit-code','HEAD','--','src','GLSMAC_data/default']);
   assert.equal((await gitRead(['ls-files','--others','--exclude-standard','--','src','GLSMAC_data/default'])).trim(),'');
-  assert.equal(nativeSource,'23e54d08b7dbb00f6b42d325c180a8c868b30ee2');
-  assert.equal(defaultTree,'a69dd4e0a9620f90bd12c8eb8636ca22e24ed47c');
+  assert.equal(nativeSource,pre.native_tree);assert.equal(defaultTree,pre.default_tree);
   const provenancePath=process.env.UNIT_BODY_MOVEMENT_RUNTIME_PROVENANCE;
   assert.ok(provenancePath,'An explicit reviewed immutable native-build provenance file is required');
+  assert.equal(resolve(provenancePath),pre.runtime_provenance);
   const provenanceBytes=readFileSync(provenancePath),provenance=JSON.parse(provenanceBytes);
+  assert.equal(hash(provenanceBytes),pre.runtime_provenance_sha256);
+  assert.equal(hash(runtime),pre.runtime['GLSMAC.js']);assert.equal(hash(readFileSync(`${build}/GLSMAC.wasm`)),pre.runtime['GLSMAC.wasm']);
   assert.equal(provenance.source_tree,nativeSource);assert.equal(provenance.default_tree,defaultTree);
   assert.equal(provenance.runtime?.['GLSMAC.js'],hash(runtime));
   assert.equal(provenance.runtime?.['GLSMAC.wasm'],hash(readFileSync(`${build}/GLSMAC.wasm`)));
   const {chromium}=await import('playwright');
   const sourcePins=Object.fromEntries(['src/GLSMAC.cpp','src/game/frontend/Game.h','src/game/frontend/unit/UnitManager.h','src/game/frontend/unit/Unit.h','src/game/frontend/unit/Unit.cpp','src/game/frontend/unit/UnitDef.h','src/scene/actor/Instanced.h'].map(name=>[name,hash(readFileSync(`${scriptsRoot}/${name}`))]));
-  const report={version:1,status:'running',candidate_executed:false,original_passing_cases:0,
+  const hostHead=(await gitRead(['rev-parse','HEAD'])).trim();assert.equal(hostHead,pre.head);
+  const report={version:2,profile:'current-checkout',preflight_sha256:preflightDigest,tool_executables:pre.tools,
+    runtime_binding:'metadata-consistent',independent_compile_proof_verified:false,fidelity_passing_cases:0,status:'running',candidate_executed:false,original_passing_cases:0,
     scope:'Sampled existing native billboard translation under one normal move, exact all-owner native delta; no GPU/pose/original claim',
     budgets:movementBudgets,native_watchdog_supported:false,
     runtime_sampling_trigger:'29 fixed positive-delay census callbacks plus sole accepted receipt',
     endpoint_gate:'strict offline two actual endpoint samples before first pending query',
-    host_head:(await gitRead(['rev-parse','HEAD'])).trim(),setup_children:setupChildren,
+    host_head:hostHead,setup_children:setupChildren,
     native_source_tree:nativeSource,observer_cpp_sha256:sourcePins,production_default_tree:defaultTree,runtime_provenance_sha256:hash(provenanceBytes),
     production_default_sha256:hash(JSON.stringify(scripts)),runtime_js_sha256:hash(runtime),runtime_wasm_sha256:hash(readFileSync(`${build}/GLSMAC.wasm`)),
     fixture_main_sha256:hash(movementMain),fixture_world_sha256:hash(movementWorld),observer_helpers_sha256:hash(JSON.stringify(helpers)),
@@ -78,7 +87,8 @@ test('one normal Scout move has actual intermediate body samples and guarded all
       requests:['actual Native focus_owned_base readiness','actual Native tile select','ONE normal Native move_unit actual handles','32 read-only get_unit_body_census(game) calls'],physical_game_inputs:0,movement_actions:1,census_reads:32},
     unsupported:['GPU/map pixels or frame identity','native motion cadence/all ticks','gameplay facing','animation/limb/tool binding','original appearance/policy','cross-session continuity']};
   writeFileSync(`${artifacts}/fixture-main.gls.js`,movementMain);writeFileSync(`${artifacts}/fixture-world.gls.js`,movementWorld);
-  const server=spawn('python3',['tools/serve-wasm.py',build,'--port','0','--assets',assets],{cwd:root});
+  const {child:server,command:serverCommand}=movementAssetServer(pre.tools.python,{web:pre.web_shell,assets:pre.assets,cwd:pre.host});
+  report.asset_server_command=serverCommand;
   const serverDone=new Promise(resolve=>server.once('exit',(code,signal)=>{report.asset_server_exit={code,signal};resolve({code,signal});}));
   report.asset_server_pid=server.pid;
   writeFileSync(`${artifacts}/asset-server.stdout`,'');writeFileSync(`${artifacts}/asset-server.stderr`,'');
@@ -118,6 +128,7 @@ test('one normal Scout move has actual intermediate body samples and guarded all
     report.log_transport={sealed:producerClosed,partial:true,raw_sha256:hash(sealed.text),joined_chunk_sha256:hash(joined),retained_utf8:Buffer.byteLength(sealed.text),reads:sealed.reads,settled_failure:sealed.failure};
     report.browser_errors=errors;writeFileSync(`${artifacts}/application.log`,sealed.text);
     try{
+      movementTool(pre.tools.git);movementTool(pre.tools.python);
       assert.ok(producerClosed);assert.equal(joined,sealed.text);assert.equal(sealed.failure,null);
       assert.equal(report.log_capture_error,undefined);assert.equal(report.hook_capture_error,undefined);assert.equal(report.browser_close_error,undefined);assert.deepEqual(errors,[]);
       assert.equal(report.native_raw_exit_code,0,'Actual native exit zero is required before any visible mismatch claim');
@@ -132,11 +143,11 @@ test('one normal Scout move has actual intermediate body samples and guarded all
         hook:{main_acknowledgements:config.barrier.continued&&config.barrier.ack.installed_before_runtime_capture?1:0,worker_acknowledgements:config.worker_requests.filter(worker=>worker.continued).length,
           runtime_out_bound:config.callbacks.first_callback.runtime_out_bound,runtime_err_bound:config.callbacks.first_callback.runtime_err_bound,runtime_callMain_present:config.callbacks.first_callback.runtime_callMain_present}};
       writeFileSync(`${artifacts}/receipt-acceptance.json`,JSON.stringify(acceptance,null,2)+'\n');
-      const evaluation=await movementChild('python3',['-m','state_trace.unit_body_movement_proof',`${artifacts}/application.log`,`${artifacts}/receipt-acceptance.json`,`${artifacts}/movement-result.json`],
+      const evaluation=await movementBoundChild(pre.tools.python,['-m','state_trace.unit_body_movement_proof',`${artifacts}/application.log`,`${artifacts}/receipt-acceptance.json`,`${artifacts}/movement-result.json`],
         {cwd:`${root}tools/behavior-tests`,timeout_ms:10000,signal:t.signal});
       writeFileSync(`${artifacts}/evaluator.stdout`,evaluation.stdout||'');writeFileSync(`${artifacts}/evaluator.stderr`,evaluation.stderr||'');
       report.evaluator_process=evaluation;report.evaluator_exit_code=evaluation.status;report.evaluator_signal=evaluation.signal;report.evaluator_error=evaluation.error?String(evaluation.error):null;
-      assert.equal(evaluation.spawned,true);assert.equal(evaluation.wait_completed,true);assert.equal(evaluation.timed_out,false);assert.equal(evaluation.cancelled,false);assert.equal(evaluation.output_limit,false);
+      assert.equal(evaluation.tool_unchanged,true);assert.equal(evaluation.spawned,true);assert.equal(evaluation.wait_completed,true);assert.equal(evaluation.timed_out,false);assert.equal(evaluation.cancelled,false);assert.equal(evaluation.output_limit,false);
       assert.equal(evaluation.status,0,`Complete native census invariant rejected: ${evaluation.stderr}`);
       const result=JSON.parse(readFileSync(`${artifacts}/movement-result.json`,'utf8'));assert.equal(result.complete,true);assert.equal(result.match,true);
       report.movement_result=result;report.native_complete=true;report.log_transport.partial=false;report.status='complete-native-movement-census-match';

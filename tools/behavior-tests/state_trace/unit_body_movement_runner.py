@@ -2,7 +2,8 @@
 
 prepare hashes explicit source/web/assets/tool paths, never launches candidate.
 execute requires that reviewed SHA and a separate exclusive game grant. Native
-23e54/Defaulta69/v8 unchanged. No automatic retry; exact real Popen/wait and scoped
+Current-checkout metadata consistency is not verified compile provenance.
+Historical23e54/Defaulta69/v8 evidence remains immutable. No automatic retry; real Popen/wait and scoped
 identity cleanup, not TAP/DOM/APP substitution. No in-engine native watchdog.
 """
 from pathlib import Path
@@ -100,11 +101,70 @@ def unchanged_dependencies(pre):
     assert dependency_contents(Path(pre['dependency_symlink']))==pre['dependency_contents_sha256'], 'Executable dependency contents changed'
 
 
+PROFILE_VERSION=2
+PROFILE='current-checkout'
+
+
+def tool_pin(path):
+    path=Path(path)
+    assert path.is_absolute(), 'Tool path must be absolute'
+    path=path.resolve(strict=True)
+    assert path.is_file() and os.access(path,os.X_OK), 'Executable tool required'
+    return {'path':str(path),'sha256':sha(path)}
+
+
+def verify_tool(pin):
+    assert type(pin) is dict and set(pin)=={'path','sha256'}, 'Invalid tool binding'
+    assert tool_pin(Path(pin['path']))==pin, 'Pinned executable changed'
+    assert str(Path(pin['path']).resolve(strict=True))==pin['path'], 'Canonical tool path required'
+
+
+def verify_tools(tools):
+    assert set(tools)=={'git','python'}, 'Explicit Git/Python bindings required'
+    for pin in tools.values():verify_tool(pin)
+    assert Path(sys.executable).resolve(strict=True)==Path(tools['python']['path']), 'Different outer Python interpreter'
+
+
+def git_read(tools,root,*args):
+    verify_tools(tools)
+    return subprocess.check_output([tools['git']['path'],*args],cwd=root,text=True,timeout=10).strip()
+
+
+def current_profile(root,head,web,provenance_path,tools):
+    """Clean source + declared runtime metadata/bytes; never a compile proof."""
+    verify_tools(tools)
+    assert len(head)==40 and all(c in '0123456789abcdef' for c in head), 'Full expected source SHA required'
+    assert git_read(tools,root,'rev-parse','HEAD')==head, 'Different source HEAD'
+    native=git_read(tools,root,'rev-parse','HEAD:src')
+    default=git_read(tools,root,'rev-parse','HEAD:GLSMAC_data/default')
+    assert all(len(tree)==40 and all(c in '0123456789abcdef' for c in tree) for tree in (native,default))
+    assert git_read(tools,root,'status','--porcelain','--untracked-files=no')=='', 'Dirty source checkout'
+    assert set(git_read(tools,root,'ls-files','--others','--exclude-standard').splitlines()) <= {'tools/wasm-tests/node_modules'}, 'Unexpected untracked source'
+    provenance_path=Path(provenance_path);web=Path(web)
+    provenance=json.loads(provenance_path.read_text())
+    assert provenance['source_tree']==native and provenance['default_tree']==default, 'Runtime/source metadata mismatch'
+    runtime={name:sha(provenance_path.parent/name) for name in ('GLSMAC.js','GLSMAC.wasm')}
+    assert provenance['runtime']==runtime, 'Runtime bytes differ from supplied metadata'
+    assert provenance['owned_build_workers_reaped'] is True, 'Build cleanup metadata missing'
+    assert all(sha(web/name)==digest for name,digest in runtime.items()), 'Web/runtime bytes differ'
+    static=provenance['web_static_sha256']
+    assert type(static) is dict and {'index.html','bootstrap.js','asset-store.js'}<=set(static), 'Web metadata incomplete'
+    for name,digest in static.items():
+        assert type(name) is str and not Path(name).is_absolute() and '..' not in Path(name).parts, 'Invalid web metadata path'
+        assert sha(web/name)==digest, 'Web static bytes differ'
+    assert sha(web/'provenance.json')==sha(provenance_path), 'Different web provenance bytes'
+    return dict(version=PROFILE_VERSION,profile=PROFILE,head=head,native_tree=native,default_tree=default,
+                runtime=runtime,runtime_provenance_sha256=sha(provenance_path),runtime_binding='metadata-consistent',
+                independent_compile_proof_verified=False,fidelity_passing_cases=0)
+
+
 def unchanged(pre):
+    assert pre['version']==PROFILE_VERSION and pre['profile']==PROFILE, 'Unsupported future capture profile'
+    verify_tools(pre['tools'])
+    assert pre['command']==[pre['node'],'--test','--test-concurrency=1','tools/wasm-tests/unit-body-movement-browser.test.mjs'], 'Different pinned Node command'
     root=Path(pre['host']);web=Path(pre['web_shell'])
-    assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()==pre['head']
-    assert subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=root,text=True).strip()==''
-    assert set(subprocess.check_output(['git','ls-files','--others','--exclude-standard'],cwd=root,text=True).splitlines()) <= {'tools/wasm-tests/node_modules'}
+    profile=current_profile(root,pre['head'],web,pre['runtime_provenance'],pre['tools'])
+    assert all(pre[key]==value for key,value in profile.items()), 'Current profile changed'
     assert (root/'tools/wasm-tests/node_modules').is_dir() and str((root/'tools/wasm-tests/node_modules').resolve())==pre['dependency_symlink']
     assert all(sha(root/name)==value for name,value in pre['source_files_sha256'].items())
     assert all(sha(web/name)==value for name,value in pre['web_files_sha256'].items())
@@ -154,6 +214,10 @@ def audit(pre,result,out):
     assert report['status']=='complete-native-movement-census-match' and report['native_complete'] is True
     assert type(report['native_raw_exit_code']) is int and report['native_raw_exit_code']==0
     assert report['server_reaped'] is True and report['asset_server_pid']>0
+    assert report['tool_executables']==pre['tools']
+    assert report['preflight_sha256']==pre['preflight_sha256_for_audit']
+    assert report['runtime_binding']=='metadata-consistent' and report['independent_compile_proof_verified'] is False and report['fidelity_passing_cases']==0
+    assert report['asset_server_command']=={'command':pre['tools']['python']['path'],'args':['tools/serve-wasm.py',pre['web_shell'],'--port','0','--assets',pre['assets']],'cwd':pre['host']}
     assert report['asset_server_exit']['code']==0 or report['asset_server_exit']['signal']=='SIGTERM'
     assert report['browser_errors']==[] and report.get('server_close_error') is None
     assert report['manifest_id']==pre['asset_manifest_id'] and report['native_source_tree']==pre['native_tree']
@@ -168,9 +232,12 @@ def audit(pre,result,out):
     children=report['setup_children']
     git_args=[['rev-parse','HEAD:src'],['rev-parse','HEAD:GLSMAC_data/default'],['diff','--exit-code','HEAD','--','src','GLSMAC_data/default'],['ls-files','--others','--exclude-standard','--','src','GLSMAC_data/default'],['rev-parse','HEAD']]
     assert len(children)==len(git_args)
-    for child,args in zip(children,git_args):audited_child(child,'git',args,pre['host'])
+    for child,args in zip(children,git_args):
+        audited_child(child,pre['tools']['git']['path'],args,pre['host'])
+        assert child['tool_unchanged'] is True
     assert [json.loads(line) for line in (out/'setup-processes.jsonl').read_text().splitlines()]==children
-    audited_child(report['evaluator_process'],'python3',['-m','state_trace.unit_body_movement_proof',str(out/'application.log'),str(out/'receipt-acceptance.json'),str(out/'movement-result.json')],Path(pre['host'])/'tools/behavior-tests')
+    audited_child(report['evaluator_process'],pre['tools']['python']['path'],['-m','state_trace.unit_body_movement_proof',str(out/'application.log'),str(out/'receipt-acceptance.json'),str(out/'movement-result.json')],Path(pre['host'])/'tools/behavior-tests')
+    assert report['evaluator_process']['tool_unchanged'] is True
     assert report['evaluator_exit_code']==0 and report['evaluator_error'] is None and report['evaluator_signal'] is None
     raw=(out/'application.log').read_bytes(); text=raw.decode('utf-8'); digest=hashlib.sha256(raw).hexdigest()
     transport=report['log_transport'];assert transport['sealed'] is True and transport['partial'] is False
@@ -293,6 +360,7 @@ def capture_child(command,*,cwd,env,out,limits=None):
     result['deadline_seconds']=limits['outer_seconds']
     return result,raw
 
+# Historical capture constants only; current prepare never requires these trees.
 SOURCE='23e54d08b7dbb00f6b42d325c180a8c868b30ee2'
 DEFAULT='a69dd4e0a9620f90bd12c8eb8636ca22e24ed47c'
 RUNTIME_HASHES={'GLSMAC.js':'32446906441924bb1b1ad7a505682757c590ef8ebdcacd186a0e3fd259d8bea1',
@@ -310,6 +378,8 @@ def add_arguments(parser):
         parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--expected-head',required=True)
     parser.add_argument('--node',type=Path,default=Path(shutil.which('node') or 'node'))
+    parser.add_argument('--git',type=Path,default=Path(shutil.which('git') or 'git'))
+    parser.add_argument('--python',type=Path,default=Path(sys.executable))
 
 
 def prepare(args,driver):
@@ -318,22 +388,13 @@ def prepare(args,driver):
     DRIVER=driver.resolve();ASSETS=args.assets.resolve();DEPS=args.dependencies.resolve();HEAD=args.expected_head
     assert DRIVER==ROOT/'tools/behavior-tests/state_trace/unit_body_movement_runner.py','Run the portable boundary from the declared source checkout'
     assert len(HEAD)==40 and all(char in '0123456789abcdef' for char in HEAD),'Full expected source SHA required'
-    def git(*argv):return subprocess.check_output(['git',*argv],cwd=ROOT,text=True).strip()
+    tools={'git':tool_pin(args.git),'python':tool_pin(args.python)}
     assert not OUT.exists(),'Fresh artifact directory required; preserve any old result'
     assert OUT!=ROOT and ROOT not in OUT.parents,'Keep capture artifacts outside the immutable source checkout'
-    assert git('rev-parse','HEAD')==HEAD
-    assert git('rev-parse','HEAD:src')==SOURCE and git('rev-parse','HEAD:GLSMAC_data/default')==DEFAULT
-    assert git('status','--porcelain','--untracked-files=no')==''
-    assert set(git('ls-files','--others','--exclude-standard').splitlines()) <= {'tools/wasm-tests/node_modules'}
+    profile=current_profile(ROOT,HEAD,WEB,PROVENANCE,tools)
     assert (ROOT/'tools/wasm-tests/node_modules').is_dir()
     assert (ROOT/'tools/wasm-tests/node_modules').resolve()==DEPS
-    prov=PROVENANCE; provenance=json.loads(prov.read_text())
-    assert sha(prov)=='5c847aaf39f28b2eec66970f9122ecca4ef33e58d7ed6b558701c8de32181619'
-    assert provenance['source_tree']==SOURCE and provenance['default_tree']==DEFAULT
-    assert provenance['runtime']==RUNTIME_HASHES and provenance['owned_build_workers_reaped'] is True
-    assert all(sha(RUNTIME/name)==value and sha(WEB/name)==value for name,value in RUNTIME_HASHES.items())
-    assert all(sha(WEB/name)==value for name,value in provenance['web_static_sha256'].items())
-    assert sha(WEB/'provenance.json')==sha(prov)
+    prov=PROVENANCE
     files=['tools/behavior-tests/state_trace/unit_body_movement_runner.py','tools/behavior-tests/test_unit_body_movement_runner.py',
            'tools/wasm-tests/unit-body-movement-browser.test.mjs','tools/wasm-tests/unit-body-movement-browser-fixture.mjs',
            'tools/wasm-tests/unit-stack-order-browser-fixture.mjs','tools/wasm-tests/unit-workshop-browser-fixture.mjs',
@@ -350,7 +411,7 @@ def prepare(args,driver):
     shared=['browser-log-cursor.mjs','browser-native-log-hook.mjs','runtime-fetch-barrier.mjs','terraform-browser-inputs.mjs']
     for name in shared:
         relative='tools/wasm-tests/'+name;files.append(relative)
-        assert sha(ROOT/relative)==SHARED_HASHES[name]
+        # Current committed helper bytes are pinned below; old hashes are historical.
     node=args.node.resolve();browser=args.browser.resolve()
     fixture_script="import{createHash}from'node:crypto';import{movementMain,movementWorld,movementTerrain,movementBudgets}from'./tools/wasm-tests/unit-body-movement-browser-fixture.mjs';const h=v=>createHash('sha256').update(v).digest('hex');console.log(JSON.stringify({main:h(movementMain),world:h(movementWorld),terrain:h(movementTerrain()),budgets:movementBudgets}));"
     fixture=json.loads(subprocess.check_output([str(node),'--input-type=module','-e',fixture_script],cwd=ROOT,text=True))
@@ -358,10 +419,10 @@ def prepare(args,driver):
     assert fixture['world']=='614964b356e649998aea9cd72cbef780f3aa087cc220117c585976d59e4df27d'
     sys.path.insert(0,str(ROOT/'tools'));from wasm_assets import build_manifest,manifest_bytes
     manifest=build_manifest(ASSETS);assert manifest['id']=='12743b42e275842a7ae3862572ec769c6d86f647394f0edb1ff9db6d104888e3'
-    pre={'version':1,'status':'preflight only; zero candidate engines/browser launches',
-         'host':str(ROOT),'head':HEAD,'native_tree':SOURCE,'default_tree':DEFAULT,
+    pre={**profile,'status':'preflight only; zero candidate engines/browser launches',
+         'host':str(ROOT),'tools':tools,
          'source_files_sha256':{name:sha(ROOT/name) for name in files},
-         'runtime':RUNTIME_HASHES,'runtime_provenance':str(prov),'runtime_provenance_sha256':sha(prov),
+         'runtime_provenance':str(prov),
          'web_shell':str(WEB),'web_files_sha256':{str(path.relative_to(WEB)):sha(path) for path in sorted(WEB.rglob('*')) if path.is_file()},
          'assets':str(ASSETS),'asset_manifest_id':manifest['id'],'asset_manifest_sha256':hashlib.sha256(manifest_bytes(manifest)).hexdigest(),
          'dependency_contents_sha256':dependency_contents(DEPS),'dependency_content_scope':'Future unexecuted profile: all files in playwright and playwright-core; historical v2 package content was not pinned',
@@ -372,7 +433,7 @@ def prepare(args,driver):
          'preflight_builder':str(Path(__file__).resolve()),'preflight_builder_sha256':sha(Path(__file__)),
          'executor_pure_tests':str(ROOT/'tools/behavior-tests/test_unit_body_movement_runner.py'),'executor_pure_tests_sha256':sha(ROOT/'tools/behavior-tests/test_unit_body_movement_runner.py'),'executor_pure_checks':'see exact unit-test result; no Native/game credit',
          'runtime_sampling_trigger':'29 fixed positive-delay census callbacks plus sole accepted receipt','endpoint_gate':'strict offline two actual endpoint samples before first pending query',
-         'source_review':'Dedicated movement source; NEVER game-executed. Separate final-source review and exclusive run authorization required',
+         'source_review':'Current-checkout metadata consistency is not independent compile proof. Separate final-source review and exclusive run authorization required',
          'budgets':BUDGETS,'native_watchdog_supported':False,'node_test_budget_seconds':180,'outer_timeout_seconds':190,'cleanup_seconds':8,
          'command':[str(node),'--test','--test-concurrency=1','tools/wasm-tests/unit-body-movement-browser.test.mjs'],
          'declared_input':{'players':7,'bases':7,'units':9,'tiles':128,'stack_tile':[8,8],'destination':[10,8],'native_flat_elevation':10,'census_reads':32,'physical_game_inputs':0,'movement_actions':1},
@@ -381,7 +442,8 @@ def prepare(args,driver):
     OUT.mkdir();(OUT/'asset-manifest.json').write_bytes(manifest_bytes(manifest))
     (OUT/'preflight.json').write_text(json.dumps(pre,indent=2)+'\n')
     print(json.dumps({'head':HEAD,'preflight_sha256':sha(OUT/'preflight.json'),'driver_sha256':pre['driver_sha256'],
-                      'native_tree':SOURCE,'fixture_sha256':fixture,'candidate_engines_started':0},indent=2))
+                      'native_tree':profile['native_tree'],'fixture_sha256':fixture,'candidate_engines_started':0,
+                      'runtime_binding':'metadata-consistent','independent_compile_proof_verified':False,'fidelity_passing_cases':0},indent=2))
 
 
 
@@ -392,14 +454,17 @@ def execute(args):
     assert sha(Path(__file__))==pre['driver_sha256'] and pre['budgets']==BUDGETS
     assert not any((out/name).exists() for name in ('owned-process.json','raw-outcome.json','report.json','node.log')),'No overwrite/retry'
     unchanged(pre);assert sha(out/'asset-manifest.json')==pre['asset_manifest_sha256']
+    pre['preflight_sha256_for_audit']=args.manifest_sha256
     env=dict(os.environ)
     for key in ('NODE_OPTIONS','NODE_TEST_CONTEXT','NODE_TEST_REQUIRES'):env.pop(key,None)
     env.update(WASM_SCRIPTS_ROOT=pre['host'],WASM_APP_DIR=pre['web_shell'],SMAC_ASSETS_DIR=pre['assets'],
                UNIT_BODY_MOVEMENT_RUNTIME_PROVENANCE=pre['runtime_provenance'],UNIT_BODY_MOVEMENT_ARTIFACTS_DIR=str(out),
+               UNIT_BODY_MOVEMENT_PREFLIGHT_PATH=str(out/'preflight.json'),UNIT_BODY_MOVEMENT_PREFLIGHT_SHA256=args.manifest_sha256,
                FONTCONFIG_FILE=pre['fontconfig'],PLAYWRIGHT_BROWSERS_PATH=pre['playwright_browsers_path'],WASM_BROWSER_EXECUTABLE=pre['browser'])
     result,raw=capture_child(pre['command'],cwd=Path(pre['host']),env=env,out=out)
     result.update(kind='one actual movement census OS outcome',head=pre['head'],native_tree=pre['native_tree'],default_tree=pre['default_tree'],runtime=pre['runtime'],
-                  preflight_sha256=args.manifest_sha256,driver_sha256=pre['driver_sha256'],original_passing_cases=0,strict_status='incomplete')
+                  preflight_sha256=args.manifest_sha256,driver_sha256=pre['driver_sha256'],original_passing_cases=0,strict_status='incomplete',
+                  runtime_binding='metadata-consistent',independent_compile_proof_verified=False,fidelity_passing_cases=0)
     (out/'node.log').write_bytes(raw);(out/'raw-exit-status.txt').write_text(json.dumps(result['raw_node_exit'])+'\n')
     try:unchanged(pre);result['postrun_bindings_match']=True
     except Exception as error:result['postrun_bindings_match']=False;result['postrun_binding_error']=repr(error)

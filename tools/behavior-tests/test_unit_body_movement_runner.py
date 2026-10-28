@@ -1,6 +1,9 @@
 """No game/server/browser. Unicode, scoped identity and cheap real OS wait proofs."""
 from pathlib import Path
 import copy
+import hashlib
+import shutil
+import shlex
 import json
 import os
 import signal
@@ -261,5 +264,150 @@ class MovementRunnerTests(unittest.TestCase):
         self.assertEqual(runner.BUDGETS,dict(node_ms=180000,observation_ms=120000,outer_seconds=190,term_seconds=3,kill_wait_seconds=5,cleanup_seconds=8,postkill_seconds=2,census_calls=32,sample_delay_ms=10))
         self.assertEqual(runner.SOURCE,'23e54d08b7dbb00f6b42d325c180a8c868b30ee2')
         self.assertEqual(runner.DEFAULT,'a69dd4e0a9620f90bd12c8eb8636ca22e24ed47c')
+
+
+
+class CurrentMovementProfileTests(unittest.TestCase):
+    """Real metadata/cheap child boundaries; supplied bytes are never a runtime."""
+    def inputs(self,folder):
+        folder=Path(folder);root=folder/'source';root.mkdir()
+        for name,value in {'src/declared.cpp':'// declared source only\n','GLSMAC_data/default/main.gls.js':'// never parsed\n','tools/wasm_assets.py':'# tracked helper\n','runner.py':'# source metadata test only\n'}.items():
+            path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(value)
+        git=Path(shutil.which('git')).resolve();node=Path(shutil.which('node')).resolve()
+        subprocess.run([str(git),'init','-q'],cwd=root,check=True)
+        subprocess.run([str(git),'add','.'],cwd=root,check=True)
+        subprocess.run([str(git),'-c','user.name=Public fixture','-c','user.email=fixture@example.invalid','commit','-qm','Declared source metadata'],cwd=root,check=True)
+        tools={'git':runner.tool_pin(git),'python':runner.tool_pin(Path(sys.executable).resolve())}
+        head=runner.git_read(tools,root,'rev-parse','HEAD')
+        runtime=folder/'runtime';web=folder/'web';runtime.mkdir();web.mkdir()
+        for name in ('GLSMAC.js','GLSMAC.wasm'):
+            (runtime/name).write_bytes(b'not executable runtime input');(web/name).write_bytes((runtime/name).read_bytes())
+        for name in ('index.html','bootstrap.js','asset-store.js'):(web/name).write_bytes(b'not served web input')
+        metadata=dict(source_tree=runner.git_read(tools,root,'rev-parse','HEAD:src'),default_tree=runner.git_read(tools,root,'rev-parse','HEAD:GLSMAC_data/default'),
+                      runtime={name:runner.sha(runtime/name) for name in ('GLSMAC.js','GLSMAC.wasm')},
+                      owned_build_workers_reaped=True,web_static_sha256={name:runner.sha(web/name) for name in ('index.html','bootstrap.js','asset-store.js')})
+        provenance=runtime/'provenance.json';provenance.write_text(json.dumps(metadata));(web/'provenance.json').write_bytes(provenance.read_bytes())
+        return root,head,web,provenance,tools,node
+
+    def node(self,code,env=None):
+        root=Path(__file__).resolve().parents[2];uri=(root/'tools/wasm-tests/unit-body-movement-browser-fixture.mjs').as_uri()
+        script='import{movementProfile,movementBoundChild,movementAssetServer,movementTool,movementMain,movementWorld,movementTerrain,movementBudgets}from'+json.dumps(uri)+';'+code
+        environ=dict(os.environ if env is None else env);environ.pop('SMAC_ASSETS_DIR',None)
+        child=subprocess.run([str(Path(shutil.which('node')).resolve()),'--input-type=module','-e',script],cwd=root,env=environ,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=10)
+        self.assertEqual(child.returncode,0,child.stderr)
+        return json.loads(next(line[7:] for line in child.stdout.splitlines() if line.startswith('RESULT|')))
+
+    def test_current_committed_trees_and_metadata_are_consistent_without_compile_credit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,head,web,prov,tools,node=self.inputs(folder)
+            profile=runner.current_profile(root,head,web,prov,tools)
+            self.assertNotEqual(profile['native_tree'],runner.SOURCE);self.assertNotEqual(profile['default_tree'],runner.DEFAULT)
+            self.assertEqual(profile['profile'],'current-checkout');self.assertEqual(profile['version'],2)
+            self.assertEqual(profile['runtime_binding'],'metadata-consistent')
+            self.assertFalse(profile['independent_compile_proof_verified']);self.assertEqual(profile['fidelity_passing_cases'],0)
+
+    def test_current_profile_rejects_head_source_runtime_metadata_and_web_changes(self):
+        variants=('head','dirty-helper','native','default','js','wasm','web','static','web-provenance')
+        for variant in variants:
+            with self.subTest(variant=variant),tempfile.TemporaryDirectory() as folder:
+                root,head,web,prov,tools,node=self.inputs(folder);metadata=json.loads(prov.read_text())
+                if variant=='head':head='0'*40
+                if variant=='dirty-helper':(root/'tools/wasm_assets.py').write_text('# changed tracked input\n')
+                if variant in ('native','default'):
+                    metadata['source_tree' if variant=='native' else 'default_tree']='0'*40
+                    prov.write_text(json.dumps(metadata));(web/'provenance.json').write_bytes(prov.read_bytes())
+                if variant in ('js','wasm'):(prov.parent/('GLSMAC.js' if variant=='js' else 'GLSMAC.wasm')).write_bytes(b'different runtime bytes')
+                if variant=='web':(web/'GLSMAC.js').write_bytes(b'different served runtime')
+                if variant=='static':(web/'bootstrap.js').write_bytes(b'different bootstrap')
+                if variant=='web-provenance':(web/'provenance.json').write_bytes(b'different metadata')
+                with self.assertRaises(AssertionError):runner.current_profile(root,head,web,prov,tools)
+
+    def test_postflight_rejects_changed_tracked_source_helper(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,head,web,prov,tools,node=self.inputs(folder)
+            modules=Path(folder)/'packages'
+            for name in ('playwright','playwright-core'):
+                (modules/name).mkdir(parents=True);(modules/name/'package.json').write_text('{}')
+            (root/'tools/wasm-tests').mkdir();(root/'tools/wasm-tests/node_modules').symlink_to(modules,target_is_directory=True)
+            font=Path(folder)/'font';font.write_text('not used')
+            pre=dict(runner.current_profile(root,head,web,prov,tools),tools=tools,host=str(root),web_shell=str(web),runtime_provenance=str(prov),
+                command=[str(node),'--test','--test-concurrency=1','tools/wasm-tests/unit-body-movement-browser.test.mjs'],
+                dependency_symlink=str(modules),source_files_sha256={name:runner.sha(root/name) for name in ('tools/wasm_assets.py','runner.py')},
+                web_files_sha256={path.name:runner.sha(path) for path in web.iterdir()},driver=str(root/'runner.py'),driver_sha256=runner.sha(root/'runner.py'),
+                node=str(node),node_sha256=runner.sha(node),browser=str(node),browser_sha256=runner.sha(node),fontconfig=str(font),fontconfig_sha256=runner.sha(font),
+                dependency_package_sha256={name:runner.sha(modules/name/'package.json') for name in ('playwright','playwright-core')},dependency_contents_sha256=runner.dependency_contents(modules))
+            runner.unchanged(pre)
+            (root/'tools/wasm_assets.py').write_text('# changed after preparation\n')
+            with self.assertRaisesRegex(AssertionError,'Dirty source'):runner.unchanged(pre)
+
+    def test_tool_replacement_absence_permissions_relative_path_and_outer_python_reject(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'owned-tool';original=b'#!/bin/sh\nexit 0\n';path.write_bytes(original);path.chmod(0o700)
+            pin=runner.tool_pin(path);runner.verify_tool(pin)
+            for variant in ('changed','missing','permissions','relative'):
+                with self.subTest(variant=variant):
+                    path.write_bytes(original);path.chmod(0o700);bad=copy.deepcopy(pin)
+                    if variant=='changed':path.write_bytes(b'#!/bin/sh\nexit 7\n')
+                    if variant=='missing':path.unlink()
+                    if variant=='permissions':path.chmod(0o600)
+                    if variant=='relative':bad['path']='owned-tool'
+                    with self.assertRaises((AssertionError,OSError)):runner.verify_tool(bad)
+            tools={'git':runner.tool_pin(Path(shutil.which('git')).resolve()),'python':runner.tool_pin(Path(shutil.which('node')).resolve())}
+            with self.assertRaisesRegex(AssertionError,'Different outer Python'):runner.verify_tools(tools)
+
+    def test_changed_PATH_cannot_substitute_actual_git_or_python_children(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,head,web,prov,tools,node=self.inputs(folder);sentinels=Path(folder)/'PATH';sentinels.mkdir();marker=Path(folder)/'wrong-tool-used'
+            for name in ('git','python3'):
+                path=sentinels/name;path.write_text('#!/bin/sh\necho wrong > '+shlex.quote(str(marker))+'\nexit 99\n');path.chmod(0o700)
+            env=dict(os.environ,PATH=str(sentinels)+os.pathsep+os.environ.get('PATH',''))
+            # Real old bare-command counterexample, not a game invocation: these
+            # controlled wrappers ignore arguments, mark their use and exit99.
+            for bare in ('git','python3'):
+                old=subprocess.run([bare,'--version'],cwd=root,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=2)
+                self.assertEqual(old.returncode,99);self.assertTrue(marker.exists());marker.unlink()
+            with patch.dict(os.environ,env,clear=True):self.assertEqual(runner.git_read(tools,root,'rev-parse','HEAD'),head)
+            code='const tools='+json.dumps(tools)+';const git=await movementBoundChild(tools.git,["rev-parse","HEAD"],{cwd:'+json.dumps(str(root))+'});const python=await movementBoundChild(tools.python,["-c","print(42)"],{cwd:'+json.dumps(str(root))+'});console.log("RESULT|"+JSON.stringify({git,python}));'
+            result=self.node(code,env)
+            for name in ('git','python'):
+                child=result[name];self.assertEqual(child['command'],tools[name]['path']);self.assertTrue(child['spawned']);self.assertTrue(child['wait_completed']);self.assertTrue(child['tool_unchanged']);self.assertEqual(child['status'],0);self.assertIsNone(child['error'])
+            self.assertEqual(result['git']['stdout'].strip(),head);self.assertEqual(result['python']['stdout'].strip(),'42');self.assertFalse(marker.exists())
+
+    def test_browser_consumes_exact_current_manifest_and_rejects_digest_schema_tools(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,head,web,prov,tools,node=self.inputs(folder)
+            pre=dict(runner.current_profile(root,head,web,prov,tools),tools=tools,node=str(node),node_sha256=runner.sha(node))
+            path=Path(folder)/'preflight.json';cases=[]
+            for variant in ('valid','digest','version','compile-credit','relative-tool','tool-hash','tool-set'):
+                changed=copy.deepcopy(pre)
+                if variant=='version':changed['version']=1
+                if variant=='compile-credit':changed['independent_compile_proof_verified']=True
+                if variant=='relative-tool':changed['tools']['git']['path']='git'
+                if variant=='tool-hash':changed['tools']['python']['sha256']='0'*64
+                if variant=='tool-set':del changed['tools']['git']
+                target=path.with_name(variant+'.json');target.write_text(json.dumps(changed));cases.append([str(target),'0'*64 if variant=='digest' else runner.sha(target)])
+            code='const cases='+json.dumps(cases)+';const values=cases.map(([path,sha])=>{try{return {accepted:true,profile:movementProfile(path,sha).profile};}catch(e){return {accepted:false,error:String(e)};}});console.log("RESULT|"+JSON.stringify(values));'
+            values=self.node(code);self.assertTrue(values[0]['accepted']);self.assertTrue(all(not row['accepted'] for row in values[1:]))
+
+    def test_asset_server_spawn_boundary_uses_pinned_python_without_starting_server(self):
+        pin=runner.tool_pin(Path(sys.executable).resolve())
+        code='import cp from "node:child_process";import{syncBuiltinESMExports}from"node:module";let requested=null;cp.spawn=(command,args,options)=>{requested={command,args,cwd:options.cwd};return {test_only_no_OS_child:true};};syncBuiltinESMExports();const result=movementAssetServer('+json.dumps(pin)+',{web:"/declared-web",assets:"/declared-assets",cwd:"/declared-host"});console.log("RESULT|"+JSON.stringify({requested,declared:result.command,no_child:result.child.test_only_no_OS_child}));'
+        result=self.node(code)
+        self.assertEqual(result['requested'],dict(command=pin['path'],args=['tools/serve-wasm.py','/declared-web','--port','0','--assets','/declared-assets'],cwd='/declared-host'))
+        self.assertEqual(result['requested'],result['declared']);self.assertTrue(result['no_child'])
+
+    def test_absolute_child_receipt_cannot_be_replaced_by_bare_command_or_fake_success(self):
+        tool=runner.tool_pin(Path(sys.executable).resolve())
+        child=dict(command=tool['path'],args=['-c','print(1)'],cwd='/tmp',pid=123,spawned=True,wait_completed=True,status=0,signal=None,error=None,spawn_error_code=None,timed_out=False,cancelled=False,output_limit=False,unknown_wait=False,timeout_ms=10000,term_ms=1000,kill_wait_ms=1000)
+        runner.audited_child(child,tool['path'],child['args'],'/tmp')
+        for key,value in [('command','python3'),('status',True),('spawned',False),('wait_completed',False),('error','spawn EPERM status0')]:
+            with self.subTest(key=key),self.assertRaises(AssertionError):runner.audited_child(dict(child,**{key:value}),tool['path'],child['args'],'/tmp')
+
+    def test_generated_movement_inputs_and_budgets_still_equal_historical_case(self):
+        values=self.node('import{createHash}from"node:crypto";const h=v=>createHash("sha256").update(v).digest("hex");console.log("RESULT|"+JSON.stringify({main:h(movementMain),world:h(movementWorld),terrain:h(movementTerrain()),budgets:movementBudgets}));')
+        self.assertEqual(values['main'],'1a709eae23b96d02d7359e98775458fcd8a97c92adc46a667566657e03dbfd8d')
+        self.assertEqual(values['world'],'614964b356e649998aea9cd72cbef780f3aa087cc220117c585976d59e4df27d')
+        self.assertEqual(values['terrain'],'a2bac027296c614e8bf036a350d5bc5e6e0db2605af8a51eb27a84fb0756f5f8')
+        self.assertEqual(values['budgets'],runner.BUDGETS)
 
 if __name__=='__main__':unittest.main()
