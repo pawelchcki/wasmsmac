@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {combine,plan,snapshotAt} from './gse-shards.mjs';
+import {censusTestName,combine,nativeCensusEvidence,plan,snapshotAt} from './gse-shards.mjs';
 import {fileURLToPath} from 'node:url';
 import {readFileSync} from 'node:fs';
 import {matchesGlob} from 'node:path';
@@ -10,7 +10,13 @@ const source={'GLSMAC_data/default/main.gls.js':'production',
   'GLSMAC_data/tests/nested/input.gls.js':'support',
   ...Object.fromEntries(['a','b','c','d','e'].map(n=>[`GLSMAC_data/tests/${n}.gls.js`,n]))};
 const runtime={'GLSMAC.js':'a'.repeat(64),'GLSMAC.wasm':'b'.repeat(64)};
-const fixture=()=>[1,2].map(index=>({version:1,completed:true,native_engine_tests:true,
+// Synthetic protocol inputs only: these strings never prove native execution.
+const nativeFacts=()=>({binding_calls:19,invalid_calls:11,complete_copies:5,owners:2,units:3,
+  checks_including_retirement:123,synthetic_texture_inputs:true,normal_startup:false,gpu_pixels:false});
+const nativeOutput=()=>({close_observed:true,status:0,signal:null,error:null,stderr:'',
+  stdout:`  test if tests work...\n  ${censusTestName}...\nUNIT_BODY_CENSUS_NATIVE|${JSON.stringify(nativeFacts())}\n  Another registered test...\nAll tests passed.\n`});
+const nativeReport=()=>{const observed=nativeOutput();return {native_result:observed,native_census:nativeCensusEvidence(observed)};};
+const fixture=()=>[1,2].map(index=>({version:2,completed:true,native_engine_tests:true,...nativeReport(),
   partition:{index,count:2},source_sha256:plan(source).source_sha256,
   runtime_sha256:{...runtime},scripts:plan(source,index,2).selected}));
 
@@ -65,7 +71,7 @@ test('four-way resource profile keeps every actual script and helper exactly onc
   for(const part of parts)for(const [name,value] of Object.entries(actual)){
     if(!/^GLSMAC_data\/tests\/[^_/][^/]*\.gls\.js$/.test(name))assert.equal(part.mounted[name],value);
   }
-  const reports=parts.map(part=>({version:1,completed:true,native_engine_tests:true,
+  const reports=parts.map(part=>({version:2,completed:true,native_engine_tests:true,...nativeReport(),
     partition:{index:part.index,count:4},source_sha256:part.source_sha256,
     runtime_sha256:{...runtime},scripts:part.selected}));
   assert.deepEqual(combine(reports,actual,4).scripts,all);
@@ -93,4 +99,85 @@ test('complete GSE PR path filters include actual collection implementation and 
     'tools/wasm-tests/gse-full-worker.cjs','.github/workflows/wasm.yml'])assert.ok(selected(path),path);
   for(const path of ['docs/notes.md','src/common/Unrelated.cpp','tools/wasm-tests/unrelated.mjs'])
     assert.equal(selected(path),false,path);
+});
+
+test('native Census protocol requires its own registered block and post-retirement facts',()=>{
+  const observed=nativeOutput(),evidence=nativeCensusEvidence(observed);
+  assert.deepEqual(evidence.marker,nativeFacts());
+  assert.ok(evidence.test_header_line<evidence.marker_line);
+  assert.ok(evidence.marker_line<evidence.next_test_header_line);
+  assert.ok(evidence.next_test_header_line<evidence.native_footer_line);
+  const combined=combine(fixture(),source,2);
+  assert.equal(combined.native_census.partitions.length,2);
+  assert.match(combined.native_census.scope,/Repeated same synthetic/);
+});
+
+test('missing duplicate or unanchored native records cannot supply Census evidence',()=>{
+  const original=nativeOutput(),header=`  ${censusTestName}...`,marker=`UNIT_BODY_CENSUS_NATIVE|${JSON.stringify(nativeFacts())}`;
+  for(const record of [header,marker,'All tests passed.']) {
+    for(const change of [text=>text.replace(record,''),text=>text.replace(record,`${record}\n${record}`),
+      text=>text.replace(record,`source echo: ${record}`)]) {
+      const observed={...original,stdout:change(original.stdout)};
+      assert.throws(()=>nativeCensusEvidence(observed),record);
+    }
+  }
+});
+
+test('a marker emitted by a later test or script is not the Census test result',()=>{
+  const marker=`UNIT_BODY_CENSUS_NATIVE|${JSON.stringify(nativeFacts())}`;
+  for(const stdout of [
+    `${marker}\n  ${censusTestName}...\nAll tests passed.\n`,
+    `  ${censusTestName}...\n  Another native test...\n${marker}\nAll tests passed.\n`,
+    `  ${censusTestName}...\n  testing ./GLSMAC_data/tests/example.gls.js...\n${marker}\nAll tests passed.\n`,
+    `  ${censusTestName}...\nAll tests passed.\n${marker}\n`,
+  ])assert.throws(()=>nativeCensusEvidence({...nativeOutput(),stdout}));
+});
+
+test('Census marker schema counts native types and declared limitations stay strict',()=>{
+  for(const [key,value] of [
+    ['binding_calls',18],['invalid_calls',10],['complete_copies',4],['owners',7],['units',9],
+    ['binding_calls','19'],['owners',true],['checks_including_retirement',0],
+    ['checks_including_retirement',true],['checks_including_retirement',1.5],
+    ['checks_including_retirement',Number.MAX_SAFE_INTEGER+1],
+    ['normal_startup',true],['gpu_pixels',true],['synthetic_texture_inputs',false],
+  ]) {
+    const facts={...nativeFacts(),[key]:value};
+    assert.throws(()=>nativeCensusEvidence({...nativeOutput(),
+      stdout:nativeOutput().stdout.replace(JSON.stringify(nativeFacts()),JSON.stringify(facts))}),key);
+  }
+  for(const value of [null,[],{}, {...nativeFacts(),extra:true},
+    Object.fromEntries(Object.entries(nativeFacts()).filter(([key])=>key!=='checks_including_retirement'))]) {
+    assert.throws(()=>nativeCensusEvidence({...nativeOutput(),
+      stdout:nativeOutput().stdout.replace(JSON.stringify(nativeFacts()),JSON.stringify(value))}));
+  }
+  assert.throws(()=>nativeCensusEvidence({...nativeOutput(),
+    stdout:nativeOutput().stdout.replace(JSON.stringify(nativeFacts()),'{invalid JSON')}));
+});
+
+test('native text cannot replace actual worker close exit and error evidence',()=>{
+  for(const delta of [{close_observed:false},{close_observed:undefined},{status:1},{status:null},
+    {status:true},{status:'0'},{signal:'SIGTERM'},{error:{}},{error:'spawn failed status0'}]) {
+    assert.throws(()=>nativeCensusEvidence({...nativeOutput(),...delta}));
+  }
+  for(const stream of ['stdout','stderr'])for(const failure of [
+    'TEST FAILED','Testing complete, passed: 1, failed: 1','UNIT_BODY_CENSUS_CLEANUP_ERROR|retirement',
+  ])assert.throws(()=>nativeCensusEvidence({...nativeOutput(),[stream]:nativeOutput()[stream]+failure}));
+  for(const stderr of ['RuntimeError: native abort','[Error] copy failure','Error: node failed',
+    'TypeError: bad input','Pthread 2 sent an error!']) {
+    assert.throws(()=>nativeCensusEvidence({...nativeOutput(),stderr}));
+  }
+  assert.throws(()=>nativeCensusEvidence({...nativeOutput(),stderr:'x'.repeat(10*1024*1024+1)}));
+});
+
+test('aggregate reparses every retained native output instead of trusting case flags',()=>{
+  for(const change of [report=>{report.version=1;},report=>{delete report.native_result;},
+    report=>{delete report.native_census;},report=>{report.native_result.status=3;},
+    report=>{report.native_result.stdout=report.native_result.stdout.replace('UNIT_BODY_CENSUS_NATIVE|','omitted|');},
+    report=>{report.native_result.stdout+='benign but different retained text\n';},
+    report=>{report.native_census.marker.binding_calls=20;},
+    report=>{report.native_census.stdout_sha256='0'.repeat(64);},
+    report=>{report.native_result.close_observed=false;}]) {
+    const reports=fixture();change(reports[1]);
+    assert.throws(()=>combine(reports,source,2));
+  }
 });
