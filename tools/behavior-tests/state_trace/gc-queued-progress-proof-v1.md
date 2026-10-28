@@ -40,3 +40,9 @@ world-single-player-setup --timeout 120 --jobs 1 --runtime PATH/GLSMAC.js
 
 Fresh complete affected-partition and PR gates remain required before delivery.
 Passing these bounded checks does not establish Main health or full game fidelity.
+
+## Exact-head full GSE evidence
+
+The separately retained [full GSE audit](gc-queued-progress-full-gse-v1.json) records run [40601834211](https://github.com/pawelchcki/wasmsmac/actions/runs/40601834211) at head `38045387a976589bec83f0e84b178f716fe6c4dc`: all four partitions and coverage passed, with the exact 189-script union (48/47/44/50), the concurrent progress regression registered in each native run, and all 15 startup cases passed in partition 1. Six downloaded ZIP hashes match GitHub artifact digests. Actual CI Node was v22.16.0; the runtime hashes were measured from the downloaded bytes. The cached engine artifact has no compiler-source manifest, so the binding is the exact-head workflow/cache recipe and executed current-source regression, without assuming equality to the local runtime. Worker exit zero is supported by the executed strict close-status assertion before each completed report and successful step; no separate OS-status artifact was emitted.
+
+This append preserves the old red and local green evidence. It records historical verification only; fresh CI, review, and required review-check publication remain mandatory for the resulting head. No Main-health or gameplay-deadlock conclusion follows from this artifact audit.
