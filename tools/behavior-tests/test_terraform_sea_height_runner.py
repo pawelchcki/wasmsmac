@@ -176,6 +176,98 @@ class SeaPreparationTests(unittest.TestCase):
 
 
 class SeaOwnedChildTests(unittest.TestCase):
+    def escape_code(self, parent_delay=0):
+        return """import os,time
+r,w=os.pipe();child=os.fork()
+if child==0:
+ os.close(r);os.setsid();os.write(w,b'x');os.close(w);time.sleep(10)
+else:
+ os.close(w);os.read(r,1);os.close(r);print('ESCAPED|'+str(child),flush=True);time.sleep(""" + str(parent_delay) + ")\n"
+
+    def assert_escape_waited(self, result, raw):
+        child = int(raw.decode().strip().split('|')[1])
+        self.assertTrue(result['actual_wait_returned']); self.assertTrue(result['forced_cleanup'])
+        self.assertTrue(result['owned_group_absent']); self.assertTrue(result['observed_owned_session_absent'])
+        self.assertTrue(result['known_owned_identities_absent']); self.assertTrue(result['ownership_supported'])
+        self.assertEqual(result['remaining_owned_identities'], []); self.assertEqual(result['unresolved_adopted_children'], [])
+        actual = next(row for row in result['adopted_children_actual_waits'] if row['pid'] == child)
+        self.assertIsInstance(actual['start_ticks'], int); self.assertTrue(os.WIFSIGNALED(actual['wait_status']))
+        observed = next(row for row in result['owned_identity_provenance'] if row['pid'] == child)
+        self.assertIn(child, observed['observed_sessions']); self.assertNotEqual(child, result['session_id'])
+        self.assertTrue(result['subreaper_restored'])
+
+    def test_setsid_orphan_after_closed_root_is_adopted_and_actually_waited(self):
+        result, raw = self.run_child(self.escape_code())
+        self.assertEqual(result['actual_os_process_exit_code'], 0)
+        self.assert_escape_waited(result, raw)
+
+    def test_timeout_setsid_tree_keeps_true_leader_wait_separate_from_native(self):
+        result, raw = self.run_child(self.escape_code(10), timeout=1)
+        self.assertTrue(result['outer_timed_out']); self.assertLess(result['actual_os_process_exit_code'], 0)
+        self.assert_escape_waited(result, raw)
+        self.assertNotIn('native_app_exit', result)
+
+    def test_observed_escape_with_unrelated_baseline_preserves_that_child(self):
+        unrelated = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(10)'])
+        try:
+            result, raw = self.run_child(self.escape_code(.2))
+            self.assert_escape_waited(result, raw)
+            self.assertIsNone(unrelated.poll())
+            self.assertNotIn(unrelated.pid, [row['pid'] for row in result['adopted_children_actual_waits']])
+        finally:
+            unrelated.terminate(); unrelated.wait(timeout=2)
+
+    def test_unproven_unreadable_and_reused_adoptees_never_authorize_signal_or_wait(self):
+        def row(pid,start,parent,session): return dict(pid=pid,start_ticks=start,parent=parent,session=session,group=session)
+        for mode in ('ambiguous', 'unreadable', 'reused'):
+            scope=dict(owner=999,known={100:1},foreign={200:2},provenance={100:'actual-Popen-leader'},sessions={},adoption_allowed=False,unsupported=set(),unresolved=[],waited_adopted=[],root_start=1)
+            table={100:row(100,1,999,100),200:row(200,2,999,999)}
+            if mode!='unreadable': table[300]=row(300,3,999,300)
+            if mode=='reused': scope['known'][300]=4
+            with self.subTest(mode=mode),patch.object(runner,'process_table',return_value=table),patch.object(runner,'direct_children',return_value={100,200,300}),patch.object(runner.os,'kill') as kill,patch.object(runner.os,'waitpid',return_value=(0,0)) as wait:
+                self.assertEqual(runner.members(100,scope),[{'pid':100,'start_ticks':1}])
+                runner.signal_members(100,15,scope);runner.reap(100,scope)
+                self.assertTrue(scope['unsupported'])
+                self.assertTrue(all(call.args[0]==100 for call in kill.call_args_list))
+                self.assertTrue(all(call.args[0]==100 for call in wait.call_args_list))
+                if mode=='reused': self.assertEqual(scope['known'][300],4)
+                else: self.assertEqual(scope['unresolved'][0]['pid'],300)
+
+    def test_missing_child_observation_is_unsupported_not_an_empty_owned_tree(self):
+        scope=dict(owner=999,known={100:1},foreign={},provenance={100:'actual-Popen-leader'},sessions={},adoption_allowed=True,unsupported=set(),unresolved=[],waited_adopted=[],root_start=1)
+        table={100:dict(pid=100,start_ticks=1,parent=999,session=100,group=100)}
+        with patch.object(runner,'process_table',return_value=table),patch.object(runner,'direct_children',return_value=None),patch.object(runner.os,'kill') as kill:
+            self.assertEqual(runner.members(100,scope),[{'pid':100,'start_ticks':1}])
+            self.assertIn('direct-child-observation-unavailable',scope['unsupported'])
+            self.assertEqual(scope['unresolved'],[{'pid':None,'start_ticks':None}])
+            runner.signal_members(100,15,scope)
+            self.assertTrue(all(call.args[0]==100 for call in kill.call_args_list))
+        with patch.object(runner,'direct_children',return_value=None),self.assertRaisesRegex(RuntimeError,'before launch'):
+            runner.new_ownership()
+
+    def test_unreadable_leader_still_reaps_actual_Popen_without_clean_certificate(self):
+        actual = runner.process_table
+        def hidden_new_child(): return {pid:row for pid,row in actual().items() if row['parent']!=os.getpid()}
+        with patch.object(runner,'process_table',side_effect=hidden_new_child):
+            result, _ = self.run_child('import time;time.sleep(10)')
+        self.assertTrue(result['actual_wait_returned']); self.assertTrue(result['owned_group_absent'])
+        self.assertIsInstance(result['pid'],int)
+        self.assertFalse(result['ownership_supported']); self.assertFalse(result['known_owned_identities_absent'])
+        self.assertIn('unreadable-owned-leader',result['ownership_unsupported_reasons'])
+        self.assertTrue(result['subreaper_restored'])
+
+    def test_preexisting_unrelated_zombie_is_not_reaped_by_outer_runner(self):
+        unrelated = subprocess.Popen([sys.executable,'-c',"import sys;print('ready',flush=True);sys.exit(7)"],stdout=subprocess.PIPE)
+        try:
+            self.assertEqual(unrelated.stdout.readline(),b'ready\n')
+            result, _ = self.run_child("print('owned only')")
+            self.assertTrue(result['known_owned_identities_absent'])
+            self.assertNotIn(unrelated.pid,[row['pid'] for row in result['adopted_children_actual_waits']])
+            self.assertEqual(unrelated.wait(timeout=2),7)
+        finally:
+            if unrelated.poll() is None: unrelated.kill();unrelated.wait(timeout=2)
+            unrelated.stdout.close()
+
     def test_same_session_descendant_with_new_group_is_terminated_and_reaped(self):
         code = """import os,time
 r,w=os.pipe();child=os.fork()
@@ -195,7 +287,7 @@ else:
     def test_reused_start_identity_is_not_signalled(self):
         with patch.object(runner, 'members', side_effect=[[{'pid': 101, 'start_ticks': 1}],
                                                          [{'pid': 101, 'start_ticks': 2}]]), patch.object(runner.os, 'kill') as kill:
-            runner.signal_members(100, 15)
+            runner.signal_members(100, 15, {})
         kill.assert_not_called()
 
     def run_child(self, code, timeout=2):
