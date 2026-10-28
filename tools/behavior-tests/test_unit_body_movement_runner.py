@@ -62,6 +62,54 @@ class MovementRunnerTests(unittest.TestCase):
         self.assertIn(b'All tests passed.',raw)
         with tempfile.TemporaryDirectory() as directory,self.assertRaises(AssertionError):runner.audit({},result,Path(directory))
 
+    def test_successful_synthetic_outer_audit_returns_mover_without_inventing_selection(self):
+        # Full return-path model, not an OS/native execution receipt. Keep the
+        # real child-receipt, transport, equality and movement-effect checks;
+        # only the existing synthetic terrain schema boundary is stubbed.
+        from test_unit_body_movement_proof import fixture,text,acceptance
+        from state_trace import unit_body_movement_proof as movement
+        from state_trace import unit_body_census_proof as static
+        log=text(fixture());control=acceptance(log);digest=hashlib.sha256(log.encode()).hexdigest()
+        with tempfile.TemporaryDirectory() as folder,patch.object(static.terrain_observation,'validate_snapshot',side_effect=lambda world:world) as terrain:
+            out=Path(folder);host=Path(__file__).resolve().parents[2]
+            proof=movement.evaluate(log,control)
+            # This is the exact old final-return lookup, after all proof gates.
+            with self.assertRaises(KeyError):proof['selected_unit_id']
+            tools={name:{'path':'/synthetic-only/'+name,'sha256':'a'*64} for name in ('git','python')}
+            pre=dict(tools=tools,host=str(host),web_shell='/synthetic-web',assets='/synthetic-assets',
+                preflight_sha256_for_audit='a'*64,asset_manifest_id='model-assets',native_tree='b'*40,default_tree='c'*40,
+                production_default_files={'GLSMAC_data/default/main.gls.js':{'sha256':'d'*64,'mode':'100644'}},production_default_sha256='e'*64,
+                runtime_provenance_sha256='f'*64,runtime={'GLSMAC.js':'1'*64,'GLSMAC.wasm':'2'*64},head='3'*40,
+                fixture_sha256=dict(main='4'*64,world='5'*64,terrain='6'*64),budgets=dict(runner.BUDGETS),
+                runtime_sampling_trigger='synthetic fixed samples',endpoint_gate='synthetic actual endpoints')
+            def child(command,args,cwd):
+                return dict(command=command,args=args,cwd=str(cwd),pid=123,spawned=True,wait_completed=True,status=0,signal=None,error=None,
+                    spawn_error_code=None,timed_out=False,cancelled=False,output_limit=False,unknown_wait=False,
+                    timeout_ms=10000,term_ms=1000,kill_wait_ms=1000,tool_unchanged=True)
+            git_args=[['rev-parse','HEAD:src'],['rev-parse','HEAD:GLSMAC_data/default'],['diff','--exit-code','HEAD','--','src','GLSMAC_data/default'],['ls-files','--others','--exclude-standard','--','src','GLSMAC_data/default'],['rev-parse','HEAD']]
+            children=[child(tools['git']['path'],args,host) for args in git_args]
+            evaluator=child(tools['python']['path'],['-m','state_trace.unit_body_movement_proof',str(out/'application.log'),str(out/'receipt-acceptance.json'),str(out/'movement-result.json')],host/'tools/behavior-tests')
+            report=dict(status='complete-native-movement-census-match',native_complete=True,native_raw_exit_code=0,server_reaped=True,asset_server_pid=124,
+                tool_executables=tools,preflight_sha256=pre['preflight_sha256_for_audit'],runtime_binding='metadata-consistent',independent_compile_proof_verified=False,fidelity_passing_cases=0,
+                asset_server_command=dict(command=tools['python']['path'],args=['tools/serve-wasm.py',pre['web_shell'],'--port','0','--assets',pre['assets']],cwd=str(host)),
+                asset_server_exit=dict(code=0,signal=None),browser_errors=[],manifest_id=pre['asset_manifest_id'],native_source_tree=pre['native_tree'],
+                production_default_tree=pre['default_tree'],production_default_files=pre['production_default_files'],production_default_sha256=pre['production_default_sha256'],
+                runtime_provenance_sha256=pre['runtime_provenance_sha256'],runtime_js_sha256=pre['runtime']['GLSMAC.js'],runtime_wasm_sha256=pre['runtime']['GLSMAC.wasm'],
+                host_head=pre['head'],fixture_main_sha256=pre['fixture_sha256']['main'],fixture_world_sha256=pre['fixture_sha256']['world'],declared_input=dict(map_bytes_sha256=pre['fixture_sha256']['terrain']),
+                budgets=pre['budgets'],native_watchdog_supported=False,runtime_sampling_trigger=pre['runtime_sampling_trigger'],endpoint_gate=pre['endpoint_gate'],
+                setup_children=children,evaluator_process=evaluator,evaluator_exit_code=0,evaluator_error=None,evaluator_signal=None,
+                log_transport=dict(sealed=True,partial=False,settled_failure=None,raw_sha256=digest,joined_chunk_sha256=digest,retained_utf8=len(log.encode())),movement_result=proof)
+            (out/'report.json').write_text(json.dumps(report));(out/'application.log').write_text(log)
+            (out/'receipt-acceptance.json').write_text(json.dumps(control));(out/'movement-result.json').write_text(json.dumps(proof))
+            (out/'application-log-chunks.jsonl').write_text(json.dumps(dict(control['acquisition'][0],text=log))+'\n')
+            (out/'setup-processes.jsonl').write_text(''.join(json.dumps(row)+'\n' for row in children))
+            for name in ('node.log','asset-server.stdout','asset-server.stderr'):(out/name).write_text('Synthetic model only; no child or candidate started.\n')
+            outer=dict(raw_node_exit=0,os_wait_completed=True,outer_timeout=False,owned_group_after_cleanup='absent',tracked_descendants_after_cleanup=[],forced_cleanup=False,postrun_bindings_match=True)
+            result=runner.audit(pre,outer,out)
+            self.assertEqual(terrain.call_count,4);self.assertEqual(result['moving_unit_id'],8);self.assertNotIn('selected_unit_id',result)
+            self.assertEqual(result['census_reads'],32);self.assertEqual(result['log_sha256'],digest)
+            self.assertEqual(len(result['artifact_sha256']),9);self.assertFalse(proof['candidate_executed'])
+
     def test_real_deadline_term_and_kill_oswait_are_bounded(self):
         result,raw=self.child("import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);print('ready-only',flush=True);time.sleep(10)",outer_seconds=.2)
         self.assertTrue(result['outer_timeout']);self.assertTrue(result['forced_cleanup']);self.assertTrue(result['os_wait_completed'])

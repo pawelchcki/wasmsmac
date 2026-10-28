@@ -315,7 +315,7 @@ def audit(pre,result,out):
     proof=evaluate(text,acceptance)
     assert canonical(proof)==canonical(report['movement_result'])==canonical(decode_json((out/'movement-result.json').read_text()))
     return {'actual_native_exit':0,'log_sha256':digest,'log_bytes':len(raw),'chunk_count':chunks,
-            'selected_unit_id':proof['selected_unit_id'],'unit_count':proof['unit_count'],'census_reads':proof['census_reads'],'sampled_intermediate_ordinals':proof['sampled_intermediate_ordinals'],
+            'moving_unit_id':proof['moving_unit_id'],'unit_count':proof['unit_count'],'census_reads':proof['census_reads'],'sampled_intermediate_ordinals':proof['sampled_intermediate_ordinals'],
             'asset_server_pid':report['asset_server_pid'],'asset_server_exit':report['asset_server_exit'],
             'artifact_sha256':{name:sha(out/name) for name in ('report.json','application.log','application-log-chunks.jsonl',
                  'receipt-acceptance.json','movement-result.json','setup-processes.jsonl','node.log','asset-server.stdout','asset-server.stderr')}}
