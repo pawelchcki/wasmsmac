@@ -13,7 +13,7 @@ const sources = [
   '../../src/common/Common.cpp',
   '../../src/engine/Engine.cpp',
   '-I../../src',
-  '-std=c++17',
+  '-std=c++23',
   '-O1',
   '-g',
   '-DFASTDEBUG=1',

@@ -1,0 +1,21 @@
+# Reuse the production-code regression probes; no alternative thread/buffer model.
+FOREACH( PROBE thread-runtime buffer-copy )
+	IF ( PROBE STREQUAL "thread-runtime" )
+		SET( PRODUCTION_SOURCES common/Thread.cpp common/Common.cpp engine/Engine.cpp )
+	ELSE ()
+		SET( PRODUCTION_SOURCES types/Buffer.cpp common/Common.cpp )
+	ENDIF ()
+	LIST( TRANSFORM PRODUCTION_SOURCES PREPEND "${PROJECT_SOURCE_DIR}/src/" )
+	ADD_EXECUTABLE( ${PROBE} "${PROJECT_SOURCE_DIR}/tools/wasm-tests/${PROBE}.cpp" ${PRODUCTION_SOURCES} )
+	GLSMAC_CONFIGURE_TARGET( ${PROBE} )
+	TARGET_INCLUDE_DIRECTORIES( ${PROBE} PRIVATE "${PROJECT_SOURCE_DIR}/src" )
+	# Keep assertions active in optimized configurations, too.
+	TARGET_COMPILE_OPTIONS( ${PROBE} PRIVATE -UNDEBUG -ffunction-sections -fdata-sections )
+	TARGET_LINK_OPTIONS( ${PROBE} PRIVATE -Wl,--gc-sections )
+	ADD_TEST( NAME ${PROBE} COMMAND ${PROBE} )
+	SET_TESTS_PROPERTIES( ${PROBE} PROPERTIES TIMEOUT 30 )
+ENDFOREACH()
+
+ADD_EXECUTABLE( cpp-standard standard.cpp )
+GLSMAC_CONFIGURE_TARGET( cpp-standard )
+ADD_TEST( NAME cpp-standard COMMAND cpp-standard )
