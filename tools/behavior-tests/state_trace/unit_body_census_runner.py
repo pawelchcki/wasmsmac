@@ -29,6 +29,7 @@ if not __debug__ or sys.flags.optimize or "PYTHONOPTIMIZE" in os.environ:
 if __package__ in (None, ""):
     # Keep direct file CLI imports on the behavior-tests parent module path.
     sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from state_trace.unit_body_census_preflight import dependency_contents
 
 
 
@@ -80,6 +81,10 @@ def group_probe(pgid):
     except PermissionError:return 'permission-denied'
 
 
+def unchanged_dependencies(pre):
+    assert dependency_contents(Path(pre['dependency_symlink']))==pre['dependency_contents_sha256'], 'Executable dependency contents changed'
+
+
 def unchanged(pre):
     root=Path(pre['host']);web=Path(pre['web_shell'])
     assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()==pre['head']
@@ -93,6 +98,7 @@ def unchanged(pre):
     assert sha(Path(pre['node']))==pre['node_sha256'] and sha(Path(pre['browser']))==pre['browser_sha256']
     assert sha(Path(pre['fontconfig']))==pre['fontconfig_sha256']
     assert all(sha(Path(pre['dependency_symlink'])/name/'package.json')==value for name,value in pre['dependency_package_sha256'].items())
+    unchanged_dependencies(pre)
 
 
 def audit_chunks(text,lines):
