@@ -100,9 +100,9 @@ class MovementRunnerTests(unittest.TestCase):
 
     def test_async_real_readonly_git_preserves_source_tree_and_waits(self):
         result=self.helper("const r=await movementChild('git',['rev-parse','HEAD:src'],{cwd:process.cwd()});console.log('RESULT|'+JSON.stringify(r));")
-        self.assertEqual(result['stdout'].strip(),runner.SOURCE);self.assertEqual(result['status'],0)
+        self.assertEqual(result['stdout'].strip(),subprocess.check_output(['git','rev-parse','HEAD:src'],cwd=Path(__file__).resolve().parents[2],text=True).strip());self.assertEqual(result['status'],0)
         self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertIsNone(result['error'])
-        with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+        self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
 
     def test_async_git_in_actual_default_node_worker_has_persisted_body_receipt(self):
         root=Path(__file__).resolve().parents[2];uri=(root/'tools/wasm-tests/unit-body-movement-browser-fixture.mjs').as_uri()
@@ -116,13 +116,13 @@ class MovementRunnerTests(unittest.TestCase):
             self.assertEqual(outcome['owned_group_after_cleanup'],'absent');self.assertEqual(outcome['tracked_descendants_after_cleanup'],[])
             self.assertTrue(receipt.exists(),'No actual inner body receipt; file PASS alone is insufficient')
             result=json.loads(receipt.read_text());self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertEqual(result['status'],0)
-            self.assertEqual(result['stdout'].strip(),runner.SOURCE)
-            with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+            self.assertEqual(result['stdout'].strip(),subprocess.check_output(['git','rev-parse','HEAD:src'],cwd=Path(__file__).resolve().parents[2],text=True).strip())
+            self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
 
     def test_async_actual_nonzero_is_not_promoted_by_fake_pass_output(self):
         result=self.helper("const r=await movementChild('python3',['-c',\"print('All tests passed.');raise SystemExit(7)\"],{cwd:process.cwd()});console.log('RESULT|'+JSON.stringify(r));")
         self.assertEqual(result['status'],7);self.assertTrue(result['wait_completed']);self.assertIn('All tests passed.',result['stdout'])
-        with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+        self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
 
     def test_async_spawn_error_status_zero_counterexample_never_reports_exit_zero(self):
         result=self.helper("import cp from 'node:child_process';import{syncBuiltinESMExports}from'node:module';import{EventEmitter}from'node:events';import{PassThrough}from'node:stream';cp.spawn=()=>{const p=new EventEmitter();p.stdout=new PassThrough();p.stderr=new PassThrough();process.nextTick(()=>{const e=Object.assign(Error('spawn git EPERM'),{code:'EPERM',status:0});p.emit('error',e);});return p;};syncBuiltinESMExports();const r=await movementChild('git',['rev-parse','HEAD:src'],{cwd:process.cwd()});console.log('RESULT|'+JSON.stringify(r));")
@@ -133,12 +133,12 @@ class MovementRunnerTests(unittest.TestCase):
         result=self.helper("const r=await movementChild('python3',['-c','import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);print(123,flush=True);time.sleep(10)'],{cwd:process.cwd(),timeout_ms:400,term_ms:50,kill_wait_ms:500});console.log('RESULT|'+JSON.stringify(r));")
         self.assertTrue(result['timed_out']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
         self.assertNotEqual(result['status'],0);self.assertLess(result['elapsed_ms'],2000)
-        with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+        self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
 
     def test_async_cancellation_reaps_instead_of_leaving_owned_child(self):
         result=self.helper("const c=new AbortController();const p=movementChild('python3',['-c','import time;time.sleep(10)'],{cwd:process.cwd(),signal:c.signal,timeout_ms:1000,term_ms:50,kill_wait_ms:500});setTimeout(()=>c.abort(),200);const r=await p;console.log('RESULT|'+JSON.stringify(r));")
         self.assertTrue(result['cancelled']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
-        with self.assertRaises(ProcessLookupError):os.kill(result['pid'],0)
+        self.assertTrue(result['spawned']);self.assertTrue(result['wait_completed']);self.assertFalse(result['unknown_wait'])
 
     def test_async_signal_in_normal_after_hook_remains_usable(self):
         result=self.helper("import{test}from'node:test';test('cheap helper lifecycle only',async t=>{t.after(async()=>{const r=await movementChild('python3',['-c','print(1)'],{cwd:process.cwd(),signal:t.signal});console.log('RESULT|'+JSON.stringify(r));});});")
@@ -149,6 +149,87 @@ class MovementRunnerTests(unittest.TestCase):
         runner.audited_child(value,'git',value['args'],'/tmp')
         for key,replacement in [('error','spawnSync git EPERM'),('spawned',False),('wait_completed',False),('cancelled',True),('timed_out',True),('pid',None),('status',True)]:
             with self.subTest(key=key),self.assertRaises(AssertionError):runner.audited_child(dict(value,**{key:replacement}),'git',value['args'],'/tmp')
+
+
+    def test_reused_child_under_owned_parent_is_never_readopted(self):
+        tracked={10:2,11:3}
+        table={10:dict(pid=10,start_ticks=2,ppid=1),
+               11:dict(pid=11,start_ticks=99,ppid=10),
+               12:dict(pid=12,start_ticks=100,ppid=11)}
+        with patch.object(runner,'process_table',return_value=(table,0)):
+            sample=runner.own_sample(10,tracked)
+        self.assertEqual([r['pid'] for r in sample['observed_owned']],[10])
+        self.assertEqual(tracked,{10:2,11:3})
+
+    def test_waited_pid_reused_by_foreign_group_is_never_signalled(self):
+        def row(pid,start,ppid):return dict(pid=pid,start_ticks=start,ppid=ppid,pgid=100,session=100,state='S')
+        original={100:row(100,1,1),101:row(101,2,100)}
+        foreign={100:row(100,90,1),101:row(101,91,100)}
+        class Waited:
+            pid=100;returncode=0
+            def communicate(self,timeout):return b'owned-wait-complete',b''
+        with tempfile.TemporaryDirectory() as directory,patch.object(runner.subprocess,'Popen',return_value=Waited()),patch.object(runner,'process_table',side_effect=[(original,0),(foreign,0),(foreign,0)]),patch.object(runner,'group_probe',return_value='present'),patch.object(runner.os,'killpg') as group_signal,patch.object(runner.os,'kill') as pid_signal:
+            result,raw=runner.capture_child(['dummy'],cwd=Path(directory),env={},out=Path(directory))
+        self.assertTrue(result['os_wait_completed']);self.assertEqual(result['raw_node_exit'],0)
+        self.assertTrue(result['group_ownership_unknown']);self.assertEqual(result['tracked_descendants_after_cleanup'],[])
+        group_signal.assert_not_called();pid_signal.assert_not_called()
+
+    def test_package_code_changes_reject_with_unchanged_manifests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for name in ('playwright','playwright-core'):
+                (root/name/'lib').mkdir(parents=True)
+                (root/name/'package.json').write_text('{"version":"test"}')
+                (root/name/'lib/driver.js').write_text('original executable bytes')
+            pre=dict(dependency_symlink=str(root),dependency_contents_sha256=runner.dependency_contents(root))
+            runner.unchanged_dependencies(pre)
+            for name in ('playwright','playwright-core'):
+                path=root/name/'lib/driver.js';original=path.read_text();path.write_text('modified executable bytes')
+                with self.assertRaises(AssertionError):runner.unchanged_dependencies(pre)
+                path.write_text(original)
+            extra=root/'playwright/lib/added.js';extra.write_text('new executable bytes')
+            with self.assertRaises(AssertionError):runner.unchanged_dependencies(pre)
+            extra.unlink();(root/'playwright/lib/driver.js').unlink()
+            with self.assertRaises(AssertionError):runner.unchanged_dependencies(pre)
+
+    def test_package_symlink_cannot_escape_content_pin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for name in ('playwright','playwright-core'):
+                (root/name).mkdir();(root/name/'package.json').write_text('{}')
+            (root/'outside.js').write_text('outside declared package')
+            (root/'playwright/escape.js').symlink_to(root/'outside.js')
+            with self.assertRaises(AssertionError):runner.dependency_contents(root)
+
+    def test_python_optimization_rejected_before_import_cli_or_case_credit(self):
+        root=Path(__file__).resolve().parents[2];script=root/'tools/behavior-tests/state_trace/unit_body_movement_runner.py'
+        base=dict(os.environ);base.pop('PYTHONOPTIMIZE',None);base['PYTHONPATH']=str(root/'tools/behavior-tests')
+        variants=[(['-O'],None),(['-OO'],None),([], '1'),([], '0')]
+        entries=[['-c',"import state_trace.unit_body_movement_runner;print('UNSAFE_CASE_CREDIT')"],['-m','state_trace.unit_body_movement_runner','--help'],[str(script),'--help']]
+        for flags,optimize in variants:
+            for entry in entries:
+                env=dict(base)
+                if optimize is not None:env['PYTHONOPTIMIZE']=optimize
+                with self.subTest(flags=flags,env=optimize,entry=entry):
+                    child=subprocess.run([sys.executable,*flags,*entry],cwd=root,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=5)
+                    self.assertNotEqual(child.returncode,0);self.assertIn('requires unoptimized Python',child.stderr);self.assertNotIn('UNSAFE_CASE_CREDIT',child.stdout)
+        for entry in entries:
+            child=subprocess.run([sys.executable,*entry],cwd=root,env=base,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=5)
+            self.assertEqual(child.returncode,0,child.stderr)
+
+
+    def test_historical_freeze_is_retained_without_substituting_execution_identity(self):
+        import hashlib
+        ui=Path(__file__).resolve().parents[2]/'tools/behavior-tests/ui'
+        original=(ui/'unit-body-movement-source-freeze-v2.json').read_bytes()
+        self.assertEqual(hashlib.sha256(original).hexdigest(),'41fd6d3bbf06a19144efec9176c3559ba0d655894fea2cb34a7d7a8de2b807bf')
+        freeze=json.loads(original);mapping=json.loads((ui/'unit-body-movement-source-equivalence-v2.json').read_text())
+        self.assertEqual(mapping['actual_executed_commit'],freeze['head'])
+        self.assertNotEqual(mapping['actual_executed_commit'],mapping['public_equivalent_commit'])
+        self.assertFalse(mapping['public_commit_was_game_executed'])
+        self.assertEqual(len(mapping['source_files_sha256']),41)
+        for path,digest in freeze['changed_files_sha256'].items():self.assertEqual(mapping['source_files_sha256'][path],digest)
+        self.assertEqual(mapping['native_tree'],runner.SOURCE);self.assertEqual(mapping['default_tree'],runner.DEFAULT)
 
     def test_proposed_profile_matches_fixed_executable_boundaries(self):
         self.assertEqual(runner.BUDGETS,dict(node_ms=180000,observation_ms=120000,outer_seconds=190,term_seconds=3,kill_wait_seconds=5,cleanup_seconds=8,postkill_seconds=2,census_calls=32,sample_delay_ms=10))

@@ -7,6 +7,14 @@ identity cleanup, not TAP/DOM/APP substitution. No in-engine native watchdog.
 """
 from pathlib import Path
 import argparse,hashlib,json,os,signal,subprocess,sys,time,shutil
+
+# Acceptance uses assertions below. Fail before imports/CLI/API case credit when
+# Python would erase them, including an explicitly supplied optimization env.
+if not __debug__ or sys.flags.optimize or "PYTHONOPTIMIZE" in os.environ:
+    raise RuntimeError("unit-body movement acceptance requires unoptimized Python without PYTHONOPTIMIZE")
+if __package__ in (None, ""):
+    # Direct file CLI must resolve the parent protocol/compare modules first.
+    sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from state_trace.unit_body_movement_proof import BUDGETS
 
 
@@ -42,13 +50,15 @@ def own_sample(pid,tracked):
     for key,start in tracked.items():
         if key in table and table[key]['start_ticks']==start:owned.add(key)
     while True:
-        added={key for key,value in table.items() if value['ppid'] in owned}
+        # Never re-adopt a recycled tracked PID through a still-owned parent.
+        added={key for key,value in table.items() if value['ppid'] in owned and
+               (key not in tracked or value['start_ticks']==tracked[key])}
         if added<=owned:break
         owned|=added
     rows=[]
     for key in sorted(owned):
         if key in table:
-            row=table[key];tracked[key]=row['start_ticks'];rows.append(row)
+            row=table[key];tracked.setdefault(key,row['start_ticks']);rows.append(row)
     return {'monotonic':time.monotonic(),'node_visible':pid in owned,'observed_owned':rows,
             'proc_stat_read_failures':failures,'exhaustive_host_inventory':False}
 
@@ -57,6 +67,31 @@ def group_probe(pgid):
     try:os.killpg(pgid,0);return 'present'
     except ProcessLookupError:return 'absent'
     except PermissionError:return 'permission-denied'
+
+
+def dependency_contents(root):
+    """All installed bytes of the two executable Playwright packages.
+
+    Future preflights only: the historical v2 capture pinned manifests/browser,
+    not these package trees. Reject symlinks rather than hashing their targets
+    outside the declared dependency roots or silently skipping their contents.
+    """
+    result={}
+    for name in ('playwright','playwright-core'):
+        package=Path(root)/name
+        assert package.is_dir() and not package.is_symlink(), 'Actual package directory required'
+        files={}
+        for path in sorted(package.rglob('*')):
+            assert not path.is_symlink(), 'Symlinked package content is unsupported'
+            if path.is_file():files[str(path.relative_to(package))]=sha(path)
+            else:assert path.is_dir(), 'Unsupported package content type'
+        assert 'package.json' in files and files, 'Missing package content'
+        result[name]=files
+    return result
+
+
+def unchanged_dependencies(pre):
+    assert dependency_contents(Path(pre['dependency_symlink']))==pre['dependency_contents_sha256'], 'Executable dependency contents changed'
 
 
 def unchanged(pre):
@@ -72,6 +107,7 @@ def unchanged(pre):
     assert sha(Path(pre['node']))==pre['node_sha256'] and sha(Path(pre['browser']))==pre['browser_sha256']
     assert sha(Path(pre['fontconfig']))==pre['fontconfig_sha256']
     assert all(sha(Path(pre['dependency_symlink'])/name/'package.json')==value for name,value in pre['dependency_package_sha256'].items())
+    unchanged_dependencies(pre)
 
 
 def audit_chunks(text,lines):
@@ -322,6 +358,7 @@ def prepare(args,driver):
          'runtime':RUNTIME_HASHES,'runtime_provenance':str(prov),'runtime_provenance_sha256':sha(prov),
          'web_shell':str(WEB),'web_files_sha256':{str(path.relative_to(WEB)):sha(path) for path in sorted(WEB.rglob('*')) if path.is_file()},
          'assets':str(ASSETS),'asset_manifest_id':manifest['id'],'asset_manifest_sha256':hashlib.sha256(manifest_bytes(manifest)).hexdigest(),
+         'dependency_contents_sha256':dependency_contents(DEPS),'dependency_content_scope':'Future unexecuted profile: all files in playwright and playwright-core; historical v2 package content was not pinned',
          'dependency_symlink':str(DEPS),'dependency_package_sha256':{name:sha(DEPS/name/'package.json') for name in ('playwright','playwright-core')},
          'node':str(node),'node_sha256':sha(node),'node_version':subprocess.check_output([str(node),'--version'],text=True).strip(),
          'browser':str(browser),'browser_sha256':sha(browser),'fontconfig':str(args.fontconfig.resolve()),'fontconfig_sha256':sha(args.fontconfig.resolve()),'playwright_browsers_path':str(args.playwright_browsers_path.resolve()),

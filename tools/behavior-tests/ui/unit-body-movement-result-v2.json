@@ -322,7 +322,16 @@
     "Native clock/cadence/all-ticks, backend animation cause ID or exact callback identity",
     "Facing, limb/tool/pose/clip binding, speed/duration parity",
     "Original-game appearance/policy or repeat acceptance",
-    "Cross-session continuity and exhaustive host descendant inventory"
+    "Cross-session continuity and exhaustive host descendant inventory",
+    "Historical full Playwright executable package-content provenance: only manifests and Chromium binary were pinned; future full content pins are unexecuted and do not repair old coverage"
   ],
-  "delivery_intent": "Commit harness and truthful incomplete outcome; no automatic retry, weakened oracle, production or runtime edits; stop after wrap-up handoff"
+  "delivery_intent": "Commit harness and truthful incomplete outcome; no automatic retry, weakened oracle, production or runtime edits; stop after wrap-up handoff",
+  "source_recovery": {
+    "mapping": "tools/behavior-tests/ui/unit-body-movement-source-equivalence-v2.json",
+    "actual_source_head_unchanged": "66dc0b997e2804a33012bebaea45bca0c221e22d",
+    "public_byte_equivalent_commit": "8f956da124794bb1166ccdb69ae0aaec0d7459e3",
+    "public_commit_was_game_executed": false,
+    "original_source_freeze": "tools/behavior-tests/ui/unit-body-movement-source-freeze-v2.json",
+    "original_source_freeze_sha256": "41fd6d3bbf06a19144efec9176c3559ba0d655894fea2cb34a7d7a8de2b807bf"
+  }
 }
