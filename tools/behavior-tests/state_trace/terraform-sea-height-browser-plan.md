@@ -184,3 +184,8 @@ missing dispatch/ACK or in-flight state is not an action rejection; unsupported
 live quote is a real safety result, not completed work; full body markers followed
 by shutdown timeout/OOM remain failure. The existing land proof and original
 observations remain unchanged by any of these results.
+
+
+## Current acceptance repair version
+
+The latest receipt/declaration proof and result bind source2a7a29c4. All current case-credit counters remain0. Exactly one source-typed pre-restore declaration and all observed-flow receipts are validated. Known pre-launch ownership errors produce failed/unsupported completion packets without invented waits, exit codes or cleanup. Public CI inventories are42 Sea model methods and30 runner methods; the retained input remains private and historical.
