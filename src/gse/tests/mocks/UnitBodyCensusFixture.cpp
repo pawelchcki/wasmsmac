@@ -69,6 +69,7 @@ struct CensusFixtureState final : backend::State {
 struct UnitBodyCensusFixture {
     // Both backend identities outlive the GLSMAC-owned State and its wrappers.
     backend::Game backend_game, different_game;
+    bool backend_started = false, different_started = false;
     std::unique_ptr< GLSMAC > application;
     CensusFixtureState* state = nullptr; // GC-owned, rooted by application->m_state
     value::Object* game_value = nullptr;
@@ -107,7 +108,7 @@ struct UnitBodyCensusFixture {
     ~UnitBodyCensusFixture() {
         // Run failures still retire the supplied context. Normal completion
         // calls Retire explicitly so any cleanup failure becomes a failed test.
-        if ( application ) {
+        if ( application || backend_started || different_started ) {
             try { Retire(); }
             catch ( const std::exception& error ) {
                 util::LogHelper::Println( std::string( "UNIT_BODY_CENSUS_CLEANUP_ERROR|" ) + error.what() );
@@ -116,6 +117,22 @@ struct UnitBodyCensusFixture {
     }
 
     void Retire() {
+        if ( !application && !backend_started && !different_started ) { return; }
+        // Collect the real Game/Random wrappers before retiring their native
+        // owners. These are started identities, not initialized backend worlds.
+        RetireApplication();
+        if ( different_started ) {
+            different_started = false; // consume once, including a failed Stop
+            different_game.Stop();
+        }
+        if ( backend_started ) {
+            backend_started = false;
+            backend_game.Stop();
+        }
+        Require( !backend_game.GetRandom() && !different_game.GetRandom(), "native backend retirement left RNG owners behind" );
+    }
+
+    void RetireApplication() {
         if ( !application ) { return; }
         bool empty_scene = true, backend_detached = true;
         // Detach first, under the same GC-owner boundary as installation. The
@@ -315,6 +332,12 @@ struct UnitBodyCensusFixture {
 
     void Run() {
         application = std::make_unique< GLSMAC >(); // normal registration, not RunMain/start_game
+        // Public Start supplies the real eager Random wrapper prerequisite.
+        // Its inherited Module::Start is empty: no scheduler/thread/MT_Init or
+        // backend world is supplied, and no reverse State linkage is claimed.
+        backend_game.Start(); backend_started = true;
+        different_game.Start(); different_started = true;
+        Require( backend_game.GetRandom() && different_game.GetRandom(), "native backend wrapper RNG prerequisite missing" );
         Owner( [ & ]( GSE_CALLABLE ) {
             Require( gc_space->IsOwnerThread(), "binding setup is not on application GC owner" );
             Require( g_engine->GetGame() == nullptr, "fixture requires the existing asset-free GSE test engine" );
