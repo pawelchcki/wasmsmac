@@ -71,7 +71,7 @@ int main() {
         with tempfile.TemporaryDirectory(prefix='presentation-sound-') as directory:
             src = Path(directory)/'test.cpp'; src.write_text(source)
             exe = Path(directory)/'test'
-            subprocess.run([compiler, '-std=c++17', '-DFASTDEBUG', '-O1', '-pthread',
+            subprocess.run([compiler, '-std=c++23', '-DFASTDEBUG', '-O1', '-pthread',
                             '-ffunction-sections', '-fdata-sections', '-I'+str(ROOT/'src'), str(src),
                             *[str(ROOT/'src'/p) for p in sources], '-Wl,--gc-sections',
                             '-Wl,--wrap=pthread_mutex_lock', '-o', str(exe)], check=True, capture_output=True)

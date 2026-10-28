@@ -156,7 +156,7 @@ def run_cases(cases, target):
         command = [
             compiler, str(DIRECTORY / "glsmac.cpp"),
             str(ROOT / "src/game/backend/technology/Table.cpp"), f"-I{ROOT / 'src'}",
-            "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror",
+            "-std=c++23", "-O2", "-Wall", "-Wextra", "-Werror",
         ]
         if target == "wasm":
             command.extend(["-sENVIRONMENT=node", "-sEXIT_RUNTIME=1"])

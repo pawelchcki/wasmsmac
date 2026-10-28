@@ -71,7 +71,13 @@ profile includes selected performance, portability and bugprone checks even when
 they currently emit no finding. New findings and extra identical occurrences
 fail the gate. The regression suite exercises the real clang-tidy executable,
 proving an introduced warning fails after the original baseline passes. Source
-or compile-command changes during analysis invalidate that run.
+or compile-command changes during analysis invalidate that run, including
+preset and toolchain configuration edits. Native standalone behavior, research,
+text and texture probes now also export actual compile commands. The native
+FastDebug report separately inventories 11 platform-specific sources absent
+from that database; Debug-only, Windows and WASM static analysis is not counted
+as passing native analysis. WASM sources receive their own C++23 compiler/runtime
+probe lane. Unknown missing native sources still fail the incremental gate.
 
 ## Sanitizer failures preserved and repaired
 

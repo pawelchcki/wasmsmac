@@ -128,7 +128,7 @@ int main() {
         with tempfile.TemporaryDirectory(prefix='presentation-animation-') as directory:
             src = Path(directory)/'test.cpp'; src.write_text(source)
             exe = Path(directory)/'test'
-            build = subprocess.run([compiler, '-std=c++17', '-DFASTDEBUG', '-O1', '-pthread',
+            build = subprocess.run([compiler, '-std=c++23', '-DFASTDEBUG', '-O1', '-pthread',
                                     '-ffunction-sections', '-fdata-sections', '-I'+str(ROOT/'src'), str(src),
                                     *[str(ROOT/'src'/p) for p in sources], '-Wl,--gc-sections', '-o', str(exe)],
                                    capture_output=True, text=True)

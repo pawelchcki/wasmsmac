@@ -43,7 +43,7 @@ class GateTests(unittest.TestCase):
     def test_headers_and_configuration_trigger_full_analysis(self):
         db = [{"file": str(quality.ROOT / p), "directory": str(quality.ROOT)}
               for p in ["src/a.cpp", "src/b.cpp", "src/tmp/embed.cpp"]]
-        for change in ["src/a.h", "cmake/ProjectOptions.cmake", ".clang-tidy", "flake.lock"]:
+        for change in ["src/a.h", "cmake/ProjectOptions.cmake", ".clang-tidy", "flake.lock", "CMakePresets.json"]:
             self.assertEqual(quality.translation_units(db, [Path(change)]),
                              [Path("src/a.cpp"), Path("src/b.cpp")])
         self.assertEqual(quality.translation_units(db, [Path("src/b.cpp")]), [Path("src/b.cpp")])
@@ -57,10 +57,21 @@ class GateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "absent"):
             quality.translation_units(other, [Path("src/ui/dom/Object.colormap.cpp")])
 
+    def test_known_wasm_sources_remain_explicitly_outside_native_analysis(self):
+        db = [{"file": str(quality.ROOT / "src/native.cpp"), "directory": str(quality.ROOT)}]
+        path = Path("tools/wasm-tests/platform.cpp")
+        self.assertIn("platform-build.mjs", quality.NATIVE_UNSUPPORTED[path])
+        self.assertEqual(quality.translation_units(db, [path]), [])
+        # A suitable platform compilation database still selects the real unit.
+        wasm = [{"file": str(quality.ROOT / path), "directory": str(quality.ROOT)}]
+        self.assertEqual(quality.translation_units(wasm, [path]), [path])
+
     def test_missing_compilation_entry_is_fatal(self):
         db = [{"file": str(quality.ROOT / "src/a.cpp"), "directory": str(quality.ROOT)}]
         with self.assertRaisesRegex(ValueError, "absent"):
             quality.translation_units(db, [Path("src/missing.cpp")])
+        with self.assertRaisesRegex(ValueError, "absent"):
+            quality.translation_units(db, [Path("src/missing.cpp"), Path("CMakePresets.json")])
         with self.assertRaisesRegex(ValueError, "no first-party"):
             quality.translation_units([])
 
@@ -84,6 +95,18 @@ class GateTests(unittest.TestCase):
             self.assertEqual(result[0]["source"], "int count;")
             self.assertEqual(result[0]["line"], 2)
 
+    def test_preset_changes_invalidate_an_inflight_source_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src").mkdir()
+            (root / "src/probe.cpp").write_text("int main() { return 0; }\n")
+            (root / ".clang-tidy").write_text("Checks: '-*'\n")
+            presets = root / "CMakePresets.json"
+            presets.write_text('{"flags":"before"}')
+            with patch.object(quality, "ROOT", root):
+                before = quality.source_snapshot([Path("src/probe.cpp")], [])
+                presets.write_text('{"flags":"after"}')
+                self.assertNotEqual(before, quality.source_snapshot([Path("src/probe.cpp")], []))
 
     @unittest.skipUnless(shutil.which("clang-tidy"), "requires pinned Nix tools")
     def test_real_tidy_rejects_new_diagnostic_after_baseline(self):

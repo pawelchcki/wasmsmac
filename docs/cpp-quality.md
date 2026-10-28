@@ -59,13 +59,22 @@ Choose the actual PR base ref/SHA rather than assuming the remote is named
 files. Use `clang-format --lines=START:END -i PATH` for a focused correction.
 GSE `.gls.js` files are not JavaScript and never enter these checks.
 
-Tidy uses real compilation commands, including defines and include paths.
+The native FastDebug tidy lane uses real compilation commands, including defines
+and include paths. Standalone native behavior, research, text and texture probes
+are registered as CMake targets so their commands enter the same database.
 Changed implementation files select their translation units. Included implementation
 fragments have an explicit owner map (currently Object.colormap.cpp → Object.cpp). Any changed
-first-party header, CMake configuration, toolchain or analysis configuration
-selects the full first-party compilation database. An implementation file absent
-from the database fails the check; configure its actual target rather than
-silently analyzing it with guessed flags. Generated `src/tmp` files, external
+first-party header, CMake configuration (including `CMakePresets.json`), toolchain
+or analysis configuration selects the full native compilation database. Unknown
+implementation files absent from the database fail the check; configure their
+actual targets rather than analyzing them with guessed flags. An exact list of
+11 platform-specific exceptions in `NATIVE_UNSUPPORTED` records the Debug-only
+memory watcher, Windows sockets and WASM-only sources. Each report lists those
+paths and reasons outside static-analysis passing totals. A matching platform
+database still analyzes them when available. The separate C++23 WASM probe lane
+compiles and executes the graphics, platform, threading, buffers, asset bridge,
+map and installed-text consumers with Emscripten. This is compiler/runtime
+coverage; Debug, Windows and WASM clang-tidy coverage remain gaps. Generated `src/tmp` files, external
 translation units and vendor diagnostics are excluded; parsing errors anywhere
 are fatal. New first-party standalone targets should be registered in CMake so
 they can be analyzed with their actual flags.

@@ -22,3 +22,27 @@ ENDFOREACH()
 ADD_EXECUTABLE( cpp-standard standard.cpp )
 GLSMAC_CONFIGURE_TARGET( cpp-standard )
 ADD_TEST( NAME cpp-standard COMMAND cpp-standard )
+
+# Standalone native tools also need real compile commands for changed-file
+# analysis, even when a normal application build does not build their binaries.
+FUNCTION( GLSMAC_ADD_ANALYSIS_TOOL TARGET )
+	ADD_EXECUTABLE( ${TARGET} EXCLUDE_FROM_ALL ${ARGN} )
+	GLSMAC_CONFIGURE_TARGET( ${TARGET} )
+	TARGET_INCLUDE_DIRECTORIES( ${TARGET} PRIVATE "${PROJECT_SOURCE_DIR}/src" )
+	TARGET_COMPILE_OPTIONS( ${TARGET} PRIVATE -ffunction-sections -fdata-sections )
+	TARGET_LINK_OPTIONS( ${TARGET} PRIVATE -Wl,--gc-sections )
+ENDFUNCTION()
+GLSMAC_ADD_ANALYSIS_TOOL( behavior-probe
+	"${PROJECT_SOURCE_DIR}/tools/behavior-tests/glsmac.cpp"
+	"${PROJECT_SOURCE_DIR}/src/game/backend/technology/Table.cpp"
+)
+GLSMAC_ADD_ANALYSIS_TOOL( research-state
+	"${PROJECT_SOURCE_DIR}/tools/behavior-tests/research_state.cpp"
+	"${PROJECT_SOURCE_DIR}/src/game/backend/technology/Research.cpp"
+	"${PROJECT_SOURCE_DIR}/src/types/Buffer.cpp"
+	"${PROJECT_SOURCE_DIR}/src/common/Common.cpp"
+)
+GLSMAC_ADD_ANALYSIS_TOOL( smac-text-check "${PROJECT_SOURCE_DIR}/tools/smac-data/test_smac_text.cpp" )
+GLSMAC_ADD_ANALYSIS_TOOL( smac-text-inspect "${PROJECT_SOURCE_DIR}/tools/smac-data/inspect.cpp" )
+GLSMAC_ADD_ANALYSIS_TOOL( flic-check "${PROJECT_SOURCE_DIR}/tools/texture-tests/flic.cpp" "${PROJECT_SOURCE_DIR}/src/loader/texture/Flic.cpp" )
+GLSMAC_ADD_ANALYSIS_TOOL( caviar-check "${PROJECT_SOURCE_DIR}/tools/texture-tests/caviar.cpp" "${PROJECT_SOURCE_DIR}/src/loader/texture/Caviar.cpp" )

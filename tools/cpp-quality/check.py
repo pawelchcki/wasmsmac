@@ -19,6 +19,21 @@ CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".h", ".hpp"}
 INCLUDED_IMPLEMENTATIONS = {
     Path("src/ui/dom/Object.colormap.cpp"): Path("src/ui/dom/Object.cpp"),
 }
+# Exact platform-specific sources absent from the native FastDebug database.
+# These remain outside static passing totals; WASM producers run in CI.
+NATIVE_UNSUPPORTED = {
+    Path("src/debug/MemoryWatcher.cpp"): "Debug-only instrumentation; FastDebug has no DEBUG memory hooks",
+    Path("src/network/impl/Windows.cpp"): "Windows socket backend; requires Windows headers and ABI",
+    Path("src/network/impl/Browser.cpp"): "WASM backend; platform-build.mjs and full Emscripten application build",
+    Path("src/network/simpletcp/Browser.cpp"): "WASM backend; platform-build.mjs and full Emscripten application build",
+    Path("tools/innoextract/browser.cpp"): "WASM installer adapter; full Emscripten application build",
+    Path("tools/wasm-tests/asset-bridge.cpp"): "WASM-only entrypoint; asset-bridge-build.mjs",
+    Path("tools/wasm-tests/canvas.cpp"): "WASM-only graphics entrypoint; build.mjs",
+    Path("tools/wasm-tests/game-shaders.cpp"): "WASM-only graphics fixture; build.mjs",
+    Path("tools/wasm-tests/platform.cpp"): "WASM-only platform fixture; platform-build.mjs",
+    Path("tools/wasm-tests/smac-map.cpp"): "WASM-only map fixture; smac-map-build.mjs",
+    Path("tools/wasm-tests/texture-upload.cpp"): "WASM-only texture fixture; texture-upload-build.mjs",
+}
 
 
 def run(args, **kwargs):
@@ -101,20 +116,21 @@ def translation_units(database, changed=None):
         raise ValueError("Compilation database contains no first-party translation units")
     if changed is None:
         return sorted(units)
-    cpp = {INCLUDED_IMPLEMENTATIONS.get(p, p) for p in changed if first_party(p)}
+    cpp = {INCLUDED_IMPLEMENTATIONS.get(p, p) for p in changed if first_party(p)
+           and (p not in NATIVE_UNSUPPORTED or p in units)}
+    missing = {p for p in cpp - units if p.suffix not in {".h", ".hpp"}}
+    if missing:
+        raise ValueError("Changed sources absent from compile_commands.json: " +
+                         ", ".join(map(str, sorted(missing))))
     # A changed header can affect every translation unit. Global build/profile
     # changes also require full analysis; never report a vacuous incremental pass.
-    config = {"CMakeLists.txt", "flake.nix", "flake.lock", ".clang-tidy",
+    config = {"CMakeLists.txt", "CMakePresets.json", "flake.nix", "flake.lock", ".clang-tidy",
               "tools/cpp-quality/check.py", "tools/cpp-quality/toolchain.json",
               "tools/cpp-quality/baseline.json"}
     if any(p.suffix in {".h", ".hpp"} for p in cpp) or any(
             str(p) in config or str(p).startswith("cmake/") or p.name == "CMakeLists.txt"
             for p in changed):
         return sorted(units)
-    missing = cpp - units
-    if missing:
-        raise ValueError("Changed sources absent from compile_commands.json: " +
-                         ", ".join(map(str, sorted(missing))))
     return sorted(cpp & units)
 
 
@@ -173,6 +189,10 @@ def source_snapshot(units, database):
     paths.update(ROOT / fragment for fragment, owner in INCLUDED_IMPLEMENTATIONS.items()
                  if owner in units)
     paths.add(ROOT / ".clang-tidy")
+    config_files = [ROOT / name for name in ["CMakeLists.txt", "CMakePresets.json", "flake.nix", "flake.lock",
+                                            "tools/cpp-quality/check.py", "tools/cpp-quality/toolchain.json"]]
+    paths.update(path for path in config_files if path.exists())
+    paths.update((ROOT / "cmake").rglob("*.cmake"))
     digest = hashlib.sha256(json.dumps(database, sort_keys=True).encode())
     for path in sorted(paths):
         digest.update(str(path.relative_to(ROOT)).encode() + b"\0" + path.read_bytes())
@@ -218,7 +238,10 @@ def tidy_check(args):
     if snapshot != source_snapshot(units, current_database):
         raise ValueError("Sources or compile commands changed during analysis; rerun on a stable tree")
     diagnostics = sorted(unique.values(), key=lambda d: (d["path"], d["offset"], d["check"]))
-    report = {"llvm": version, "profile_sha256": profile,
+    registered = set(translation_units(database))
+    unsupported = [{"path": str(path), "reason": reason} for path, reason in sorted(NATIVE_UNSUPPORTED.items())
+                   if path not in registered]
+    report = {"llvm": version, "profile_sha256": profile, "unsupported_native_sources": unsupported,
               "translation_units": len(units), "source_snapshot": snapshot, "diagnostics": diagnostics}
     (args.report_dir / "diagnostics.json").write_text(json.dumps(report, indent=2) + "\n")
     if args.write_baseline:
@@ -234,7 +257,8 @@ def tidy_check(args):
     added = new_diagnostics(diagnostics, baseline["diagnostics"])
     for d in added:
         print(f"{d['path']}:{d['line']}: {d['message']} [{d['check']}]", file=sys.stderr)
-    print(f"{len(units)} translation units; {len(diagnostics)} findings; {len(added)} new")
+    print(f"{len(units)} translation units; {len(diagnostics)} findings; {len(added)} new; "
+          f"{len(unsupported)} declared platform sources outside native static-analysis totals")
     return int(bool(added))
 
 

@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   analysis:
-    name: C++ formatting and static analysis
+    name: C++ formatting and native static analysis
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -107,3 +107,36 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./cpp-standard.exe
           exit $LASTEXITCODE
+
+  wasm-probes:
+    name: C++23 WASM graphics and platform probes
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16'
+          cache: npm
+          cache-dependency-path: tools/wasm-tests/package-lock.json
+      - name: Install the pinned browser toolchain and graphics runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y libegl1 libgles2 libgl1-mesa-dri
+          git clone --depth 1 --branch 4.0.22 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/quality-emsdk"
+          "$RUNNER_TEMP/quality-emsdk/emsdk" install 4.0.22
+          "$RUNNER_TEMP/quality-emsdk/emsdk" activate 4.0.22
+      - name: Compile and execute platform-specific probes with their actual flags
+        run: |
+          source "$RUNNER_TEMP/quality-emsdk/emsdk_env.sh"
+          npm --prefix tools/wasm-tests ci
+          npm --prefix tools/wasm-tests test
+          npx --prefix tools/wasm-tests playwright install --with-deps chromium
+          npm --prefix tools/wasm-tests run test:assets
+          python3 tools/smac-data/run.py --target wasm --report build/cpp-quality/smac-text-wasm.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cpp-wasm-probes
+          path: |
+            tools/wasm-tests/build/artifacts
+            build/cpp-quality/smac-text-wasm.json
