@@ -7,7 +7,7 @@ Historical23e54/Defaulta69/v8 evidence remains immutable. No automatic retry; re
 identity cleanup, not TAP/DOM/APP substitution. No in-engine native watchdog.
 """
 from pathlib import Path
-import argparse,hashlib,json,os,signal,subprocess,sys,time,shutil
+import argparse,hashlib,json,os,signal,stat,subprocess,sys,time,shutil
 
 # Acceptance uses assertions below. Fail before imports/CLI/API case credit when
 # Python would erase them, including an explicitly supplied optimization env.
@@ -130,6 +130,61 @@ def git_read(tools,root,*args):
     return subprocess.check_output([tools['git']['path'],*args],cwd=root,text=True,timeout=10).strip()
 
 
+def default_scripts(root,head,tools):
+    """Actual mounted UTF8 bytes must equal HEAD blobs, not just Git status.
+
+    assume-unchanged/skip-worktree can hide edits from status and diff. Inspect
+    the complete mounted inventory and compare it to real pinned-Git objects.
+    """
+    verify_tools(tools)
+    prefix='GLSMAC_data/default';directory=Path(root)/prefix
+    assert directory.is_dir() and not directory.is_symlink(), 'Default root must be a real directory'
+    files={};scripts={};pending=[directory]
+    while pending:
+        for path in pending.pop().iterdir():
+            info=path.lstat()
+            assert not stat.S_ISLNK(info.st_mode), 'Symlinked Default input unsupported'
+            if stat.S_ISDIR(info.st_mode):pending.append(path)
+            else:
+                assert stat.S_ISREG(info.st_mode), 'Nonregular Default input unsupported'
+                if not path.name.endswith('.gls.js'):continue
+                name=path.relative_to(root).as_posix();raw=path.read_bytes()
+                scripts[name]=raw.decode('utf-8')
+                files[name]={'sha256':hashlib.sha256(raw).hexdigest(),
+                             'mode':'100755' if info.st_mode&0o111 else '100644'}
+    args=[tools['git']['path'],'ls-tree','-rz','--full-tree',head,'--',prefix]
+    tree=subprocess.check_output(args,cwd=root,timeout=10)
+    expected={};objects=[]
+    for entry in tree.split(b'\0'):
+        if not entry:continue
+        metadata,encoded=entry.split(b'\t',1);mode,kind,oid=metadata.decode('ascii').split()
+        name=encoded.decode('utf-8')
+        if not name.endswith('.gls.js'):continue
+        assert kind=='blob' and mode in ('100644','100755'), 'Nonregular HEAD Default script'
+        assert name not in expected and name.startswith(prefix+'/'), 'Invalid HEAD Default inventory'
+        expected[name]={'mode':mode};objects.append((name,oid))
+    assert expected and set(files)==set(expected), 'Mounted Default inventory differs from HEAD'
+    # One bounded real Git batch; never hundreds of per-script child processes.
+    batch=subprocess.check_output([tools['git']['path'],'cat-file','--batch'],
+        input=''.join(oid+'\n' for _,oid in objects).encode('ascii'),cwd=root,timeout=10)
+    offset=0
+    for name,oid in objects:
+        end=batch.index(b'\n',offset);actual,kind,size=batch[offset:end].decode('ascii').split();size=int(size)
+        assert actual==oid and kind=='blob' and size>=0, 'Unexpected Git object response'
+        start=end+1;raw=batch[start:start+size];offset=start+size+1
+        assert len(raw)==size and batch[start+size:offset]==b'\n', 'Truncated Git blob'
+        expected[name]['sha256']=hashlib.sha256(raw).hexdigest()
+    assert offset==len(batch), 'Extra Git object response'
+    verify_tools(tools)
+    assert files==expected, 'Mounted Default bytes/modes differ from HEAD'
+    # JavaScript default string sort uses UTF16 units, not Python codepoints.
+    order=lambda name:name.encode('utf-16-be')
+    scripts=dict(sorted(scripts.items(),key=lambda item:order(item[0])))
+    digest=hashlib.sha256(json.dumps(scripts,ensure_ascii=False,separators=(',',':')).encode('utf-8')).hexdigest()
+    return {'production_default_files':dict(sorted(files.items(),key=lambda item:order(item[0]))),
+            'production_default_sha256':digest}
+
+
 def current_profile(root,head,web,provenance_path,tools):
     """Clean source + declared runtime metadata/bytes; never a compile proof."""
     verify_tools(tools)
@@ -154,6 +209,7 @@ def current_profile(root,head,web,provenance_path,tools):
         assert sha(web/name)==digest, 'Web static bytes differ'
     assert sha(web/'provenance.json')==sha(provenance_path), 'Different web provenance bytes'
     return dict(version=PROFILE_VERSION,profile=PROFILE,head=head,native_tree=native,default_tree=default,
+                **default_scripts(root,head,tools),
                 runtime=runtime,runtime_provenance_sha256=sha(provenance_path),runtime_binding='metadata-consistent',
                 independent_compile_proof_verified=False,fidelity_passing_cases=0)
 
@@ -202,6 +258,12 @@ def audited_child(child,command,args,cwd):
     assert child['timeout_ms']==10000 and child['term_ms']==1000 and child['kill_wait_ms']==1000
 
 
+def default_report(pre,report):
+    assert report['production_default_tree']==pre['default_tree']
+    assert report['production_default_files']==pre['production_default_files']
+    assert report['production_default_sha256']==pre['production_default_sha256']
+
+
 def audit(pre,result,out):
     # These are the actual Popen return/wait facts, not in-game or parsed TAP results.
     assert type(result['raw_node_exit']) is int and result['raw_node_exit']==0,'Actual OS Node exit zero required'
@@ -221,7 +283,7 @@ def audit(pre,result,out):
     assert report['asset_server_exit']['code']==0 or report['asset_server_exit']['signal']=='SIGTERM'
     assert report['browser_errors']==[] and report.get('server_close_error') is None
     assert report['manifest_id']==pre['asset_manifest_id'] and report['native_source_tree']==pre['native_tree']
-    assert report['production_default_tree']==pre['default_tree']
+    default_report(pre,report)
     assert report['runtime_provenance_sha256']==pre['runtime_provenance_sha256']
     assert report['runtime_js_sha256']==pre['runtime']['GLSMAC.js'] and report['runtime_wasm_sha256']==pre['runtime']['GLSMAC.wasm']
     assert report['host_head']==pre['head'] and report['fixture_main_sha256']==pre['fixture_sha256']['main']

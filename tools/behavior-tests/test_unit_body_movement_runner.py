@@ -306,6 +306,60 @@ class CurrentMovementProfileTests(unittest.TestCase):
             self.assertEqual(profile['runtime_binding'],'metadata-consistent')
             self.assertFalse(profile['independent_compile_proof_verified']);self.assertEqual(profile['fidelity_passing_cases'],0)
 
+    def test_hidden_Default_edits_reject_even_when_status_and_diff_are_clean(self):
+        for flag in ('--assume-unchanged','--skip-worktree'):
+            with self.subTest(flag=flag),tempfile.TemporaryDirectory() as folder:
+                root,head,web,prov,tools,node=self.inputs(folder)
+                old=runner.current_profile(root,head,web,prov,tools)
+                name='GLSMAC_data/default/main.gls.js'
+                runner.git_read(tools,root,'update-index',flag,name)
+                (root/name).write_text('// hidden modification, not a new accepted baseline\n')
+                self.assertEqual(runner.git_read(tools,root,'status','--porcelain','--untracked-files=no'),'')
+                self.assertEqual(runner.git_read(tools,root,'diff','--exit-code','HEAD','--','GLSMAC_data/default'),'')
+                with self.assertRaisesRegex(AssertionError,'Default bytes/modes'):
+                    runner.current_profile(root,head,web,prov,tools)
+                # Same pre-existing reviewed profile must reject at execute's
+                # unchanged boundary before later dependency/runtime checks.
+                pre=dict(old,tools=tools,host=str(root),web_shell=str(web),runtime_provenance=str(prov),node=str(node),
+                    command=[str(node),'--test','--test-concurrency=1','tools/wasm-tests/unit-body-movement-browser.test.mjs'])
+                with self.assertRaisesRegex(AssertionError,'Default bytes/modes'):runner.unchanged(pre)
+
+    def test_complete_Default_inventory_modes_UTF8_symlinks_and_scan_errors_fail_closed(self):
+        for mode in ('missing','extra','executable','invalid-utf8','symlink','nested-scan'):
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as folder:
+                root,head,web,prov,tools,node=self.inputs(folder);path=root/'GLSMAC_data/default/main.gls.js'
+                if mode=='missing':path.unlink()
+                elif mode=='extra':path.with_name('extra.gls.js').write_text('// not committed')
+                elif mode=='executable':path.chmod(0o755)
+                elif mode=='invalid-utf8':path.write_bytes(b'\xff')
+                elif mode=='symlink':
+                    path.unlink();path.symlink_to(root/'runner.py')
+                else:
+                    nested=path.parent/'nested';nested.mkdir();original=Path.iterdir
+                    def denied(value):
+                        if value==nested:raise PermissionError('owned synthetic scan denial')
+                        return original(value)
+                    with patch.object(Path,'iterdir',denied),self.assertRaises(PermissionError):runner.default_scripts(root,head,tools)
+                    continue
+                with self.assertRaises((AssertionError,UnicodeError)):runner.default_scripts(root,head,tools)
+
+    def test_Default_Unicode_producer_serialization_and_report_join(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root,head,web,prov,tools,node=self.inputs(folder);directory=root/'GLSMAC_data/default'
+            for name in ('\ue000.gls.js','🚀.gls.js'):(directory/name).write_text('BOM:\ufeff emoji🚀\n\t"\\\u2028',encoding='utf-8')
+            runner.git_read(tools,root,'add','.');runner.git_read(tools,root,'-c','user.name=Public fixture','-c','user.email=fixture@example.invalid','commit','-qm','Unicode metadata')
+            head=runner.git_read(tools,root,'rev-parse','HEAD');profile=runner.default_scripts(root,head,tools)
+            uri=(Path(__file__).resolve().parents[2]/'tools/wasm-tests/unit-body-movement-browser.test.mjs').as_uri()
+            code='const{movementDefaultScripts}=await import('+json.dumps(uri)+');const root='+json.dumps(str(root))+';const pre='+json.dumps(profile)+';const scripts=movementDefaultScripts(root,pre);const bad=[];for(const field of ["production_default_sha256","production_default_files"]){const changed=structuredClone(pre);if(field==="production_default_sha256")changed[field]="0".repeat(64);else delete changed[field][Object.keys(changed[field])[0]];try{movementDefaultScripts(root,changed);bad.push(false);}catch{bad.push(true);}}console.log("RESULT|"+JSON.stringify({keys:Object.keys(scripts),bad}));'
+            values=self.node(code)
+            self.assertLess(values['keys'].index('GLSMAC_data/default/🚀.gls.js'),values['keys'].index('GLSMAC_data/default/\ue000.gls.js'))
+            self.assertEqual(values['bad'],[True,True])
+            pre=dict(profile,default_tree='a'*40);report=dict(profile,production_default_tree='a'*40)
+            runner.default_report(pre,report)
+            for key in ('production_default_tree','production_default_files','production_default_sha256'):
+                bad=copy.deepcopy(report);bad[key]='bad'
+                with self.subTest(key=key),self.assertRaises(AssertionError):runner.default_report(pre,bad)
+
     def test_current_profile_rejects_head_source_runtime_metadata_and_web_changes(self):
         variants=('head','dirty-helper','native','default','js','wasm','web','static','web-provenance')
         for variant in variants:

@@ -79,6 +79,79 @@ def _equal(a, b):
     return canonical(a) == canonical(b)
 
 
+def _callbacks(rows, ready, submit, settled, a, b):
+    # Source partial order only: RefreshUnit/MoveUnit can both refresh source B;
+    # completion and later RenderTile can repeat destination A. SetSelectedTile
+    # itself emits no tile_select. No total order against receipt/timer samples.
+    events = [r['data'] for r in rows if r['kind'] == 'EVENT' and r['data']['seq'] > ready['seq']]
+    phase = 'source'; promoted = []; destination = []
+    for event in events:
+        require(event['seq'] > submit['seq'], 'unexpected callback between idle barrier and submission')
+        require(event['kind'] == 'native-unit-preview', 'unexpected post-submit tile selection')
+        uid = event['unit_id']
+        if uid == b and phase == 'source': promoted.append(event['seq'])
+        elif uid == a and promoted:
+            phase = 'destination'; destination.append(event['seq'])
+        else: require(False, 'foreign/null/regressive native preview callback')
+    require(promoted and destination and destination[0] < settled,
+            'source promotion then destination callback missing before settled boundary')
+    return promoted[0], dict(preview_unit_id=a, source_inferred_selected_tile=dict(x=10,y=8),
+                            evidence='ordered callback identities; tile inferred from source and settled world, not a final mounted UI/focus observation')
+
+
+def _stationary_bodies(decoded, reads, a, b, promotion):
+    baseline = decoded[0]
+    initial = {row['unit_id']: row for row in baseline['units']}
+    require(initial[str(b)]['instance_state'] in ('unallocated','absent') and
+            initial[str(b)]['unit_shown'] is False, 'source B was not hidden behind idle A')
+    visibility = {}
+    for row in initial.values():
+        key = row['resource']['key']
+        require(key not in visibility or visibility[key] == row['actor_visible'], 'ambiguous shared actor visibility')
+        visibility[key] = row['actor_visible']
+    def claims(packet):
+        result = {}
+        for row in packet['units']:
+            if row['instance_state'] == 'present':
+                key=row['resource']['key']; result[key]=result.get(key,0)+1
+        return result
+    counts = {row['resource_key']: int(row['before']) for row in baseline['instance_counts']}
+    base_claims=claims(baseline); b_allocated=initial[str(b)].get('instance_id'); b_shown=False
+    for packet, read in zip(decoded, reads):
+        require(packet['cache_counts_before'] == baseline['cache_counts_before'], 'movement changed cached resource inventory')
+        allocated=set()
+        for current in packet['units']:
+            old=initial[current['unit_id']]; uid=int(current['unit_id']); key=current['resource']['key']
+            keys=('unit_id','manager_unit_id','owner_id','definition_id','resource')
+            require(_equal({k:old[k] for k in keys},{k:current[k] for k in keys}), 'all-owner resource identity changed')
+            require(current['actor_visible'] == visibility[key], 'shared body actor visibility changed')
+            if 'instance_id' in current:
+                claim=(key,current['instance_id']);require(claim not in allocated, 'duplicate allocated body identity');allocated.add(claim)
+            if uid != a:
+                require(all(current['unit_render_coords'][axis]['bits']==old['unit_render_coords'][axis]['bits'] for axis in 'xyz'),
+                        'stationary all-owner body coordinates changed')
+            if current['instance_state']=='present':
+                # Actual Unit SetInstance/UpdateInstance default Vec3 angle.
+                require(all(current['instance_angle'][axis]['bits']==0 for axis in 'xyz'), 'static body instance angle changed')
+            if uid == b:
+                present=current['instance_state']=='present'
+                require(current['unit_shown'] is present, 'B shown/membership disagreement')
+                if b_allocated is None and 'instance_id' in current:
+                    require(present, 'B allocation appeared without source promotion');b_allocated=current['instance_id']
+                require(current.get('instance_id')==b_allocated, 'allocated B instance changed or disappeared')
+                require(not b_shown or present, 'promoted B disappeared')
+                require(read['seq'] < promotion or present, 'source preview B lacks its actual promoted body')
+                b_shown |= present
+            elif uid != a:
+                require(all(current.get(k)==old.get(k) for k in ('instance_state','instance_id','unit_shown')),
+                        'unaffected body allocation/membership changed')
+        present=claims(packet)
+        for count in packet['instance_counts']:
+            key=count['resource_key']
+            require(int(count['before'])-counts[key] == present.get(key,0)-base_claims.get(key,0),
+                    'unexplained shared body instance-count transition')
+
+
 def _normalized_world(world):
     result = copy.deepcopy(world)
     # Actual tile-order enumeration may change when A moves; raw identities do not.
@@ -165,6 +238,7 @@ def validate_observation(rows):
     checkpoints=[r['data'] for r in rows if r['kind']=='CHECKPOINT']
     require(len(checkpoints)==2 and [c['label'] for c in checkpoints]==['before','after'], 'full before/after missing')
     for c in checkpoints: census.fields(c, {'seq','label','world','state','native_unit_scalars','pending'})
+    require(all(c['state']=={} for c in checkpoints), 'unrecognized mounted UI checkpoint observation')
     before, projection=_world(checkpoints[0]); after, after_projection=_world(checkpoints[1])
     require(projection and sorted(projection,key=lambda r:int(r['unit_id']))==sorted(after_projection,key=lambda r:int(r['unit_id'])),
             'world identity changed')
@@ -189,13 +263,8 @@ def validate_observation(rows):
     for packet in decoded:
         actor=_row(packet,a); require(_equal({k:actor.get(k) for k in identity},identity), 'actual A resource/instance identity changed')
         points.append(_point(actor))
-        # Resource descriptors/allocated IDs for every other actor remain exact;
-        # instance presence, positions and counts may legitimately change.
-        for old in decoded[0]['units']:
-            current=_row(packet,int(old['unit_id']))
-            keys=('unit_id','manager_unit_id','owner_id','definition_id','resource')
-            require(_equal({k:old[k] for k in keys},{k:current[k] for k in keys}), 'all-owner resource identity changed')
-            if 'instance_id' in old: require(current.get('instance_id')==old['instance_id'], 'allocated instance changed')
+    promotion, callback_state = _callbacks(rows,ready,submit,reads[30]['seq'],a,b)
+    _stationary_bodies(decoded,reads,a,b,promotion)
     end=dict(x=start['x']+1.0,y=start['y'],z=start['z'])
     require(ready['seq']<checkpoints[0]['seq']<reads[0]['seq']<submit['seq']<reads[1]['seq'], 'baseline/submit order missing')
     pending=[r['data'] for r in rows if r['kind']=='PENDING']; require(bool(pending), 'no actual pending barrier')
@@ -228,10 +297,11 @@ def validate_observation(rows):
     if not _equal(_normalized_world(expected),_normalized_world(after)) or not _equal(sorted(expected_scalars,key=lambda r:r['unit_id']),sorted(checkpoints[1]['native_unit_scalars'],key=lambda r:r['unit_id'])):
         raise MovementInvariantMismatch('complete observed world differs from sole A move/MP/moved/exact quote effect')
     return dict(schema='application.unit-body-movement-proof.v1',complete=True,match=True,evaluation_only=True,
-                candidate_executed=False,original_passing_cases=0,unit_count=9,census_reads=32,selected_unit_id=a,
+                candidate_executed=False,original_passing_cases=0,unit_count=9,census_reads=32,moving_unit_id=a,
                 sampled_intermediate_ordinals=intermediate,endpoint_sample_ordinals=[29,30],
                 before_after_all_seven_guarded=True,receipt_event_id=receipt['event_id'],
-                unsupported=['GPU/pixels','native timestamps/cadence/all-ticks','backend animation cause ID','facing/poses/clips','original parity'])
+                final_callback_state=callback_state,
+                unsupported=['final mounted UI/selection/focus','GPU/pixels','native timestamps/cadence/all-ticks','backend animation cause ID','facing/poses/clips','original parity'])
 
 
 def _envelope(log,acceptance):

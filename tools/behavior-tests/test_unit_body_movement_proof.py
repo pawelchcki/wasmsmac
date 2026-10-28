@@ -50,13 +50,16 @@ def fixture():
     add('CENSUS',ordinal=1,stage='baseline',payload=json.dumps(census))
     submit=add('SUBMIT',name='move_unit',a=8,owner=0,x=10,y=8)
     receipt=add('RECEIPT',name='move_unit',event_id='opaque-local-token',caller=0,success=True)
+    add('EVENT',kind='native-unit-preview',unit_id=9)
     for i in range(1,30):
         packet=copy.deepcopy(census);row=packet['units'][7];x=0.5+min(i/5,1.0)
         row['unit_render_coords']['x']=number(x);row['instance_position']['x']=number(x+0.125)
         # Source B promotion and actual map growth across calls are legitimate.
         other=packet['units'][8];other['instance_state']='present';other['unit_shown']=True
-        other['instance_position']=copy.deepcopy(census['units'][7]['instance_position']);other['instance_angle']=vec()
+        other['instance_position']=copy.deepcopy(census['units'][7]['instance_position'])
+        other['instance_angle']=vec(0.0,0.0,0.0) # Actual default Native Vec3, including +0 z.
         packet['instance_counts'][0].update(before='2',after='2')
+        if i==5:add('EVENT',kind='native-unit-preview',unit_id=8)
         add('CENSUS',ordinal=i+1,stage='sample',payload=json.dumps(packet))
     add('PENDING',stage='poll',values=copy.deepcopy(pending))
     add('PENDING',stage='capture',values=copy.deepcopy(pending))
@@ -95,6 +98,16 @@ def change_packet(row, mutate):
     packet=json.loads(row['payload']);mutate(packet);row['payload']=json.dumps(packet)
 
 
+def insert_event(rows,index,**data):
+    # Model a coherent new callback, not a serial-gap rejection.
+    mapping={r['data']['seq']:i+1+(i>=index) for i,r in enumerate(rows)}
+    for row in rows:
+        value=row['data'];value['seq']=mapping[value['seq']]
+        for key in ('tile_seq','preview_seq','submit_seq','receipt_seq'):
+            if key in value:value[key]=mapping[value[key]]
+    rows.insert(index,dict(kind='EVENT',data=dict(seq=index+1,**data)))
+
+
 class MovementProofTests(unittest.TestCase):
     def evaluate(self,rows):
         log=text(rows)
@@ -104,6 +117,52 @@ class MovementProofTests(unittest.TestCase):
     def test_synthetic_complete_sampled_move_and_cross_read_map_growth(self):
         result=self.evaluate(fixture());self.assertTrue(result['match']);self.assertFalse(result['candidate_executed'])
         self.assertEqual(result['census_reads'],32);self.assertTrue(result['sampled_intermediate_ordinals']);self.assertEqual(result['original_passing_cases'],0)
+        self.assertEqual(result['final_callback_state']['preview_unit_id'],8)
+        self.assertEqual(result['moving_unit_id'],8);self.assertNotIn('selected_unit_id',result)
+        self.assertIn('final mounted UI/selection/focus',result['unsupported'])
+
+    def test_legitimate_B_first_allocation_and_repeated_source_destination_callbacks(self):
+        rows=fixture()
+        def unallocated(p):
+            row=p['units'][8];row['instance_state']='unallocated';del row['instance_id']
+        change_packet(kind(rows,'CENSUS')[0],unallocated)
+        source=next(i for i,r in enumerate(rows) if r['kind']=='EVENT' and r['data'].get('unit_id')==9)
+        insert_event(rows,source+1,kind='native-unit-preview',unit_id=9)
+        insert_event(rows,len(rows)-1,kind='native-unit-preview',unit_id=8)
+        self.assertTrue(self.evaluate(rows)['match'])
+
+    def test_finite_stationary_displacement_angle_membership_and_shared_counts_reject(self):
+        for mode in ('foreign-displaced','B-displaced','angle','angle-sign','unaffected-shown','B-hidden','B-id','B-unallocated','shared-visible','extra-instance'):
+            rows=fixture()
+            def bad(p):
+                row=p['units'][8 if mode.startswith('B-') else 0]
+                if mode.endswith('displaced'):
+                    row['unit_render_coords']['x']=number(0.75)
+                    if row['instance_state']=='present':row['instance_position']['x']=number(0.875)
+                elif mode=='angle':p['units'][8]['instance_angle']['x']=number(0.125)
+                elif mode=='angle-sign':p['units'][8]['instance_angle']['z']=number(-0.0)
+                elif mode=='unaffected-shown':row['unit_shown']=True
+                elif mode in ('B-hidden','B-unallocated'):
+                    row.update(instance_state='absent' if mode=='B-hidden' else 'unallocated',unit_shown=False)
+                    del row['instance_position'];del row['instance_angle']
+                    if mode=='B-unallocated':del row['instance_id']
+                    p['instance_counts'][0].update(before='1',after='1')
+                elif mode=='B-id':row['instance_id']='99'
+                elif mode=='shared-visible':row['actor_visible']=False
+                else:p['instance_counts'][0].update(before='3',after='3')
+            change_packet(kind(rows,'CENSUS')[8],bad)
+            with self.subTest(mode=mode),self.assertRaises(ProtocolError):self.evaluate(rows)
+
+    def test_source_justified_callback_order_rejects_coherent_unrelated_or_late_events(self):
+        for mode in ('foreign','null','tile','regression','before-source','late-tile'):
+            rows=fixture()
+            if mode=='before-source':
+                event=next(r for r in rows if r['kind']=='EVENT' and r['data'].get('unit_id')==9)
+                event['data']['unit_id']=8
+            else:
+                data=dict(kind='tile-select',x=10,y=8) if mode in ('tile','late-tile') else dict(kind='native-unit-preview',unit_id={'foreign':7,'null':None,'regression':9}[mode])
+                insert_event(rows,len(rows)-1 if mode in ('regression','late-tile') else 11,**data)
+            with self.subTest(mode=mode),self.assertRaises(ProtocolError):self.evaluate(rows)
 
     def test_unknown_telemetry_or_malformed_native_callback_is_not_ignored(self):
         log=text(fixture()).replace('UM_READY|','UM_UNKNOWN|',1)

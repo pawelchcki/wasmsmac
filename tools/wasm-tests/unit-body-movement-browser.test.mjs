@@ -1,7 +1,7 @@
 // Candidate-only normal move; zero physical controls, no pose/original oracle.
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {appendFileSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
+import {appendFileSync,lstatSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
 import {test} from 'node:test';
@@ -24,6 +24,29 @@ const artifacts=process.env.UNIT_BODY_MOVEMENT_ARTIFACTS_DIR||`${root}tools/wasm
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const seed='1651011033:1377505029:3019448108:3247278135';
 
+// Asset-free metadata helper. No runtime/server/browser entry occurs here.
+export function movementDefaultScripts(source,pre){
+  const directory=`${source}/GLSMAC_data/default`,pending=[directory],entries=[],files={};
+  const top=lstatSync(directory);assert.ok(top.isDirectory()&&!top.isSymbolicLink());
+  while(pending.length){
+    const parent=pending.pop();
+    for(const name of readdirSync(parent)){
+      const path=`${parent}/${name}`,info=lstatSync(path);assert.ok(!info.isSymbolicLink(),'Symlinked Default input unsupported');
+      if(info.isDirectory()){pending.push(path);continue;}
+      assert.ok(info.isFile(),'Nonregular Default input unsupported');
+      if(!name.endsWith('.gls.js'))continue;
+      const key=path.slice(source.length+1),bytes=readFileSync(path),text=bytes.toString('utf8');
+      assert.ok(Buffer.from(text,'utf8').equals(bytes),'Default input must be strict UTF8');
+      files[key]={sha256:hash(bytes),mode:info.mode&0o111?'100755':'100644'};entries.push([key,text]);
+    }
+  }
+  entries.sort(([a],[b])=>a<b?-1:a>b?1:0);
+  const scripts=Object.fromEntries(entries);
+  assert.deepEqual(files,pre.production_default_files,'Mounted Default inventory/bytes/modes differ from reviewed HEAD blobs');
+  assert.equal(hash(JSON.stringify(scripts)),pre.production_default_sha256,'Mounted Default producer digest differs');
+  return scripts;
+}
+
 test('one normal Scout move has actual intermediate body samples and guarded all-owner native effects',{
   skip:!assets&&'Requires installed assets and an explicitly exclusive candidate browser lease',timeout:movementBudgets.node_ms,
 },async t=>{
@@ -33,8 +56,7 @@ test('one normal Scout move has actual intermediate body samples and guarded all
   assert.equal(pre.web_shell,resolve(build));assert.equal(pre.assets,resolve(assets));assert.equal(pre.command[0],process.execPath);
   assert.equal(resolve(process.env.UNIT_BODY_MOVEMENT_PREFLIGHT_PATH),`${resolve(artifacts)}/preflight.json`);
   mkdirSync(artifacts,{recursive:true});
-  const scripts=Object.fromEntries(readdirSync(`${scriptsRoot}/GLSMAC_data/default`,{recursive:true})
-    .filter(name=>name.endsWith('.gls.js')).sort().map(name=>[`GLSMAC_data/default/${name}`,readFileSync(`${scriptsRoot}/GLSMAC_data/default/${name}`,'utf8')]));
+  const scripts=movementDefaultScripts(resolve(scriptsRoot),pre);
   const names=['_state_trace_observer','_terrain_trace_observer','_terraform_cooperation_observer'];
   const helpers=Object.fromEntries(names.map(name=>[name,readFileSync(`${scriptsRoot}/GLSMAC_data/tests/${name}.gls.js`,'utf8')]));
   const bootstrap=readFileSync(`${build}/bootstrap.js`,'utf8');
@@ -75,7 +97,7 @@ test('one normal Scout move has actual intermediate body samples and guarded all
     endpoint_gate:'strict offline two actual endpoint samples before first pending query',
     host_head:hostHead,setup_children:setupChildren,
     native_source_tree:nativeSource,observer_cpp_sha256:sourcePins,production_default_tree:defaultTree,runtime_provenance_sha256:hash(provenanceBytes),
-    production_default_sha256:hash(JSON.stringify(scripts)),runtime_js_sha256:hash(runtime),runtime_wasm_sha256:hash(readFileSync(`${build}/GLSMAC.wasm`)),
+    production_default_files:pre.production_default_files,production_default_sha256:hash(JSON.stringify(scripts)),runtime_js_sha256:hash(runtime),runtime_wasm_sha256:hash(readFileSync(`${build}/GLSMAC.wasm`)),
     fixture_main_sha256:hash(movementMain),fixture_world_sha256:hash(movementWorld),observer_helpers_sha256:hash(JSON.stringify(helpers)),
     fixture_module_sha256:hash(readFileSync(new URL('unit-body-movement-browser-fixture.mjs',import.meta.url))),
     evaluator_sha256:hash(readFileSync(`${root}tools/behavior-tests/state_trace/unit_body_movement_proof.py`)),
@@ -129,6 +151,7 @@ test('one normal Scout move has actual intermediate body samples and guarded all
     report.browser_errors=errors;writeFileSync(`${artifacts}/application.log`,sealed.text);
     try{
       movementTool(pre.tools.git);movementTool(pre.tools.python);
+      movementDefaultScripts(resolve(scriptsRoot),pre);
       assert.ok(producerClosed);assert.equal(joined,sealed.text);assert.equal(sealed.failure,null);
       assert.equal(report.log_capture_error,undefined);assert.equal(report.hook_capture_error,undefined);assert.equal(report.browser_close_error,undefined);assert.deepEqual(errors,[]);
       assert.equal(report.native_raw_exit_code,0,'Actual native exit zero is required before any visible mismatch claim');
@@ -162,6 +185,7 @@ test('one normal Scout move has actual intermediate body samples and guarded all
   await page.locator('#custom-maps').setInputFiles({name:'unit-body-movement-arid.MP',mimeType:'application/octet-stream',buffer:movementTerrain()});await page.locator('#import-maps').click();
   await page.waitForFunction(()=>document.querySelector('#custom-map-list').textContent.includes('unit-body-movement-arid.MP'));
   await page.locator('#asset-source').selectOption('remote');await page.locator('#asset-url').fill(`${address}/assets/manifest.json`);
+  assert.deepEqual(movementDefaultScripts(resolve(scriptsRoot),pre),scripts);
   await page.evaluate(({scripts,helpers,main,world,seed})=>{
     for(const[name,source]of Object.entries(scripts)){const path=`/unit-body-snapshot/${name}`;Module.FS.mkdirTree(path.slice(0,path.lastIndexOf('/')));Module.FS.writeFile(path,source);}
     Module.FS.mkdirTree('/unit-body-snapshot/GLSMAC_data/tests');for(const[name,source]of Object.entries(helpers))Module.FS.writeFile(`/unit-body-snapshot/GLSMAC_data/tests/${name}.gls.js`,source);
