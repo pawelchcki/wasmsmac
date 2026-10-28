@@ -107,7 +107,9 @@ test('complete GSE PR path filters include actual collection implementation and 
   for(const path of ['src/gc/Space.cpp','src/gc/GC.cpp','src/gse/tests/GSE.cpp',
     'src/common/Mutex.cpp','src/common/Mutex.h','tools/wasm-tests/gse-shards.mjs',
     'tools/wasm-tests/gse-full-worker.cjs','.github/workflows/wasm.yml'])assert.ok(selected(path),path);
-  for(const path of ['docs/notes.md','src/common/Unrelated.cpp','tools/wasm-tests/unrelated.mjs'])
+  // Direct Census inputs and demonstrated headless prerequisites select the real workflow.
+  for(const path of ["src/GLSMAC.cpp", "src/game/frontend/Game.h", "src/game/frontend/unit/BadgeDefs.h", "src/game/frontend/sprite/Sprite.h", "src/scene/actor/Actor.h", "src/game/frontend/unit/Unit.cpp", "src/game/frontend/unit/UnitDef.h", "src/game/frontend/unit/UnitManager.h", "src/game/frontend/unit/SlotBadges.cpp", "src/game/frontend/Slot.cpp", "src/game/frontend/sprite/InstancedSprite.h", "src/game/frontend/sprite/InstancedSpriteManager.cpp", "src/scene/actor/Instanced.cpp", "src/scene/actor/Sprite.h", "src/types/texture/Texture.cpp", "src/game/backend/Game.cpp", "src/game/backend/Random.cpp", "src/graphics/Null.h", "src/main.cpp", "src/ui/UI.cpp", "src/ui/geometry/Geometry.cpp", "resource/font/terminus/TerminusTTF-4.49.3-minified.ttf"])assert.ok(selected(path),path);
+  for(const path of ["docs/notes.md", "src/common/Unrelated.cpp", "tools/wasm-tests/unrelated.mjs", "resource/font/other-font.ttf", "src/game/backend/diplomacy/Unrelated.cpp", "src/scene/actor/Light.cpp"])
     assert.equal(selected(path),false,path);
 });
 
