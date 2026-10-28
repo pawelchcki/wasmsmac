@@ -198,6 +198,52 @@ class StableSelectionTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(ProtocolError):
                 selection.diff_records(raw)
 
+    def test_git_similarity_scores_accept_padding_and_reject_invalid_scores(self):
+        for kind in ('R', 'C'):
+            expected = [dict(status=kind, old_path='src/old.cpp', path='misc/new.cpp')]
+            for score in ('0', '00', '000', '7', '07', '007', '98', '098', '99', '099', '100'):
+                with self.subTest(kind=kind, score=score):
+                    self.assertEqual(selection.diff_records(
+                        (kind + score + '\0src/old.cpp\0misc/new.cpp\0').encode()), expected)
+            for score in ('', '-1', '+1', '101', '199', '999', '0000', '0100', '00100',
+                          '1.0', ' 98', '98 ', '\u0660\u0669\u0668'):
+                with self.subTest(kind=kind, invalid_score=score), self.assertRaises(ProtocolError):
+                    selection.diff_records((kind + score + '\0src/old.cpp\0misc/new.cpp\0').encode())
+        for raw in (b'R098\0src/old.cpp\0', b'R098\0../old.cpp\0misc/new.cpp\0',
+                    b'C098\0src/old.cpp\0/absolute.cpp\0'):
+            with self.subTest(raw=raw), self.assertRaises(ProtocolError):
+                selection.diff_records(raw)
+
+    def test_real_git_edited_rename_and_copy_keep_both_paths(self):
+        for kind in ('R', 'C'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                def git(*args):
+                    return subprocess.check_output(['git', *args], cwd=root, stderr=subprocess.DEVNULL)
+                git('init', '-q')
+                git('config', 'user.name', 'Selector Test')
+                git('config', 'user.email', 'selector@example.invalid')
+                (root / 'src').mkdir(); (root / 'misc').mkdir()
+                content = ''.join(f'line {i:03d} unchanged content\n' for i in range(200))
+                source = root / 'src/mapped.cpp'; source.write_text(content)
+                git('add', '.'); git('commit', '-qm', 'base')
+                base = git('rev-parse', 'HEAD').decode().strip()
+                destination = 'misc/renamed.cpp' if kind == 'R' else 'misc/copied.cpp'
+                if kind == 'R': source.rename(root / destination)
+                (root / destination).write_text(content.replace('line 100 unchanged', 'line 100 modified'))
+                git('add', '.'); git('commit', '-qm', 'edited move or copy')
+                head = git('rev-parse', 'HEAD').decode().strip()
+                raw = git('diff', '--name-status', '-z', '--find-renames', '--find-copies',
+                          '--find-copies-harder', base, head, '--')
+                status = raw.split(b'\0')[0].decode()
+                self.assertEqual(status[0], kind)
+                self.assertTrue(0 < int(status[1:]) < 100)
+                changed = selection.actual_changes(root, base, head)
+                self.assertEqual(changed, [dict(status=kind, old_path='src/mapped.cpp', path=destination)])
+                plan = self.plan(changed)
+                self.assertEqual({row['path'] for row in plan['reasons']}, {'src/mapped.cpp', destination})
+                self.assert_complete(plan)
+
     def test_duplicate_json_fields_never_silently_override_bindings(self):
         with self.assertRaises(ProtocolError):
             decode_json('{"version":1,"version":2}')

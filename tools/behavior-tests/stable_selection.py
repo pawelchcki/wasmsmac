@@ -69,7 +69,7 @@ def diff_records(raw):
     rows = []
     while tokens:
         status = tokens.pop(0)
-        require(bool(re.fullmatch(r'[AMDT]|[RC](?:100|[0-9]{1,2})', status)), 'Invalid Git diff status')
+        require(bool(re.fullmatch(r'[AMDT]|[RC](?:100|0[0-9]{2}|[0-9]{1,2})', status)), 'Invalid Git diff status')
         count = 2 if status[0] in 'RC' else 1
         require(len(tokens) >= count, 'Truncated Git change')
         names, tokens = tokens[:count], tokens[count:]
