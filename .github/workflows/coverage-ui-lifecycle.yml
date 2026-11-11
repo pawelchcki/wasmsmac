@@ -42,6 +42,7 @@ jobs:
           --suite popup-resize-regression
           --suite popup-sound-regression
           --jobs 2
+          --default-timeout 120
           --report build/ui-lifecycle/report.json
       - uses: actions/upload-artifact@v4
         if: always()

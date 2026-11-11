@@ -29,7 +29,7 @@ python3 tools/behavior-tests/fast.py \
   --suite game-modal-input \
   --suite popup-resize-regression \
   --suite popup-sound-regression \
-  --jobs 1 --report build/ui-lifecycle-focused.json
+  --jobs 1 --default-timeout 120 --report build/ui-lifecycle-focused.json
 ```
 
 The adjacent `ui-interactions` suite is also included in local verification.
@@ -62,6 +62,38 @@ The successful report is retained as
 `/tmp/wasmsmac-coverage-ui-focused-2.json` during this delivery. Static diff
 checks and workflow YAML structure validation also passed. These local results
 are supplementary to exact-final-head PR CI and review.
+
+### Initial PR CI failure and configuration repair
+
+PR #57's first focused workflow used `fast.py` directly and inherited its
+30-second development fallback. The established regression CI dispatcher
+`tools/behavior-tests/lanes.py` explicitly supplies `--default-timeout 120` in
+`command()`; the new focused workflow had omitted that argument. In
+[run 43023624947](https://github.com/pawelchcki/wasmsmac/actions/runs/43023624947),
+`game-modal-input` reached the first new scenario before timing out. Both popup
+suites passed. The partial run is retained as a failure, not a passing total.
+
+The focused workflow now uses the same 120-second fallback as established CI.
+This is a fallback, rather than a `--timeout` override: any catalog-declared
+deadline still takes precedence. No test inputs, assertions, fixture behavior,
+catalog selections or production code changed in this repair.
+
+The Hot harness independently rejected the preparatory Stable-selection profile
+because its inventory fingerprint includes every GSE regression source. Updating
+those sources requires regenerating that fingerprint. Only `inventory_sha256`
+was refreshed from `stable_selection.inventory()['sha256']`; coverage unions,
+selections and `dependencies_reviewed: false` remain unchanged. The 39 selector
+and lane checks pass after the refresh; the stale-profile failure log is retained.
+
+The CI-equivalent local replay used the exact failed job's engine, Node 22.16.0,
+two workers and the established 120-second fallback. All four suites passed with
+the same ordered scenario names, 93 scenarios and 564 assertions; the script
+snapshot hash also matched the earlier passing replay. Runner time was 43.50
+seconds, with `game-modal-input` taking 39.53 seconds. The failed engine's WASM
+SHA-256 is
+`fc72c9ecfe33c74cbd3b6be2324904dc77dc27bc3262edb256f2752c05ea9dc7`.
+The CI-equivalent report remains at
+`/tmp/wasmsmac-coverage-ui-ci-equivalent-120.json`; final-head CI still applies.
 
 ## Limits
 
