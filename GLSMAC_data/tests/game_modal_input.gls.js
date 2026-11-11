@@ -192,3 +192,74 @@ behavior.scenario('UI restart discards an old exit animation without delivering 
 	f.finish_animation();
 	test.assert(f.state.results == [] && !f.popup.is_shown());
 });
+
+behavior.scenario('turn confirmation cannot submit after delivered wait and active status transitions', () => {
+	f.start(); f.state.orders = []; f.state.results = [];
+	const turn = f.view.find('button', 'text', 'TURN COMPLETE');
+	turn.emit('click', {}); f.finish_animation();
+	f.game.emit('turn_status', { status: 'please_wait' });
+	test.assert(turn.text == 'PLEASE WAIT' && f.popup.is_shown());
+	f.game.emit('turn_status', { status: 'active' });
+	f.view.find('button', 'text', 'Yes, end the turn.').emit('click', {});
+	f.finish_animation();
+	test.assert(f.state.orders == [] && !f.popup.is_shown(), 'An earlier confirmation cannot act on a restored active turn');
+	test.assert(turn.text == 'TURN COMPLETE', 'Stale confirmation cannot replace the newer native status');
+	turn.emit('click', {}); f.finish_animation();
+	f.view.find('button', 'text', 'Yes, end the turn.').emit('click', {});
+	f.finish_animation();
+	test.assert(f.state.orders == ['complete_turn'] && turn.text == 'PLEASE WAIT', 'A fresh confirmation remains usable exactly once');
+});
+
+behavior.scenario('delivered mission year invalidates an open confirmation without losing the next dialog', () => {
+	f.start(); f.state.orders = [];
+	const turn = f.view.find('button', 'text', 'TURN COMPLETE');
+	turn.emit('click', {}); f.finish_animation();
+	f.game.emit('turn', { year: 2102 });
+	test.assert(f.view.find('text', 'text', 'Mission Year 2102').text == 'Mission Year 2102');
+	f.view.find('button', 'text', 'Yes, end the turn.').emit('click', {});
+	f.finish_animation();
+	test.assert(f.state.orders == [] && turn.text == 'TURN COMPLETE', 'An old-year response cannot complete the new turn');
+	turn.emit('click', {}); f.finish_animation();
+	test.assert(f.popup.popup.id == 'turn_confirmation' && !f.popup.popup_hiding);
+	f.key('ESCAPE', {}); f.finish_animation();
+	test.assert(f.state.orders == [] && !f.popup.is_shown(), 'New-year cancellation leaves the real turn control usable');
+});
+
+behavior.scenario('modal research and restart shortcuts leave its content and decision owned by the dialog', () => {
+	f.start(); f.state.orders = []; f.state.results = [];
+	const exits = f.state.exits; const resets = f.state.resets;
+	f.popup.show('turn_confirmation', (result) => { f.state.results :+ result; });
+	f.finish_animation();
+	const window = f.popup.popup.el;
+	const speech = f.view.find('sound', 'sound', 'CPU please don\'t go.wav');
+	for (input of [{code: 'F2', modifiers: {}}, {code: 'R', modifiers: {shift: true}}, {code: 'Q', modifiers: {ctrl: true, shift: true}}, {code: 'TAB', modifiers: {}}]) {
+		test.assert(f.key(input.code, input.modifiers), 'Modal owns the explicitly delivered key before root shortcuts');
+		test.assert(f.popup.popup.el == window && window.is_visible() && !f.popup.popup_hiding);
+		test.assert(f.state.results == [] && f.state.orders == []);
+	}
+	test.assert(f.view.find('text', 'text', 'Do you really want to end the turn now?').is_visible());
+	test.assert(speech.play_count() == 0 && f.state.exits == exits && f.state.resets == resets);
+	f.key('ESCAPE', {}); f.finish_animation();
+	test.assert(f.state.results == [false] && f.view.root.handler_count('keydown') == 2);
+});
+
+behavior.scenario('saved controls from before UI restart cannot decide a successor dialog', () => {
+	f.start(); f.state.orders = []; f.state.results = [];
+	f.popup.show('turn_confirmation', (result) => { f.state.results :+ result; });
+	f.finish_animation();
+	const old_window = f.popup.popup.el;
+	const old_yes = f.view.find('button', 'text', 'Yes, end the turn.');
+	const old_handlers = old_yes.get_handlers(); const old_click = old_handlers[0].callback;
+	const resize = f.view.ui.count('resize');
+	f.start();
+	test.assert(old_window.is_removed() && old_yes.handler_count('click') == 0);
+	test.assert(!old_yes.emit('click', {}) && !old_window.emit('keydown', {code: 'ESCAPE', modifiers: {}}));
+	f.popup.show('turn_confirmation', (result) => { f.state.results :+ result; });
+	f.finish_animation();
+	const successor = f.popup.popup.el;
+	old_click({});
+	test.assert(f.popup.popup.el == successor && successor != old_window && !f.popup.popup_hiding, 'Retained old callback cannot hide the current presentation');
+	test.assert(f.state.results == [] && f.state.orders == [] && f.view.ui.count('resize') == resize);
+	f.key('ESCAPE', {}); f.finish_animation();
+	test.assert(f.state.results == [false] && !f.popup.is_shown(), 'Only the current presentation delivers a result');
+});

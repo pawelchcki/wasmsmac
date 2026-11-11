@@ -1,0 +1,51 @@
+name: UI lifecycle coverage
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/coverage-ui-lifecycle.yml'
+      - 'GLSMAC_data/tests/game_modal_input.gls.js'
+      - 'GLSMAC_data/tests/popup_resize_regression.gls.js'
+      - 'GLSMAC_data/tests/popup_sound_regression.gls.js'
+      - 'GLSMAC_data/tests/_ui_mocks.gls.js'
+      - 'GLSMAC_data/default/ui/parts/game/game.gls.js'
+      - 'GLSMAC_data/default/ui/parts/game/bottom_bar/mini_map.gls.js'
+      - 'GLSMAC_data/default/ui/parts/game/popup/**'
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    if: github.repository == 'pawelchcki/wasmsmac'
+    uses: ./.github/workflows/test-engine.yml
+  lifecycle:
+    name: Modal, popup resize and sound lifecycle
+    needs: [engine]
+    if: github.repository == 'pawelchcki/wasmsmac'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16'
+      - uses: actions/download-artifact@v4
+        with:
+          name: behavior-engine
+          path: build/wasm/bin
+      - name: Execute production UI lifecycle regressions
+        run: >-
+          python3 tools/behavior-tests/fast.py
+          --runtime build/wasm/bin/GLSMAC.js
+          --suite game-modal-input
+          --suite popup-resize-regression
+          --suite popup-sound-regression
+          --jobs 2
+          --default-timeout 120
+          --report build/ui-lifecycle/report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-lifecycle-coverage
+          path: build/ui-lifecycle
