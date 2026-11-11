@@ -95,7 +95,7 @@ SHA-256 is
 The CI-equivalent report remains at
 `/tmp/wasmsmac-coverage-ui-ci-equivalent-120.json`; final-head CI still applies.
 
-### Hosted platform dependency recovery
+### Hosted Ubuntu DNS outage
 
 At head `b2a3c467`, the focused UI job and all other applicable contexts passed,
 but the platform job initially stalled in the existing asset suite. Its cancelled
@@ -110,17 +110,20 @@ platform job (`130551515298`, `westus3`) used that same image and provisioner
 `20261028.624`. This comparison does not establish a regional root cause, but
 rules out an image-version difference among those observed jobs.
 
-The image's
-[pinned source configuration](https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/scripts/build/configure-apt-sources.sh)
-replaces the Ubuntu source URI with `mirror+file:/etc/apt/apt-mirrors.txt` and
-prioritizes Azure before the canonical Ubuntu archives. The platform job now
-replaces only that URI in `/etc/apt/sources.list.d/ubuntu.sources` with
-`https://archive.ubuntu.com/ubuntu/` before updating package indexes. Distribution
-suites, components, signing-key configuration, EGL/GLES packages and every test
-command remain unchanged. It does not bypass package signature verification or
-turn a failed test into a skip. The retained failed-attempt logs are recorded in
-the delivery ledger; the new head still requires fresh platform execution and
-all applicable CI/review gates.
+A narrowly scoped attempt to select the canonical Ubuntu archive directly also
+failed before tests: the hosted runner could not resolve `archive.ubuntu.com`.
+That source-selection change was reverted because it demonstrated no recovery.
+The normal repository/package/signature configuration and all test commands
+remain unchanged.
+
+[Canonical's official status page](https://status.canonical.com/#/) reported an
+active major DNS outage when checked at 2026-11-11 14:58 UTC. The incident began
+at 11:06:07 UTC, with DNS-down acknowledgment at 14:26 UTC; no recovery estimate
+was shown. This external evidence is consistent with the independently retained
+hosted resolution failures, but does not identify a particular runner's resolver
+or prove a regional root cause. Individual archive monitor probes still reported
+operational status. Platform retry requires recovery evidence, and the final
+head still requires all applicable CI/review gates to pass.
 
 ## Limits
 
