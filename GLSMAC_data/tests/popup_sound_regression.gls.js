@@ -43,3 +43,39 @@ behavior.scenario('replacement during quit exit cannot repeat cleanup or leak th
 	f.view.ui.emit('resize', { height: 768 });
 	test.assert(f.state.results == [true], 'only the new popup delivers a result');
 });
+
+behavior.scenario('quit speech is reacquired once per visit and repeated shows do not restart it', () => {
+	const f = mocks.game_popup(true);
+	const speech = f.view.find('sound', 'sound', 'CPU please don\'t go.wav');
+	for (let visit = 0; visit < 3; visit++) {
+		f.show('please_dont_go'); f.show('please_dont_go');
+		test.assert(speech.play_count() == visit + 1 && speech.stop_count() == visit);
+		f.view.ui.emit('resize', {height: 900});
+		test.assert(speech.play_count() == visit + 1 && f.module.is_shown(), 'Completing entry by resize does not reacquire speech');
+		f.module.popup.el.emit('keydown', {code: 'ESCAPE', modifiers: {}});
+		f.show('please_dont_go');
+		test.assert(speech.play_count() == visit + 1 && speech.stop_count() == visit + 1, 'Repeated show during exit is still the same visit');
+		f.view.ui.emit('resize', {height: 768});
+		test.assert(!f.module.is_shown() && f.view.running_timers() == 0);
+	}
+	test.assert(f.state.results == [false, false, false] && speech.play_count() == 3 && speech.stop_count() == 3);
+});
+
+behavior.scenario('replacement during quit entry prevents old controls from dismissing its successor', () => {
+	const f = mocks.game_popup(true);
+	const speech = f.view.find('sound', 'sound', 'CPU please don\'t go.wav');
+	f.show('please_dont_go');
+	const enter = f.module.sliding_timer;
+	const old_cancel = f.view.find('button', 'text', 'Oops, no, wait!');
+	const old_confirm = f.view.find('button', 'text', 'Yes, that\'s an order mister!');
+	enter.tick();
+	f.show('turn_confirmation');
+	test.assert(speech.play_count() == 1 && speech.stop_count() == 1 && !enter.tick());
+	old_cancel.emit('click', {}); old_confirm.emit('click', {});
+	test.assert(f.module.popup.id == 'turn_confirmation' && !f.module.popup_hiding && f.state.results == [], 'Hidden prior controls cannot submit or cancel another dialog');
+	f.view.ui.emit('resize', {height: 900});
+	test.assert(f.module.is_shown() && f.view.running_timers() == 0 && speech.stop_count() == 1);
+	f.view.find('button', 'text', 'Yes, end the turn.').emit('click', {});
+	f.view.ui.emit('resize', {height: 768});
+	test.assert(f.state.results == [true] && !f.module.is_shown() && speech.stop_count() == 1);
+});
