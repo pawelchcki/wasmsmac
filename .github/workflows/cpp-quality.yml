@@ -171,6 +171,9 @@ jobs:
           cache-dependency-path: tools/wasm-tests/package-lock.json
       - name: Install the pinned browser toolchain and graphics runtime
         run: |
+          # The image's Azure-first mirror transport repeatedly failed DNS.
+          # Keep Ubuntu's signed repositories and packages, using its canonical archive.
+          sudo sed -i 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update -qq
           sudo apt-get install -y libegl1 libgles2 libgl1-mesa-dri
           git clone --depth 1 --branch 4.0.22 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/quality-emsdk"

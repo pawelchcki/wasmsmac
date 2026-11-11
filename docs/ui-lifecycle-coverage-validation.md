@@ -95,6 +95,33 @@ SHA-256 is
 The CI-equivalent report remains at
 `/tmp/wasmsmac-coverage-ui-ci-equivalent-120.json`; final-head CI still applies.
 
+### Hosted platform dependency recovery
+
+At head `b2a3c467`, the focused UI job and all other applicable contexts passed,
+but the platform job initially stalled in the existing asset suite. Its cancelled
+attempt and partial artifacts remain retained. Three subsequent attempts failed
+before compilation or tests: `apt` could not resolve
+`azure.archive.ubuntu.com` while installing the unchanged EGL/GLES packages.
+These infrastructure failures are not counted as passing platform execution.
+
+The failed jobs used Ubuntu image `20261101.360.1` in `eastus2` and `westus`.
+The successful main platform job (`130549694359`, `southcentralus`) and PR #54's
+platform job (`130551515298`, `westus3`) used that same image and provisioner
+`20261028.624`. This comparison does not establish a regional root cause, but
+rules out an image-version difference among those observed jobs.
+
+The image's
+[pinned source configuration](https://github.com/actions/runner-images/blob/ubuntu24/20261101.360/images/ubuntu/scripts/build/configure-apt-sources.sh)
+replaces the Ubuntu source URI with `mirror+file:/etc/apt/apt-mirrors.txt` and
+prioritizes Azure before the canonical Ubuntu archives. The platform job now
+replaces only that URI in `/etc/apt/sources.list.d/ubuntu.sources` with
+`https://archive.ubuntu.com/ubuntu/` before updating package indexes. Distribution
+suites, components, signing-key configuration, EGL/GLES packages and every test
+command remain unchanged. It does not bypass package signature verification or
+turn a failed test into a skip. The retained failed-attempt logs are recorded in
+the delivery ledger; the new head still requires fresh platform execution and
+all applicable CI/review gates.
+
 ## Limits
 
 Explicit event delivery models child-modal consumption before root shortcuts;
